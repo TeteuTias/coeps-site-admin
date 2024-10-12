@@ -70,7 +70,7 @@ const MyComponent = () => {
       {Object.entries(data.data).map(([userId, documents]) => {
         const userInfo = data.tradutor[userId]; // Acessa o primeiro usuário
         return (
-          <div key={userId} className="border p-4 rounded max-w-[100%] overflow-scroll">
+          <div key={userId} className="border p-4 rounded max-w-[100%] overflow-auto">
             {userInfo ? (
               <>
                 <h2 className="font-bold">
