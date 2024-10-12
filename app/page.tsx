@@ -71,7 +71,7 @@ const MyComponent = () => {
         const userInfo = data.tradutor[userId]; // Acessa o primeiro usuário
         console.log(data.tradutor[userId])
         return (
-          <div key={userId} className="border p-4 rounded">
+          <div key={userId} className="border p-4 rounded max-w-[100%] overflow-scroll">
             {userInfo ? (
               <>
                 <h2 className="font-bold" onClick={() => console.log(userInfo)}>
