@@ -63,6 +63,10 @@ const MyComponent = () => {
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold">TRABALHOS RECEBIDOS</h1>
+      <p>Total de Pessoas: {Object.keys(data.data).length}</p>
+      <p>Total de Arquivos Recebidos: {Object.keys(data.data).reduce((accumulator, key) => {
+        return accumulator + data.data[key].length;
+      }, 0)}</p>
       {Object.entries(data.data).map(([userId, documents]) => {
         const userInfo = data.tradutor[userId]; // Acessa o primeiro usuário
         console.log(data.tradutor[userId])
