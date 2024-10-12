@@ -69,15 +69,14 @@ const MyComponent = () => {
       }, 0)}</p>
       {Object.entries(data.data).map(([userId, documents]) => {
         const userInfo = data.tradutor[userId]; // Acessa o primeiro usuário
-        console.log(data.tradutor[userId])
         return (
           <div key={userId} className="border p-4 rounded max-w-[100%] overflow-scroll">
             {userInfo ? (
               <>
-                <h2 className="font-bold" onClick={() => console.log(userInfo)}>
+                <h2 className="font-bold">
                   {userInfo.informacoes_usuario.nome}
                 </h2>
-                <h3 className="font-bold" onClick={() => console.log(userInfo)}>
+                <h3 className="font-bold">
                   {userInfo.informacoes_usuario.numero_telefone}
                 </h3>
               </>
