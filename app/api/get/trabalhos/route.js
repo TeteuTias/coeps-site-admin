@@ -57,8 +57,13 @@ export const GET = withApiAuthRequired(async function GET(request, response) {
             })
 
             for (const key in respostaFormatada) {
-                const data = await db.collection('usuarios').find({ _id: new ObjectId(key) }, { projection: { "informacoes_usuario": 1 } }).toArray()
-                respostaFormatadaTradutor[key] = data[0]
+                try {
+                    const data = await db.collection('usuarios').find({ _id: new ObjectId(key) }, { projection: { "informacoes_usuario": 1 } }).toArray()
+                    respostaFormatadaTradutor[key] = data[0]
+                }
+                catch {
+                    
+                }
             }
 
             return [respostaFormatada, respostaFormatadaTradutor]

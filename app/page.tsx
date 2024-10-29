@@ -62,6 +62,7 @@ const MyComponent = () => {
 
   return (
     <div className="p-4">
+      <Link href={"/listas"} className='bg-red-400 p-4'>IR PARA LISTAS</Link>
       <h1 className="text-xl font-bold">TRABALHOS RECEBIDOS</h1>
       <p>Total de Pessoas: {Object.keys(data.data).length}</p>
       <p>Total de Arquivos Recebidos: {Object.keys(data.data).reduce((accumulator, key) => {
