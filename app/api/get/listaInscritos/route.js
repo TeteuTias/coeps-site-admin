@@ -35,10 +35,13 @@ export const GET = withApiAuthRequired(async function GET(request, response) {
         }
         */
 
-        const response = await db.collection(colecao).find(
-            { "pagamento.situacao": 1, "teste":{"$not":{"$eq":true}}},
-            { projection: { informacoes_usuario: 1 } }
-        ).toArray() // 'buffer': 0, 'user_id': 0, 'size': 0
+        const response = await db.collection(colecao)
+            .find(
+                { "pagamento.situacao": 1, "teste": { "$not": { "$eq": true } } },
+                { projection: { informacoes_usuario: 1 } }
+            )
+            .sort({ "informacoes_usuario.nome": 1 }) // Ordena em ordem alfabética (ascendente)
+            .toArray(); // 'buffer': 0, 'user_id': 0, 'size': 0
 
         return NextResponse.json({
             "data": response,
