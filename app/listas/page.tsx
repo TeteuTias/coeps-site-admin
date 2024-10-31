@@ -118,6 +118,10 @@ const MyComponent = () => {
 
   return (
     <div className="p-4">
+      <div className='flex flex-col items-center'>
+        <h1 className="text-xl font-bold text-center" onClick={() => console.log(data)}>Todos Participantes</h1>
+        <Link target='_blank' href={`/gerarListaPalestras/`} prefetch={false} className='font-bold cursor-pointer p-[0.5px] bg-blue-600'>GERAR LISTA</Link >
+      </div>
       <h1 className="text-xl font-bold text-center" onClick={() => console.log(data)}>Selecione um Minicurso</h1>
       <div className='space-y-5 p-1 flex content-center items-center justify-center'>
         <div className='bg-red-400 flex flex-col items-center content-center space-y-3 max-h-screen overflow-scroll'>
