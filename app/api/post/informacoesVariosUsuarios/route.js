@@ -18,7 +18,8 @@ export const POST = withApiAuthRequired(async function POST(request) {
         const response = await db.collection(colecao).find(
             { _id: { $in: objectIds } }, // Usando $in para buscar por vários ObjectIds
             { projection: { informacoes_usuario: 1, _id: 0 } }
-        ).toArray();
+        ).sort({ "informacoes_usuario.nome": 1 }) // Ordena pelo campo informacoes_usuario.nome em ordem ascendente
+            .toArray();
 
         return NextResponse.json({ data: response })
     } catch (error) {

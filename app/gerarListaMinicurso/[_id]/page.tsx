@@ -84,7 +84,11 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                 <table className="min-w-full table-auto border-collapse border border-gray-200">
                     <thead>
                         <tr className="bg-gray-200">
-                            <th className="p-4 border border-gray-300 w-1/4">NOME MINICURSO</th>
+                            <th className="p-4 border border-gray-300 w-1/4">
+                                <div className='p-[0.5px] bg-black mt-10' />
+                                <h1 className='text-[10px]'>ESCREVA O NOME DO MINICURSO AQUI.</h1>
+
+                            </th>
                             <th className="p-4 border border-gray-300 w-1/6">{new Date().toDateString()}</th>
                             <th className="p-4 border border-gray-300 w-1/2">{new Date().toTimeString()}</th>
                         </tr>
@@ -99,7 +103,15 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                     <tbody>
                         {data2.map((item, index) => (
                             <tr key={index} className="hover:bg-gray-100 " onClick={() => console.log(item)}>
-                                <td className="p-4 border border-gray-300 text-black">{item.informacoes_usuario.nome}</td>
+                                <td className="flex flex-row p-4 border border-gray-300 text-black">
+                                    <p className='text-[10px]  p-1'>
+                                        {index + 1}
+                                    </p>
+                                    <p>
+                                        {item.informacoes_usuario.nome}
+                                    </p>
+
+                                </td>
                                 <td className="p-4 border border-gray-300 text-black">{item.informacoes_usuario.email}</td>
                                 <td className="p-4 border border-gray-300 text-black"></td>
                             </tr>
