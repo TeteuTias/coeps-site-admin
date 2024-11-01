@@ -1,104 +1,179 @@
 'use client'
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-interface Document {
-  _id: string;
-  name: string;
-  url: string;
-  userId: string;
-}
 
-interface User {
-  _id: string;
-  informacoes_usuario: {
-    cpf: string;
-    numero_telefone: string;
-    nome: string;
-    email: string;
-    data_criacao: string;
-    titulo_honorario: string;
-  };
-}
-
-interface DataStructure {
-  data: Record<string, Document[]>;
-  tradutor: Record<string, User>; // Mapeia userId para um único User
-}
-
-const MyComponent = () => {
-  const [data, setData] = useState<DataStructure>({
-    data: {},
-    tradutor: {}
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch('/api/get/trabalhos');
-        if (!response.ok) {
-          throw new Error('Erro na resposta da rede');
-        }
-        const result = await response.json();
-        setData(result);
-      } catch (error) {
-        setError("OCORREU ALGO ERRADO. RECARREGUE");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []); // O array vazio faz com que o efeito execute apenas uma vez ao montar
-
-  if (loading) {
-    return <div className="text-center">Carregando...</div>;
-  }
-
-  if (error) {
-    return <div className="text-red-500">{error}</div>;
-  }
+import Link from "next/link";
+//
+//
+//
+// <Header />
+export default function Page() {
 
   return (
-    <div className="p-4">
-      <Link href={"/listas"} className='bg-red-400 p-4'>IR PARA LISTAS</Link>
-      <h1 className="text-xl font-bold">TRABALHOS RECEBIDOS</h1>
-      <p>Total de Pessoas: {Object.keys(data.data).length}</p>
-      <p>Total de Arquivos Recebidos: {Object.keys(data.data).reduce((accumulator, key) => {
-        return accumulator + data.data[key].length;
-      }, 0)}</p>
-      {Object.entries(data.data).map(([userId, documents]) => {
-        const userInfo = data.tradutor[userId]; // Acessa o primeiro usuário
-        return (
-          <div key={userId} className="border p-4 rounded max-w-[100%] overflow-auto">
-            {userInfo ? (
-              <>
-                <h2 className="font-bold">
-                  {userInfo.informacoes_usuario.nome}
-                </h2>
-                <h3 className="font-bold">
-                  {userInfo.informacoes_usuario.numero_telefone}
-                </h3>
-              </>
-            ) : (
-              <p>User not found</p>
-            )}
+    <>
+      <div className="min-h-screen bg-[#3E4095] flex flex-col justify-center content-center items-center">
+        <PaginaAreaDoCliente />
+      </div>
+    </>
+  )
+}
+//
+//
+function PaginaAreaDoCliente() { // como é uma pagina, pega toda a tela para ele com w-[100%]
+  return (
+    <>
+      <div className="flex flex-col items-center content-center  justify-center w-[100%] h-[100%] text-white">
 
-            <ul className="list-disc pl-5">
-              {documents.map(doc => (
-                <li key={doc._id}>
-                  <Link target='_blank' href={doc.url} prefetch={true} className="text-blue-500 hover:underline">
-                    {doc.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+        <div className="w-[80%] lg:w-fit">
+          <h1 className="break-words text-center font-extrabold text-white text-[22px] lg:text-[35px]">Área do Administrador</h1>
+        </div>
+        <div className="flex flex-col items-center content-center justify-center lg:w-[65%] p-4 ">
+          <div className="grid grid-cols-2 gap-x-10 gap-y-10 lg:grid-cols-3 lg:gap-2 lg:gap-x-10 lg:gap-y-10">
+            <Link href="/trabalhos"><CardOpcoes texto="Gerar Lista Trabalhos" emoji="📖" /></Link>
+            <Link href="/listas"><CardOpcoes texto="Gerar de Lista Participantes" emoji="🖨️" /></Link>
+            <Link href=""><CardOpcoes texto="..." emoji="." /></Link>
           </div>
-        );
-      })}
+        </div>
+      </div>
+    </>
+  )
+}
+//
+function CardOpcoes({ texto, emoji }: { texto: string, emoji: string }) {
+  return (
+    <div className="flex flex-col w-32 h-32 lg:w-40 lg:h-32 items-center justify-center shadow-xl bg-white text-center p-2 cursor-pointer">
+      <h1 className="text-center font-extralight text-[36px] lg:text-[40px] font-emoji text-gray-800">
+        {emoji}
+      </h1>
+      <h1 className="text-center font-semibold text-slate-950 text-[16px] lg:text-[20px]">
+        {texto}
+      </h1>
     </div>
+  )
+}
+//
+//
+//
+/*
+const Header = () => {
+  const [menuAberto, setMenuAberto] = useState(false);
+
+  const toggleMenu = () => {
+    setMenuAberto(!menuAberto);
+  };
+
+  return (
+    <header className="bg-gray-800 p-4 z-50 w-[100%] fixed top-0">
+      <nav className="flex items-center justify-between ">
+        <div>
+          <Link href="/">
+            <Image
+              src="/Logo01.png"
+              width={150}
+              height={150}
+              alt="Picture of the author"
+            />
+          </Link>
+        </div>
+        <div className="hidden space-x-4 lg:flex lg:justify-end  w-[50%]">
+          <ul className="flex flex-row items-center justify-center content-center space-x-4 lg:space-x-10">
+            <li>
+              <Link href="/painel/" className='hover:text-red-500 ease-linear duration-150'>
+                Área do Congressista
+              </Link>
+            </li>
+            <li>
+              <Link href="/organizadores" className='hover:text-red-500 ease-linear duration-150'>
+                Trabalhos
+              </Link>
+            </li>
+            <li>
+              <Link href="/" className='hover:text-red-500 ease-linear duration-150'>
+                Minha programação
+              </Link>
+            </li>
+            <li>
+              <Link href="/anais" className='hover:text-red-500 ease-linear duration-150'>
+                Anais
+              </Link>
+            </li>
+            <li>
+              <Link href="/#ComponenteContados" className='hover:text-red-500 ease-linear duration-150'>
+                Contato
+              </Link>
+            </li>
+            <li>
+              <Link href="/api/auth/login" className='hover:text-red-500 ease-linear duration-150'>
+                <button className="ease-in duration-150 bg-red-500 px-5 py-2 font-bold border-gray-800 hover:border-red-500 hover:bg-white hover:text-red-500 border-2 ">LOGOUT</button>
+              </Link>
+            </li>
+          </ul>
+        </div>
+        <div className="lg:hidden">
+          <button
+            onClick={toggleMenu}
+            className="text-white hover:text-gray-300 focus:outline-none"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              {menuAberto ? (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              ) : (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              )}
+            </svg>
+          </button>
+        </div>
+      </nav>
+      {menuAberto && (
+        <div className="lg:hidden">
+          <ul className="mt-4 space-y-2">
+            <li>
+              <Link href="/painel/" className='hover:text-red-500 ease-linear duration-150'>
+                Área do Congressista
+              </Link>
+            </li>
+            <li>
+              <Link href="/organizadores" className='hover:text-red-500 ease-linear duration-150'>
+                Trabalhos
+              </Link>
+            </li>
+            <li>
+              <Link href="/" className='hover:text-red-500 ease-linear duration-150'>
+                Minha programação
+              </Link>
+            </li>
+            <li>
+              <Link href="/anais" className='hover:text-red-500 ease-linear duration-150'>
+                Anais
+              </Link>
+            </li>
+            <li>
+              <Link href="/#ComponenteContados" className='hover:text-red-500 ease-linear duration-150'>
+                Contato
+              </Link>
+            </li>
+            <li>
+              <Link href="/api/auth/login" className='hover:text-red-500 ease-linear duration-150'>
+                <button className="ease-in duration-150 bg-red-500 px-5 py-2 font-bold border-gray-800 hover:border-red-500 hover:bg-white hover:text-red-500 border-2 ">LOGOUT</button>
+              </Link>
+            </li>
+          </ul>
+        </div>
+      )}
+    </header>
   );
 };
-
-export default MyComponent;
+*/

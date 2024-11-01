@@ -24,7 +24,7 @@ export const GET = withApiAuthRequired(async function GET(request, response) {
 
 
         const response = await db.collection(colecao).find(
-            {},{projection:{name:1,description:1, participants:1}}
+            {}, { projection: { name: 1, description: 1, participants: 1, maxParticipants: 1 } }
         ).toArray() // 'buffer': 0, 'user_id': 0, 'size': 0
 
         return NextResponse.json({
