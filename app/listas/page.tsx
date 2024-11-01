@@ -125,10 +125,10 @@ const MyComponent = () => {
       </div>
       <h1 className="text-xl font-bold text-center" onClick={() => console.log(data)}>Selecione um Minicurso</h1>
       <div className='space-y-5 p-1 flex content-center items-center justify-center'>
-        <div className='flex flex-col items-center content-center space-y-3 max-h-screen '>
+        <div className='flex flex-col items-center content-center space-y-3 max-h-screen'>
           {data.data.map((value) => {
             return (
-              <div className='bg-white w-1/2 shadow-2xl p-5' key={value._id}>
+              <div className='bg-white w-full lg:w-1/2 shadow-2xl md:p-5' key={value._id}>
                 <div className='p-[1px] bg-red-400' />
                 <p><span className='font-bold'>NOME: </span>{value.name}</p>
                 <h1><span className='font-bold'>TOTAL DE VAGAS: </span> {value.maxParticipants}</h1>
