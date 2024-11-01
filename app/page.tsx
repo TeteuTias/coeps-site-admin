@@ -27,9 +27,9 @@ function PaginaAreaDoCliente() { // como é uma pagina, pega toda a tela para el
         </div>
         <div className="flex flex-col items-center content-center justify-center lg:w-[65%] p-4 ">
           <div className="grid grid-cols-2 gap-x-10 gap-y-10 lg:grid-cols-3 lg:gap-2 lg:gap-x-10 lg:gap-y-10">
-            <Link href="/trabalhos"><CardOpcoes texto="Gerar Lista Trabalhos" emoji="📖" /></Link>
-            <Link href="/listas"><CardOpcoes texto="Gerar de Lista Participantes" emoji="🖨️" /></Link>
-            <Link href=""><CardOpcoes texto="..." emoji="." /></Link>
+            <Link href="/trabalhos"><CardOpcoes texto="Lista de Trabalhos" emoji="📖" /></Link>
+            <Link href="/listas"><CardOpcoes texto="Lista de Participantes" emoji="🖨️" /></Link>
+            <Link href="/presenca"><CardOpcoes texto="Lista de Presença" emoji="🤚" /></Link>
           </div>
         </div>
       </div>

@@ -7,19 +7,14 @@ import { connectToDatabase } from "@/app/lib/mongodb";
 export const POST = withApiAuthRequired(async function POST(request) {
     const data = await request.json()
     const { db } = await connectToDatabase();
-    const colecao = 'usuarios'
+    const colecao = 'minicursos'
 
 
     try {
-        // Converta a lista de strings em ObjectId
-        const objectIds = data.map((id) => new ObjectId(id));
-
-        // Realize a consulta com o operador $or
-        const response = await db.collection(colecao).find(
-            { _id: { $in: objectIds } }, // Usando $in para buscar por vários ObjectIds
-            { projection: { informacoes_usuario: 1, _id: 1 } }
-        ).sort({ "informacoes_usuario.nome": 1 }) // Ordena pelo campo informacoes_usuario.nome em ordem ascendente
-            .toArray();
+        const response = await db.collection(colecao).updateOne(
+            { _id: new ObjectId(data.eventId) },  // Encontra o documento com o _id especificado
+            { $pull: { attendanceList: data.userId } }  // Remove o userId de attendanceList, se ele estiver presente
+        );
 
         return NextResponse.json({ data: response })
     } catch (error) {

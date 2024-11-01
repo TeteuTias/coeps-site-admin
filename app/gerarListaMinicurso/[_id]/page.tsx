@@ -68,7 +68,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         };
 
         fetchData();
-    }, []); // O array vazio faz com que o efeito execute apenas uma vez ao montar
+    }, [params._id]); // O array vazio faz com que o efeito execute apenas uma vez ao montar
 
     if (loading) {
         return <div className="text-center">Carregando...</div>;
