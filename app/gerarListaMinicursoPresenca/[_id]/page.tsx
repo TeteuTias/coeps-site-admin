@@ -120,7 +120,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                     {item.informacoes_usuario.email}
                                 </td>
                                 <td className="p-4 border border-gray-300 text-black text-center">
-                                    <p className=" p-2 w-full">{dataPresentes.includes(item._id) ? "PRESENTE" : "AUSÊNTE"}</p>
+                                    <p className=" p-2 w-full">{dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}</p>
                                     <button className="bg-red-400 p-2 w-1/2"
                                         onClick={async () => {
                                             setLoadingContent(true)
