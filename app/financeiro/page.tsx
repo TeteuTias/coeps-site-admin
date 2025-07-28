@@ -271,7 +271,7 @@ export default function Page() {
                                     // MODO DE VISUALIZAÇÃO
                                     <div className="text-center space-y-4">
                                         <p className="text-xl">
-                                            <span className="font-semibold">Nome do Lote:</span> {paymentData.nome}
+                                            <span className="font-semibold">Nome do Lote <span className="font-extrabold text-[8px]">Colocar em algum lugar que o nome que tá aqui vai aparecer igual na fatura do cartão</span>:</span> {paymentData.nome}
                                         </p>
                                         <p className="text-xl">
                                             <span className="font-semibold">Valor à Vista:</span> R$ {paymentData.valorAVista.toFixed(2).replace('.', ',')}
