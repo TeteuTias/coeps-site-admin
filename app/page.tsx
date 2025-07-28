@@ -30,6 +30,7 @@ function PaginaAreaDoCliente() { // como é uma pagina, pega toda a tela para el
             <Link href="/trabalhos"><CardOpcoes texto="Lista de Trabalhos" emoji="📖" /></Link>
             <Link href="/listas"><CardOpcoes texto="Lista de Participantes" emoji="🖨️" /></Link>
             <Link href="/presenca"><CardOpcoes texto="Lista de Presença" emoji="🤚" /></Link>
+            <Link href="/financeiro"><CardOpcoes texto="Financeiro" emoji="💵" /></Link>
           </div>
         </div>
       </div>
