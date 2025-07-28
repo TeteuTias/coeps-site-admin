@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 import { connectToDatabase } from "@/app/lib/mongodb";
 
 
-export const POST = withApiAuthRequired(async function POST(request) {
+export const DELETE = withApiAuthRequired(async function DELETE(request) {
     const data = await request.json()
     const { db } = await connectToDatabase();
     const colecao = 'minicursos'
@@ -15,7 +15,7 @@ export const POST = withApiAuthRequired(async function POST(request) {
         const response = await db.collection(colecao).updateOne(
             { _id: new ObjectId(data.eventId) },  // Encontra o documento com o _id especificado
             {
-                $addToSet: {
+                $pull: {
                     participants: data.userId,
                     attendanceList: data.userId
                 }
