@@ -26,12 +26,13 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
 
 
         const response = await db.collection(colecao).find(
-            { _id: new ObjectId(miniCursoId) }, { projection: { informacoes_usuario: 1, _id: 0 } }
+            { _id: new ObjectId(miniCursoId) },
+            // estamos usando essa rota para vários locais agora. Por isso removi a projeção.
         ).toArray() // 'buffer': 0, 'user_id': 0, 'size': 0
 
 
         return NextResponse.json({
-            "data": { nome: response[0].informacoes_usuario.nome, email: response[0].informacoes_usuario.email },
+            "data": { ...response[0] },
         }, { status: 200 });
 
     }
