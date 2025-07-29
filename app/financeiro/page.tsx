@@ -217,7 +217,7 @@ export default function Page() {
         <>
             { // se estiver carregando
                 loading &&
-                <LoadingModal />
+                <LoadingModal isLoading />
             }
             {
                 // se não estiver carregando...
