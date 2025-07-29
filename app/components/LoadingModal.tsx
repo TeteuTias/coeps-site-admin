@@ -1,10 +1,20 @@
-export default function LoadingModal() {
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-            <div className="flex items-center space-x-4 rounded-xl bg-white p-6 shadow-lg">
-                <div className="h-10 w-10 animate-spin rounded-full border-4 border-solid border-blue-600 border-t-transparent"></div>
-                <h1 className="text-xl font-bold text-gray-700">Carregando...</h1>
-            </div>
-        </div>
-    )
+interface LoadingModalProps {
+    isLoading: boolean;
 }
+
+
+const LoadingModal: React.FC<LoadingModalProps> = ({ isLoading }) => {
+    return (
+        <>
+            {isLoading && (
+                <div className="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-[100]">
+                    <div className="bg-white p-5 rounded-2xl">
+                        <span className="text-black text-2xl font-semibold">C A R R E G A N D O</span>
+                    </div>
+                </div>
+            )}
+        </>
+    );
+};
+
+export default LoadingModal

@@ -118,7 +118,7 @@ const MyComponent = () => {
   }
 
   return (
-    <div className="p-4 mb-10">
+    <div className="p-4 mb-10 space-y-5">
       <h1 className="text-xl font-bold text-center" onClick={() => console.log(data)}>Selecione um Minicurso</h1>
       <div className='space-y-5 p-1 flex content-center items-center justify-center'>
         <div className='flex flex-col items-center content-center space-y-3 max-h-screen'>
@@ -131,7 +131,7 @@ const MyComponent = () => {
                 <h1><span className='font-bold'>TOTAL DE INSCRITOS: </span> {value.participants.length}</h1>
                 <h1><span className='font-bold'>TOTAL DE VAGAS REMANESCENTES: </span> {value.maxParticipants - value.participants.length}</h1>
                 <h1><span className='font-bold'>ID: </span> {value._id}</h1>
-                <Link target='_blank' href={`/gerarListaMinicursoPresenca/${value._id}`} prefetch={false} className='font-bold cursor-pointer p-1 bg-blue-600'>GERAR LISTA</Link >
+                <Link target='_blank' href={`/presenca/gerarListaMinicursoPresenca/${value._id}`} prefetch={false} className='font-bold cursor-pointer p-1 bg-blue-600'>GERAR LISTA</Link >
               </div>
             )
           })}
