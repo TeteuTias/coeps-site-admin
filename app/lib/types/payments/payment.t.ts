@@ -44,7 +44,7 @@ export interface IPayment {
         "estimatedCreditDate": string | null,
         "transactionReceiptUrl": string | null,
         "nossoNumero": string, // exemplo => "10187602"
-        "bankSlipUrl": string, //"https://sandbox.asaas.com/b/pdf/e4qzehxllm4ep78p",
+        "bankSlipUrl": string, // exemplo: "https://sandbox.asaas.com/b/pdf/e4qzehxllm4ep78p",
         "lastInvoiceViewedDate": string | null,
         "lastBankSlipViewedDate": string | null,
         "discount": {
