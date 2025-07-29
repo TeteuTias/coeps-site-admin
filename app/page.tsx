@@ -40,7 +40,7 @@ function PaginaAreaDoCliente() {
           <div className="card-icon">
             <CircleDollarSign size={48} />
           </div>
-          <h2 className="card-title">Lista de Presença</h2>
+          <h2 className="card-title">Financeiro</h2>
         </Link>
       </div>
     </>
