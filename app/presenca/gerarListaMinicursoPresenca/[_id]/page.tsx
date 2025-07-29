@@ -109,7 +109,64 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
     //
     //
     useEffect(() => {
-        hydrateData();
+        const fetchData = async () => {
+            try {
+                // Função auxiliar para obter dados de participantes e lista de presença
+                const fetchParticipantAndAttendanceData = async () => {
+                    const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
+                        fetch(`/api/get/participantesMinicursos/${params._id}`),
+                        fetch(`/api/get/listaDePresenca/${params._id}`),
+                        fetch(`/api/get/minicursoProps/${params._id}`),
+                        fetch(`/api/get/todosCongressistas/`),
+                    ]);
+
+                    if (!participantsResponse.ok || !attendanceResponse.ok || !courseResponse.ok || !allUsersResponse.ok) {
+                        throw new Error("Erro ao buscar dados de participantes ou lista de presença");
+                    }
+
+                    const participantsResult: { data: string[] } = await participantsResponse.json();
+                    const attendanceResult: { data: string[] } = await attendanceResponse.json();
+                    const courseResult: { data: ICourse } = await courseResponse.json()
+                    const allUsersResult: { data: IUser[] } = await allUsersResponse.json()
+
+                    setData(participantsResult.data);
+                    setDataPresente(attendanceResult.data);
+                    setCourseData(courseResult.data)
+                    setAllUsers(allUsersResult.data)
+
+                    return participantsResult.data; // Retorna a lista de participantes para uso no fetchUserInfo
+                };
+
+                // Função auxiliar para buscar informações detalhadas dos usuários
+                const fetchUserInfo = async (userIds: string[]) => {
+                    const response = await fetch("/api/post/informacoesVariosUsuarios", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(userIds),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error("Erro na resposta da API de informações de usuários");
+                    }
+
+                    const result: { data: Usuario[] } = await response.json();
+                    setData2(result.data);
+                };
+
+                // Chamada das funções auxiliares
+                const participantIds = await fetchParticipantAndAttendanceData(); // Obtém a lista de participantes
+                await fetchUserInfo(participantIds); // Passa a lista para buscar informações detalhadas
+
+            } catch (error) {
+                setErrorBolean(true)
+                setError("OCORREU ALGO ERRADO. RECARREGUE");
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
     }, [params._id]);
 
 
@@ -128,6 +185,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
 
     return (
         <div className="min-h-screen flex flex-col items-center py-5 space-y-5">
+            <h1>{courseData.name}</h1>{/* Título */}
             <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
             <LoadingModal isLoading={loadingContent} />
             <ConfirmationModal {...isModalProps} />
@@ -336,7 +394,7 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
         if (isScannerOpen) {
             fetchCameras();
         }
-    }, [isScannerOpen]);
+    }, [isScannerOpen, selectedCameraId]);
 
     // Hook para iniciar e parar o scanner
     useEffect(() => {
@@ -458,7 +516,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
             setIsLoading(false)
         }
         fetchUser()
-    }, [])
+    }, [qrCodeResult])
 
     /**
      * Tava sem ideia para nome de função, então coloquei esse kk
@@ -531,7 +589,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                 {
                                     user && (
                                         getFeedBack(user, courseData).length === 0 ? "Não há nenhuma observação a ser feita" :
-                                            getFeedBack(user, courseData).map((value) => <p className='text-red-700 font-semibold'>{value}</p>)
+                                            getFeedBack(user, courseData).map((value) => <p key={`${user._id}`} className='text-red-700 font-semibold'>{value}</p>)
                                     )
                                 }
                             </div>
@@ -592,11 +650,6 @@ interface AllUsersModalProps {
 const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClose, onUserSelect, usersData }) => {
 
     const [searchTerm, setSearchTerm] = useState('');
-    // Não renderiza nada se não estiver aberto
-    if (!isOpen) {
-        return null;
-    }
-
     // Efeito para fechar com a tecla 'Esc'
     useEffect(() => {
         const handleEsc = (event: KeyboardEvent) => {
@@ -609,6 +662,12 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
             window.removeEventListener('keydown', handleEsc);
         };
     }, [onClose]);
+
+    // Não renderiza nada se não estiver aberto
+    if (!isOpen) {
+        return null;
+    }
+
 
 
     const filteredUsers = usersData.filter(user => {
@@ -650,6 +709,9 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
 
                 {/* Corpo rolável com a lista de usuários */}
                 <div className="flex-grow overflow-y-auto p-4">
+                    {
+                        <p className='w-full text-center font-extrabold text-red-800 py-3'>{!(courseData.participants.length + 1 >= courseData.maxParticipants) && `Atenção, o evento já atingiu seu limite máximo`}</p>
+                    }
                     <div className="flex flex-col items-center justify-center content-center space-y-4 w-full">
                         {filteredUsers.map((user) => (
                             // Envolvemos o card em um botão para torná-lo clicável

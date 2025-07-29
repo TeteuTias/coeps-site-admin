@@ -24,10 +24,6 @@ const ConfirmationModal: React.FC<ModalProps> = ({
     cancelText = 'Cancelar',
 }) => {
     // Se não estiver aberto, não renderiza nada
-    if (!isOpen) {
-        return null;
-    }
-
     // Efeito para fechar o modal com a tecla "Escape"
     useEffect(() => {
         const handleEsc = (event: KeyboardEvent) => {
@@ -42,6 +38,10 @@ const ConfirmationModal: React.FC<ModalProps> = ({
             window.removeEventListener('keydown', handleEsc);
         };
     }, [onClose]);
+    if (!isOpen) {
+        return null;
+    }
+
 
     return (
         // Contêiner principal do modal (overlay)
