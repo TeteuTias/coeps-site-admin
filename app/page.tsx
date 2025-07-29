@@ -1,7 +1,7 @@
 'use client'
 
 import Link from "next/link";
-import { FileText, Users, Hand, CircleDollarSign } from "lucide-react";
+import { FileText, Users, Hand, CircleDollarSign, UserRound } from "lucide-react";
 
 export default function Page() {
   return (
@@ -41,6 +41,12 @@ function PaginaAreaDoCliente() {
             <CircleDollarSign size={48} />
           </div>
           <h2 className="card-title">Financeiro</h2>
+        </Link>
+        <Link href="/usuarios" className="glass-card">
+          <div className="card-icon">
+            <UserRound size={48} />
+          </div>
+          <h2 className="card-title">Usuários</h2>
         </Link>
       </div>
     </>
