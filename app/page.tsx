@@ -1,7 +1,7 @@
 'use client'
 
 import Link from "next/link";
-import { FileText, Users, Hand } from "lucide-react";
+import { FileText, Users, Hand, CircleDollarSign } from "lucide-react";
 
 export default function Page() {
   return (
@@ -33,6 +33,12 @@ function PaginaAreaDoCliente() {
         <Link href="/presenca" className="glass-card">
           <div className="card-icon">
             <Hand size={48} />
+          </div>
+          <h2 className="card-title">Lista de Presença</h2>
+        </Link>
+        <Link href="/financeiro" className="glass-card">
+          <div className="card-icon">
+            <CircleDollarSign size={48} />
           </div>
           <h2 className="card-title">Lista de Presença</h2>
         </Link>
