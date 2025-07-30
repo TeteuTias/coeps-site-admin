@@ -61,11 +61,13 @@ export default function Page({ params }: { params: { userId: string } }) {
     const { userId } = params
     const [user, setUser] = useState<IUser | null>(null)
     const [formData, setFormData] = useState({
+        id_api: '',
         nome: '',
         email: '',
         numero_telefone: '',
         situacao: 0,
         situacao_animacao: false,
+        isPos_registration: false,
         tipo_pagamento: '' // Campo adicionado ao estado
     });
     const [isLoading, setIsLoading] = useState(true);
@@ -78,14 +80,17 @@ export default function Page({ params }: { params: { userId: string } }) {
             if (!response.ok) throw new Error("Usuário não encontrado");
             const userData: { data: IUser } = await response.json()
             setUser(userData.data)
+            console.log(userData.data)
             // Popula o estado do formulário com todos os dados, incluindo o novo campo
             setFormData({
+                id_api: userData.data.id_api || "",
                 nome: userData.data.informacoes_usuario.nome || '',
                 email: userData.data.informacoes_usuario.email || '',
                 numero_telefone: userData.data.informacoes_usuario.numero_telefone || '',
                 situacao: userData.data.pagamento.situacao,
                 situacao_animacao: userData.data.pagamento.situacao_animacao,
-                tipo_pagamento: userData.data.pagamento.tipo_pagamento || ''
+                tipo_pagamento: userData.data.pagamento.tipo_pagamento || '',
+                isPos_registration: userData.data.isPos_registration,
             });
         } catch (error) {
             console.error("Falha ao buscar usuário:", error)
@@ -168,6 +173,12 @@ export default function Page({ params }: { params: { userId: string } }) {
 
                     <div className="p-6 space-y-6">
                         <h2 className="text-lg font-medium text-gray-800">Informações Pessoais</h2>
+                        <div className="cursor-pointer" onClick={() => alert("*O QUE É ESSE CÓDIGO?* - Esse código é o código de identificação do congressista no banco ASSAS. Isso significa que cada congressista cadastrado possui também foi cadastrado no banco como um cliente do DADG. *COMO ALTERAR COM SEGURANÇA?* - Para alterar com segurança você deve pegar esse código diretamente do banco ASAAS. Caso não consiga fazer isso, marque o campo 'Preenchimento de Informações Iniciais' como 'Preencher Novamente'; isso vai fazer com que o usuário preencha todas as informações novamente e assim, o sistema vai gerar um novo ID já sincronizado com o banco.")}>
+                            <label htmlFor="id_api" className="block text-sm font-medium text-gray-700">Identificação Assas</label>
+                            <span className="text-red-500 font-bold text-[10px]">* CUIDADO AO TROCAR ESSA INFORMAÇÃO *</span>
+                            <p className="text-red-500 font-bold text-[10px] cursor-pointer">* COMO ALTERAR COM SEGURANÇA? *</p>
+                            <input type="text" name="id_api" id="id_api" value={formData.id_api} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
+                        </div>
                         <div>
                             <label htmlFor="nome" className="block text-sm font-medium text-gray-700">Nome Completo</label>
                             <input type="text" name="nome" id="nome" value={formData.nome} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
@@ -210,6 +221,19 @@ export default function Page({ params }: { params: { userId: string } }) {
                                 <span className="text-sm text-gray-600">Já exibida</span>
                             </div>
                         </div>
+
+                        <div>
+                            <label htmlFor="isPos_registration" className="block text-sm font-medium text-gray-700 mb-2">Preenchimento de Informações Iniciais</label>
+                            <div className="flex items-center gap-3">
+                                <span className="text-sm text-gray-600">Preencher Novamente</span>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="isPos_registration" name="isPos_registration" checked={formData.isPos_registration} onChange={handleChange} className="sr-only peer" />
+                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                </label>
+                                <span className="text-sm text-gray-600">Já Preenchido</span>
+                            </div>
+                        </div>
+
                     </div>
 
                     <div className="p-6 flex justify-end gap-4 border-t border-gray-200">

@@ -33,6 +33,8 @@ export const PUT = withApiAuthRequired(async function PUT(request) {
         if (fieldsToUpdate.situacao !== undefined) updateFields['pagamento.situacao'] = Number(fieldsToUpdate.situacao);
         if (fieldsToUpdate.situacao_animacao !== undefined) updateFields['pagamento.situacao_animacao'] = fieldsToUpdate.situacao_animacao;
         if (fieldsToUpdate.tipo_pagamento !== undefined) updateFields['pagamento.tipo_pagamento'] = fieldsToUpdate.tipo_pagamento;
+        if (fieldsToUpdate.isPos_registration !== undefined) updateFields['isPos_registration'] = fieldsToUpdate.isPos_registration;
+        if (fieldsToUpdate.id_api !== undefined) updateFields['id_api'] = fieldsToUpdate.id_api;
 
         if (Object.keys(updateFields).length === 0) {
             return NextResponse.json({ message: "Os dados enviados não correspondem a campos editáveis." }, { status: 400 });
