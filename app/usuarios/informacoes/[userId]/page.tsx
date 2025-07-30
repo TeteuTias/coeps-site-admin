@@ -1,12 +1,13 @@
 "use client"
 import { IPayment } from "@/app/lib/types/payments/payment.t"
 import { IUser } from "@/app/lib/types/user/user.t"
-import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight } from "lucide-react";
 import { useEffect, useState, FormEvent, ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ICourse } from "@/app/lib/types/events/event.t";
 import { ObjectId } from "bson";
+
 
 //
 const getPaymentStatusTranslation = (status: IPayment["lista_pagamentos"][0]["_webhook"][0]["event"]): string => {
@@ -70,12 +71,17 @@ export default function Page({ params }: { params: { userId: string } }) {
         isPos_registration: false,
         tipo_pagamento: '' // Campo adicionado ao estado
     });
+    const [dataCourses, setCourses] = useState<ICourse[]>([])
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const router = useRouter()
 
     const fetchData = async () => {
         try {
+            const responseCourses = await fetch(`/api/get/minicursosDeUsuario/${userId}`)
+            if (!responseCourses.ok) throw new Error("Erro ao carregar informações de minicursos")
+            const courses: { data: ICourse[] } = await responseCourses.json()
+            setCourses(courses.data)
             const response = await fetch(`/api/get/usuarioPorId/${userId}`)
             if (!response.ok) throw new Error("Usuário não encontrado");
             const userData: { data: IUser } = await response.json()
@@ -158,7 +164,6 @@ export default function Page({ params }: { params: { userId: string } }) {
                         Voltar para a lista
                     </Link>
                 </div>
-
                 <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-gray-200">
                         <div className="flex items-start gap-4">
@@ -245,9 +250,19 @@ export default function Page({ params }: { params: { userId: string } }) {
                 </form>
             </div>
             <div className="w-full text-center font-bold text-2xl">
+                <h1>MINICURSOS INSCRITOS</h1>
+            </div>
+            <div className="max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5">
+                {
+                    dataCourses.length === 0 ?
+                        <p className="w-full text-center py-2 font-semibold">Não há pagamentos prévios</p> :
+                        dataCourses.map((minicurso) => <CourseCard key={minicurso._id} minicurso={{ ...minicurso }} />)
+                }
+            </div>
+            <div className="w-full text-center font-bold text-2xl">
                 <h1>PAGAMENTOS</h1>
             </div>
-            <div className="max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-1">
+            <div className="flex flex-col items-center justify-center content-center max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5 px-10">
                 {
                     user.pagamento.lista_pagamentos.length === 0 ?
                         <p className="w-full text-center py-2 font-semibold">Não há pagamentos prévios</p> :
@@ -257,6 +272,92 @@ export default function Page({ params }: { params: { userId: string } }) {
         </div >
     )
 }
+
+export const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
+    const router = useRouter()
+    const { name, description, maxParticipants, participantsCount, timeline, isOpen, isFree, value, emoji } = minicurso;
+
+    const vagasPercentual = maxParticipants > 0 ? (participantsCount / maxParticipants) * 100 : 0;
+
+    const dataInicio = new Date(timeline.date_init);
+    const dataFim = new Date(timeline.date_end);
+    const dataFormatada = `${dataInicio.toLocaleDateString('pt-BR')} das ${dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às ${dataFim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-md hover:shadow-xl transition-shadow duration-300 flex flex-col overflow-hidden w-full">
+
+            {/* Cabeçalho do Card */}
+            <div className="p-6">
+                <div className="flex justify-between items-end gap-4">
+                    <span className="text-5xl">{emoji || '🎓'}</span>
+                    <div className="text-right">
+                        {isOpen ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Inscrições Abertas
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+                                <XCircle className="h-3.5 w-3.5" />
+                                Inscrições Encerradas
+                            </span>
+                        )}
+                        <span className={`w-fit mt-2 block px-3 py-1 text-xs font-medium rounded-full ${isFree ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            {isFree ? 'Gratuito' : `R$ ${value.toFixed(2).replace('.', ',')}`}
+                        </span>
+                    </div>
+                </div>
+
+                <h2 className="mt-4 text-2xl font-bold text-gray-800">{name}</h2>
+                <p className="mt-2 text-sm text-gray-600 h-20 overflow-hidden text-ellipsis">{description}</p>
+            </div>
+
+            {/* Detalhes com Ícones */}
+            <div className="p-6 space-y-4 border-t border-gray-100">
+                <div className="flex items-center gap-3 text-sm">
+                    <Calendar className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                    <span className="text-gray-700 font-medium">{dataFormatada}</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                    <MapPin className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                    <span className="text-gray-700 font-medium">{timeline.local || "---"}</span>
+                </div>
+                {/* Barra de Progresso de Vagas */}
+                <div>
+                    <div className="flex items-center justify-between mb-1 text-sm">
+                        <div className="flex items-center gap-3">
+                            <Users className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                            <span className="text-gray-700 font-medium">Vagas</span>
+                        </div>
+                        <span className="font-semibold text-indigo-600">{participantsCount} / {maxParticipants}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${vagasPercentual}%` }}></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Rodapé com Botões */}
+            <div className="mt-auto bg-gray-50 p-4 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row justify-end gap-3">
+                    <button className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
+                        onClick={() => router.push(`/presenca/gerarListaMinicursoPresenca/${minicurso._id}`)}
+                    >
+                        <ListChecks className="h-4 w-4" />
+                        Abrir Lista de Presença
+                    </button>
+                    {/* Substitua a tag 'button' por 'Link' do Next.js se necessário */}
+                    <button className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gray-800 rounded-lg hover:bg-gray-900 transition-colors"
+                        onClick={() => alert("Em Breve")}
+                    >
+                        <span>Abrir Minicurso</span>
+                        <ArrowRight className="h-4 w-4" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = ({ pagamento }) => {
     const [event, setEvent] = useState<ICourse | null>(null)
