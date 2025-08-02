@@ -397,11 +397,11 @@ export default function Page() {
                                             />
                                         </div>
                                         <div>
-                                            <label htmlFor="valorPIX" className="block text-lg font-semibold text-gray-700 text-left mb-1">PIX (R$)</label>
+                                            <label htmlFor="valorPix" className="block text-lg font-semibold text-gray-700 text-left mb-1">PIX (R$)</label>
                                             <input
                                                 type="number"
-                                                id="valorPIX"
-                                                name="valorPIX"
+                                                id="valorPix"
+                                                name="valorPix"
                                                 value={editableInfo.valorPix}
                                                 onChange={handleInfoInputChange}
                                                 className="w-full px-4 py-2 text-xl border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
