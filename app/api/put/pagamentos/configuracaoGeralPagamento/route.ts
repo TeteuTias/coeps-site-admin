@@ -14,7 +14,14 @@ export async function PUT(req: NextRequest) {
     try {
         // 2. Extrair os dados do corpo da requisição
         const body = await req.json();
-        const { nome, valorAVista, _id, valorBoleto, valorDebito, valorPix } = body;
+        const { nome, valorAVista, _id, valorBoleto, valorDebito, valorPix } = body as {
+            nome: string;
+            _id: string;
+            valorAVista: number;
+            valorBoleto: number;
+            valorDebito: number;
+            valorPix: number;
+        }
         // 3. Autenticar e validar os dados recebidos
 
         if (!ObjectId.isValid(_id)) {
@@ -25,19 +32,19 @@ export async function PUT(req: NextRequest) {
             return Response.json({ error: 'O nome do lote é obrigatório e deve ser um texto válido.' }, { status: 400 });
         }
 
-        if (valorAVista === undefined || typeof valorAVista !== 'number' || valorAVista < 0) {
+        if (Number(valorAVista) === undefined || Number(valorAVista) < 0) {
             return Response.json({ error: 'O valor à vista é obrigatório e deve ser um número positivo.' }, { status: 400 });
         }
 
-        if (valorBoleto === undefined || typeof valorBoleto !== 'number' || valorBoleto < 0) {
+        if (Number(valorBoleto) === undefined || Number(valorBoleto) < 0) {
             return Response.json({ error: 'O valor `BOLETO` é obrigatório e deve ser um número positivo.' }, { status: 400 });
         }
 
-        if (valorDebito === undefined || typeof valorDebito !== 'number' || valorDebito < 0) {
+        if (Number(valorDebito) === undefined || Number(valorDebito) < 0) {
             return Response.json({ error: 'O valor `Débito` é obrigatório e deve ser um número positivo.' }, { status: 400 });
         }
 
-        if (valorPix === undefined || typeof valorPix !== 'number' || valorPix < 0) {
+        if (Number(valorPix) === undefined || Number(valorPix) < 0) {
             return Response.json({ error: 'O valor `PIX` é obrigatório e deve ser um número positivo.' }, { status: 400 });
         }
 
@@ -49,7 +56,10 @@ export async function PUT(req: NextRequest) {
             { _id: new ObjectId(_id) }, {
             $set: {
                 nome: nome,
-                valorAVista: valorAVista,
+                valorAVista: Number(valorAVista),
+                valorBoleto: Number(valorBoleto),
+                valorDebito: Number(valorDebito),
+                valorPix: Number(valorPix)
             },
         }
         )

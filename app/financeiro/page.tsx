@@ -424,16 +424,16 @@ export default function Page() {
                                             <span className="font-semibold">Nome do Lote <span className="font-extrabold text-[8px]">Colocar em algum lugar que o nome que tá aqui vai aparecer igual na fatura do cartão</span>:</span> {paymentData.nome}
                                         </p>
                                         <p className="text-xl">
-                                            <span className="font-semibold">Crédito Á Vista:</span> R$ {paymentData?.valorAVista?.toFixed(2).replace('.', ',')}
+                                            <span className="font-semibold">Crédito Á Vista:</span> R$ {paymentData?.valorAVista}
                                         </p>
                                         <p className="text-xl">
-                                            <span className="font-semibold">Boleto:</span> R$ {paymentData?.valorBoleto?.toFixed(2).replace('.', ',')}
+                                            <span className="font-semibold">Boleto:</span> R$ {paymentData?.valorBoleto}
                                         </p>
                                         <p className="text-xl">
-                                            <span className="font-semibold">Débito:</span> R$ {paymentData?.valorDebito?.toFixed(2).replace('.', ',')}
+                                            <span className="font-semibold">Débito:</span> R$ {paymentData?.valorDebito}
                                         </p>
                                         <p className="text-xl">
-                                            <span className="font-semibold">PIX:</span> R$ {paymentData?.valorPix?.toFixed(2).replace('.', ',')}
+                                            <span className="font-semibold">PIX:</span> R$ {paymentData?.valorPix}
                                         </p>
                                         <div className="mt-6">
                                             <button onClick={() => setIsEditingInfo(true)} className="text-base bg-blue-600 hover:bg-blue-700 font-bold text-white px-6 py-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
