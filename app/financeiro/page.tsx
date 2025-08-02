@@ -24,7 +24,11 @@ export default function Page() {
     const [editableInfo, setEditableInfo] = useState({
         nome: '',
         valorAVista: 0,
+        valorBoleto: 0,
+        valorDebito: 0,
+        valorPix: 0
     });
+    const allPaymentTypes: IPaymentConfig["pagamentosAceitos"] = ["PIX", "BOLETO", "CREDIT_CARD", "DEBIT_CARD"]
     //
     //
     /* Ativa o modo de edição para os parcelamentos */
@@ -118,7 +122,10 @@ export default function Page() {
             // Inicializando o estado editável com os dados recebidos
             setEditableInfo({
                 nome: fetchedData.nome,
-                valorAVista: fetchedData.valorAVista
+                valorAVista: fetchedData.valorAVista,
+                valorBoleto: fetchedData.valorBoleto,
+                valorDebito: fetchedData.valorDebito,
+                valorPix: fetchedData.valorPix
             })
             setLoading(false)
         }
@@ -194,7 +201,10 @@ export default function Page() {
         if (paymentData) {
             setEditableInfo({
                 nome: paymentData.nome,
-                valorAVista: paymentData.valorAVista
+                valorAVista: paymentData.valorAVista,
+                valorBoleto: paymentData.valorBoleto,
+                valorDebito: paymentData.valorDebito,
+                valorPix: paymentData.valorPix
             });
         }
         // Desativa o modo de edição
@@ -213,6 +223,68 @@ export default function Page() {
         setEditableParcelamentos([...editableParcelamentos, newParcelamento]);
     };
 
+    const updateAllowedPayments = async () => {
+        setLoading(true)
+        const response = await fetch("/api/put/pagamentos/configuracaoTiposDePagamentosAceitos/", {
+            method: "PUT",
+            body: JSON.stringify({
+                _id: paymentData?._id,
+                parcelamentos: paymentData?.pagamentosAceitos
+            })
+        })
+        if (!response.ok) {
+            const error: { message: string } = await response.json()
+            setLoading(false)
+            alert(error.message)
+            return
+        }
+
+        const fetchData = async () => {
+            const data = await fetch("/api/get/pagamentos/configuracaoPagamento")
+            if (!data.ok) {
+                // Caso ocorra algum erro ao puxar as informações, vamos mostrar isso na tela
+                // coloquei um alert, mas se quiser pode criar um modal mais bonito.
+                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
+            }
+            const fetchedData = await data.json()
+            // atualizando paymentData
+            setPaymentData(fetchedData)
+            // Inicializando o estado editável com os dados recebidos
+            setEditableInfo({
+                nome: fetchedData.nome,
+                valorAVista: fetchedData.valorAVista,
+                valorBoleto: fetchedData.valorBoleto,
+                valorDebito: fetchedData.valorDebito,
+                valorPix: fetchedData.valorPix
+            })
+            setLoading(false)
+        }
+
+        const fetchDataPayedUsers = async () => {
+            const data = await fetch("/api/get/pagamentos/listaInscritos/")
+            if (!data.ok) {
+                // Caso ocorra algum erro ao puxar as informações, vamos mostrar isso na tela
+                // coloquei um alert, mas se quiser pode criar um modal mais bonito.
+                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
+            }
+            // atualizando paymentData
+            setPayedUsers(await data.json())
+            setLoading(false)
+        }
+
+        // Vamos começar puxandos os dados do banco de dados. 
+        // A rota devolverá um IPaymentConfig.
+        // Este será guardado em paymentData.
+        await fetchData()
+        await fetchDataPayedUsers()
+        // Vamos puxar todos os usuário que possuem o status de pago,
+        // ou seja: 1
+        // Este será guardado em payedUsers
+        setLoading(false)
+        alert("Pagamentos aceitos alterados com sucesso!")
+
+    }
+
     return (
         <>
             { // se estiver carregando
@@ -230,6 +302,48 @@ export default function Page() {
 
                         <main className="space-y-12">
                             {/* Seção de Informações Gerais */}
+
+                            <section className="w-full flex flex-col items-center content-center justify-center bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+                                <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Pagamentos Aceitos</h2>
+                                <div className="flex flex-row space-x-2">
+                                    {
+                                        allPaymentTypes.map((value) => {
+                                            const isSelected = paymentData.pagamentosAceitos?.includes(value);
+                                            return (
+                                                <button
+                                                    key={value}
+                                                    className={`px-4 py-2 rounded-lg text-white transition-colors duration-200
+              ${isSelected ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 hover:bg-gray-500'}`}
+                                                    onClick={() => {
+                                                        setPaymentData((prev) => {
+                                                            if (!prev) return prev;
+                                                            const atual = prev.pagamentosAceitos ?? [];
+                                                            const jaSelecionado = atual.includes(value);
+                                                            return {
+                                                                ...prev,
+                                                                pagamentosAceitos: jaSelecionado
+                                                                    ? atual.filter((item) => item !== value)
+                                                                    : [...atual, value],
+                                                            };
+                                                        });
+                                                    }}
+                                                >
+                                                    {value === "CREDIT_CARD"
+                                                        ? "Cartão de Crédito"
+                                                        : value === "DEBIT_CARD"
+                                                            ? "Cartão de Débito"
+                                                            : value}
+                                                </button>
+                                            )
+                                        })
+                                    }
+                                </div>
+                                <button onClick={updateAllowedPayments} className="mt-6 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200">
+                                    Alterar Informações
+                                </button>
+                            </section>
+
+
                             <section className="w-full bg-white p-8 rounded-xl shadow-lg border border-gray-200">
                                 <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Informações Gerais de Pagamento</h2>
 
@@ -248,7 +362,7 @@ export default function Page() {
                                             />
                                         </div>
                                         <div>
-                                            <label htmlFor="valorAVista" className="block text-lg font-semibold text-gray-700 text-left mb-1">Valor à Vista (R$)</label>
+                                            <label htmlFor="valorAVista" className="block text-lg font-semibold text-gray-700 text-left mb-1">Crédito Á Vista (R$)</label>
                                             <input
                                                 type="number"
                                                 id="valorAVista"
@@ -258,6 +372,42 @@ export default function Page() {
                                                 className="w-full px-4 py-2 text-xl border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                                             />
                                         </div>
+
+                                        <div>
+                                            <label htmlFor="valorDebito" className="block text-lg font-semibold text-gray-700 text-left mb-1">Débito (R$)</label>
+                                            <input
+                                                type="number"
+                                                id="valorDebito"
+                                                name="valorDebito"
+                                                value={editableInfo.valorDebito}
+                                                onChange={handleInfoInputChange}
+                                                className="w-full px-4 py-2 text-xl border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label htmlFor="valorBoleto" className="block text-lg font-semibold text-gray-700 text-left mb-1">Boleto (R$)</label>
+                                            <input
+                                                type="number"
+                                                id="valorBoleto"
+                                                name="valorBoleto"
+                                                value={editableInfo.valorBoleto}
+                                                onChange={handleInfoInputChange}
+                                                className="w-full px-4 py-2 text-xl border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="valorPIX" className="block text-lg font-semibold text-gray-700 text-left mb-1">PIX (R$)</label>
+                                            <input
+                                                type="number"
+                                                id="valorPIX"
+                                                name="valorPIX"
+                                                value={editableInfo.valorPix}
+                                                onChange={handleInfoInputChange}
+                                                className="w-full px-4 py-2 text-xl border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                        </div>
+
                                         <div className="mt-6 flex justify-center gap-4">
                                             <button onClick={handleSaveChanges} className="text-base bg-green-600 hover:bg-green-700 font-bold text-white px-6 py-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
                                                 Salvar
@@ -274,7 +424,16 @@ export default function Page() {
                                             <span className="font-semibold">Nome do Lote <span className="font-extrabold text-[8px]">Colocar em algum lugar que o nome que tá aqui vai aparecer igual na fatura do cartão</span>:</span> {paymentData.nome}
                                         </p>
                                         <p className="text-xl">
-                                            <span className="font-semibold">Valor à Vista:</span> R$ {paymentData.valorAVista.toFixed(2).replace('.', ',')}
+                                            <span className="font-semibold">Crédito Á Vista:</span> R$ {paymentData?.valorAVista?.toFixed(2).replace('.', ',')}
+                                        </p>
+                                        <p className="text-xl">
+                                            <span className="font-semibold">Boleto:</span> R$ {paymentData?.valorBoleto?.toFixed(2).replace('.', ',')}
+                                        </p>
+                                        <p className="text-xl">
+                                            <span className="font-semibold">Débito:</span> R$ {paymentData?.valorDebito?.toFixed(2).replace('.', ',')}
+                                        </p>
+                                        <p className="text-xl">
+                                            <span className="font-semibold">PIX:</span> R$ {paymentData?.valorPix?.toFixed(2).replace('.', ',')}
                                         </p>
                                         <div className="mt-6">
                                             <button onClick={() => setIsEditingInfo(true)} className="text-base bg-blue-600 hover:bg-blue-700 font-bold text-white px-6 py-3 rounded-lg shadow-md transition-transform transform hover:scale-105">
@@ -480,7 +639,7 @@ export default function Page() {
 
                         </main>
                     </div>
-                </div>
+                </div >
             }
         </>
     )

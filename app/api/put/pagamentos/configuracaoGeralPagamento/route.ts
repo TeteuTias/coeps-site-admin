@@ -14,8 +14,7 @@ export async function PUT(req: NextRequest) {
     try {
         // 2. Extrair os dados do corpo da requisição
         const body = await req.json();
-        const { nome, valorAVista, _id } = body;
-
+        const { nome, valorAVista, _id, valorBoleto, valorDebito, valorPix } = body;
         // 3. Autenticar e validar os dados recebidos
 
         if (!ObjectId.isValid(_id)) {
@@ -29,6 +28,19 @@ export async function PUT(req: NextRequest) {
         if (valorAVista === undefined || typeof valorAVista !== 'number' || valorAVista < 0) {
             return Response.json({ error: 'O valor à vista é obrigatório e deve ser um número positivo.' }, { status: 400 });
         }
+
+        if (valorBoleto === undefined || typeof valorBoleto !== 'number' || valorBoleto < 0) {
+            return Response.json({ error: 'O valor `BOLETO` é obrigatório e deve ser um número positivo.' }, { status: 400 });
+        }
+
+        if (valorDebito === undefined || typeof valorDebito !== 'number' || valorDebito < 0) {
+            return Response.json({ error: 'O valor `Débito` é obrigatório e deve ser um número positivo.' }, { status: 400 });
+        }
+
+        if (valorPix === undefined || typeof valorPix !== 'number' || valorPix < 0) {
+            return Response.json({ error: 'O valor `PIX` é obrigatório e deve ser um número positivo.' }, { status: 400 });
+        }
+
 
         // 4. Colocando no banco de dados
         const { db } = await connectToDatabase();

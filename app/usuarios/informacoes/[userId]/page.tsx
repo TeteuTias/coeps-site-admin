@@ -273,7 +273,7 @@ export default function Page({ params }: { params: { userId: string } }) {
     )
 }
 
-export const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
+const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
     const router = useRouter()
     const { name, description, maxParticipants, participantsCount, timeline, isOpen, isFree, value, emoji } = minicurso;
 
