@@ -279,35 +279,35 @@ export default function Page() {
                     </h2>
                     <div className="financeiro-payment-types">
                         {allPaymentTypes.map((value) => {
-                            const isSelected = paymentData.pagamentosAceitos?.includes(value);
-                            return (
-                                <button
-                                    key={value}
+                                            const isSelected = paymentData.pagamentosAceitos?.includes(value);
+                                            return (
+                                                <button
+                                                    key={value}
                                     className={`financeiro-payment-type-btn ${isSelected ? 'active' : ''}`}
-                                    onClick={() => {
-                                        setPaymentData((prev) => {
-                                            if (!prev) return prev;
-                                            const atual = prev.pagamentosAceitos ?? [];
-                                            const jaSelecionado = atual.includes(value);
-                                            return {
-                                                ...prev,
-                                                pagamentosAceitos: jaSelecionado
-                                                    ? atual.filter((item) => item !== value)
-                                                    : [...atual, value],
-                                            };
-                                        });
-                                    }}
-                                >
+                                                    onClick={() => {
+                                                        setPaymentData((prev) => {
+                                                            if (!prev) return prev;
+                                                            const atual = prev.pagamentosAceitos ?? [];
+                                                            const jaSelecionado = atual.includes(value);
+                                                            return {
+                                                                ...prev,
+                                                                pagamentosAceitos: jaSelecionado
+                                                                    ? atual.filter((item) => item !== value)
+                                                                    : [...atual, value],
+                                                            };
+                                                        });
+                                                    }}
+                                                >
                                     {value === "CREDIT_CARD" ? "Cartão de Crédito" : 
                                      value === "DEBIT_CARD" ? "Cartão de Débito" : value}
-                                </button>
-                            )
+                                                </button>
+                                            )
                         })}
-                    </div>
+                                </div>
                     <button onClick={updateAllowedPayments} className="financeiro-btn financeiro-btn-primary">
                         <Save size={18} />
                         Salvar Alterações
-                    </button>
+                                </button>
                 </div>
 
                 {/* Informações Gerais */}
@@ -317,7 +317,7 @@ export default function Page() {
                         Informações Gerais de Pagamento
                     </h2>
 
-                    {isEditingInfo ? (
+                                {isEditingInfo ? (
                         <div className="financeiro-form">
                             <div className="financeiro-form-group">
                                 <label htmlFor="nome" className="financeiro-label">
@@ -326,75 +326,75 @@ export default function Page() {
                                         Este nome aparecerá na fatura do cartão
                                     </span>
                                 </label>
-                                <input
-                                    type="text"
-                                    id="nome"
-                                    name="nome"
-                                    value={editableInfo.nome}
-                                    onChange={handleInfoInputChange}
+                                            <input
+                                                type="text"
+                                                id="nome"
+                                                name="nome"
+                                                value={editableInfo.nome}
+                                                onChange={handleInfoInputChange}
                                     className="financeiro-input"
-                                />
-                            </div>
+                                            />
+                                        </div>
                             <div className="financeiro-form-row">
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorAVista" className="financeiro-label">Crédito à Vista (R$)</label>
-                                    <input
-                                        type="number"
-                                        id="valorAVista"
-                                        name="valorAVista"
-                                        value={editableInfo.valorAVista}
-                                        onChange={handleInfoInputChange}
+                                            <input
+                                                type="number"
+                                                id="valorAVista"
+                                                name="valorAVista"
+                                                value={editableInfo.valorAVista}
+                                                onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                    />
-                                </div>
+                                            />
+                                        </div>
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorDebito" className="financeiro-label">Débito (R$)</label>
-                                    <input
-                                        type="number"
-                                        id="valorDebito"
-                                        name="valorDebito"
-                                        value={editableInfo.valorDebito}
-                                        onChange={handleInfoInputChange}
+                                            <input
+                                                type="number"
+                                                id="valorDebito"
+                                                name="valorDebito"
+                                                value={editableInfo.valorDebito}
+                                                onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                    />
-                                </div>
+                                            />
+                                        </div>
                             </div>
                             <div className="financeiro-form-row">
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorBoleto" className="financeiro-label">Boleto (R$)</label>
-                                    <input
-                                        type="number"
-                                        id="valorBoleto"
-                                        name="valorBoleto"
-                                        value={editableInfo.valorBoleto}
-                                        onChange={handleInfoInputChange}
+                                            <input
+                                                type="number"
+                                                id="valorBoleto"
+                                                name="valorBoleto"
+                                                value={editableInfo.valorBoleto}
+                                                onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                    />
-                                </div>
+                                            />
+                                        </div>
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorPix" className="financeiro-label">PIX (R$)</label>
-                                    <input
-                                        type="number"
-                                        id="valorPix"
-                                        name="valorPix"
-                                        value={editableInfo.valorPix}
-                                        onChange={handleInfoInputChange}
+                                            <input
+                                                type="number"
+                                                id="valorPix"
+                                                name="valorPix"
+                                                value={editableInfo.valorPix}
+                                                onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                    />
-                                </div>
+                                            />
+                                        </div>
                             </div>
                             <div className="financeiro-form-actions">
                                 <button onClick={handleSaveChanges} className="financeiro-btn financeiro-btn-success">
                                     <Save size={18} />
-                                    Salvar
-                                </button>
+                                                Salvar
+                                            </button>
                                 <button onClick={handleCancelEdit} className="financeiro-btn financeiro-btn-secondary">
                                     <X size={18} />
-                                    Cancelar
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
                         <div className="financeiro-info-display">
                             <div className="financeiro-info-item">
                                 <span className="financeiro-info-label">Nome do Lote:</span>
@@ -422,7 +422,7 @@ export default function Page() {
                             <button onClick={() => setIsEditingInfo(true)} className="financeiro-btn financeiro-btn-primary">
                                 <Edit3 size={18} />
                                 Editar Informações
-                            </button>
+                                            </button>
                         </div>
                     )}
                 </div>
@@ -460,9 +460,9 @@ export default function Page() {
                                             <span className="financeiro-parcelamento-total-value">R$ {(payment.valorCadaParcela * payment.totalParcelas).toFixed(2).replace('.', ',')}</span>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                                </div>
+                                            ))}
+                                        </div>
                     ) : (
                         <div className="financeiro-parcelamentos-edit">
                             <div className="financeiro-parcelamentos-grid">
@@ -473,55 +473,55 @@ export default function Page() {
                                             className="financeiro-delete-btn"
                                         >
                                             <Trash2 size={16} />
-                                        </button>
+                                            </button>
                                         <div className="financeiro-parcelamento-header">
                                             <span className="financeiro-parcelamento-codigo">Código: {payment.codigo}</span>
                                         </div>
                                         <div className="financeiro-parcelamento-form">
                                             <div className="financeiro-form-group">
                                                 <label className="financeiro-label">Total de Parcelas</label>
-                                                <input
-                                                    type="number"
-                                                    name="totalParcelas"
-                                                    value={payment.totalParcelas}
-                                                    onChange={(e) => handleParcelamentoChange(index, e)}
+                                                        <input
+                                                            type="number"
+                                                            name="totalParcelas"
+                                                            value={payment.totalParcelas}
+                                                            onChange={(e) => handleParcelamentoChange(index, e)}
                                                     className="financeiro-input"
-                                                />
-                                            </div>
+                                                        />
+                                                    </div>
                                             <div className="financeiro-form-group">
                                                 <label className="financeiro-label">Valor por Parcela (R$)</label>
-                                                <input
-                                                    type="number"
-                                                    name="valorCadaParcela"
-                                                    value={payment.valorCadaParcela}
-                                                    onChange={(e) => handleParcelamentoChange(index, e)}
+                                                        <input
+                                                            type="number"
+                                                            name="valorCadaParcela"
+                                                            value={payment.valorCadaParcela}
+                                                            onChange={(e) => handleParcelamentoChange(index, e)}
                                                     className="financeiro-input"
-                                                />
-                                            </div>
+                                                        />
+                                                    </div>
                                             <div className="financeiro-parcelamento-total">
                                                 <span className="financeiro-parcelamento-label">Novo Valor Total:</span>
                                                 <span className="financeiro-parcelamento-total-value">R$ {(payment.valorCadaParcela * payment.totalParcelas).toFixed(2).replace('.', ',')}</span>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
+                                                </div>
+                                            ))}
+                                        </div>
                             <div className="financeiro-parcelamentos-actions">
                                 <button onClick={handleAddParcelamento} className="financeiro-btn financeiro-btn-secondary">
                                     <Plus size={18} />
                                     Adicionar Parcelamento
-                                </button>
+                                            </button>
                                 <div className="financeiro-form-actions">
                                     <button onClick={handleSaveParcelamentos} className="financeiro-btn financeiro-btn-success">
                                         <Save size={18} />
-                                        Salvar Alterações
-                                    </button>
+                                                Salvar Alterações
+                                            </button>
                                     <button onClick={handleCancelParcelamentosEdit} className="financeiro-btn financeiro-btn-secondary">
                                         <X size={18} />
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </div>
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    </div>
                         </div>
                     )}
                     
@@ -543,13 +543,13 @@ export default function Page() {
                     <div className="financeiro-users-info">
                         <div className="financeiro-users-stats">
                             <span className="financeiro-users-count">
-                                Total de Inscrições: {payedUsers.length > 0 ? payedUsers.length : "Ainda não há inscrições"}
+                                    Total de Inscrições: {payedUsers.length > 0 ? payedUsers.length : "Ainda não há inscrições"}
                             </span>
                             <span className="financeiro-users-note">
                                 Valor variável com a quantidade atual de inscrições
                             </span>
-                        </div>
-                        
+                                </div>
+
                         <div className="financeiro-users-actions">
                             <button 
                                 className="financeiro-btn financeiro-btn-primary"
@@ -558,30 +558,30 @@ export default function Page() {
                                 <Users size={18} />
                                 Gerenciar Usuários
                             </button>
-                            <button
+                                        <button
                                 className="financeiro-btn financeiro-btn-danger"
-                                onClick={async () => {
+                                            onClick={async () => {
                                     if (confirm("Tem certeza que deseja remover TODAS as inscrições? Esta ação não pode ser desfeita.")) {
-                                        setLoading(true)
-                                        const data = await fetch(`/api/delete/pagamentos/removerInscricao/ALL`, {
-                                            method: "DELETE"
-                                        })
+                                                setLoading(true)
+                                                const data = await fetch(`/api/delete/pagamentos/removerInscricao/ALL`, {
+                                                    method: "DELETE"
+                                                })
 
-                                        if (!data.ok) {
-                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                            setLoading(false)
-                                            return;
-                                        }
+                                                if (!data.ok) {
+                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                    setLoading(false)
+                                                    return;
+                                                }
 
-                                        setPayedUsers([])
-                                        setLoading(false)
+                                                setPayedUsers([])
+                                                setLoading(false)
                                         alert("Todas as inscrições foram removidas com sucesso!")
                                     }
                                 }}
                             >
                                 <UserX size={18} />
                                 Remover Todas Inscrições
-                            </button>
+                                        </button>
                         </div>
                     </div>
 
@@ -611,44 +611,44 @@ export default function Page() {
                                     </div>
                                 </div>
                                 <div className="financeiro-user-actions">
-                                    <button
+                                                        <button
                                         className="financeiro-btn financeiro-btn-success"
                                         onClick={() => router.push(`/usuarios/informacoes/${user._id}`)}
                                     >
                                         <UserCheck size={16} />
                                         Ver Perfil
                                     </button>
-                                    <button
+                                                        <button
                                         className="financeiro-btn financeiro-btn-danger"
-                                        onClick={async () => {
+                                                            onClick={async () => {
                                             if (confirm("Tem certeza que deseja remover esta inscrição?")) {
-                                                setLoading(true)
-                                                const data = await fetch(`/api/delete/pagamentos/removerInscricao/${user._id}`, {
-                                                    method: "DELETE"
-                                                })
+                                                                setLoading(true)
+                                                                const data = await fetch(`/api/delete/pagamentos/removerInscricao/${user._id}`, {
+                                                                    method: "DELETE"
+                                                                })
 
-                                                if (!data.ok) {
-                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                    setLoading(false)
-                                                    return;
-                                                }
+                                                                if (!data.ok) {
+                                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                                    setLoading(false)
+                                                                    return;
+                                                                }
 
-                                                setPayedUsers((prev) => prev.filter((value) => `${value._id}` !== `${user._id}`))
-                                                setLoading(false)
-                                                alert("A inscrição foi removida com sucesso!")
-                                            }
+                                                                setPayedUsers((prev) => prev.filter((value) => `${value._id}` !== `${user._id}`))
+                                                                setLoading(false)
+                                                                alert("A inscrição foi removida com sucesso!")
+                                                            }
                                         }}
                                     >
                                         <UserX size={16} />
-                                        Remover Inscrição
-                                    </button>
-                                </div>
-                            </div>
-                        )) : (
+                                                            Remover Inscrição
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )) : (
                             <div className="financeiro-empty-state">
                                 <Users size={48} />
                                 <p>Nenhum usuário pagante encontrado.</p>
-                            </div>
+                                    </div>
                         )}
                     </div>
                 </div>

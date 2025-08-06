@@ -4,9 +4,9 @@
   --azul: #1B305F;
 }
 
-.listas-main-container {
+.trabalhos-main-container {
   min-height: 100vh;
-  padding: 2rem 0;
+  padding: 5rem 0 2rem 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -283,7 +283,7 @@
 
 @media (max-width: 900px) {
   .trabalhos-main-container {
-    padding: 1.2rem 0.2rem;
+    padding: 4rem 0.2rem 1.2rem 0.2rem;
   }
   .trabalhos-lista {
     max-width: 100vw;
@@ -297,7 +297,7 @@
 
 @media (max-width: 700px) {
   .trabalhos-main-container {
-    padding: 0.7rem 0.1rem;
+    padding: 3.5rem 0.1rem 0.7rem 0.1rem;
   }
   .trabalhos-title {
     font-size: 1.3rem;
@@ -355,7 +355,7 @@
     box-sizing: border-box;
   }
   .trabalhos-main-container {
-    padding: 0.2rem 0;
+    padding: 3rem 0 0.2rem 0;
     min-width: 100vw;
     width: 100vw;
     box-sizing: border-box;

@@ -1,51 +1,98 @@
-'use client'
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+"use client"
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Home, Users, FileText, ClipboardList, UserCheck, CreditCard, Menu, X } from 'lucide-react'
+import { useState } from 'react'
+import './Header.css'
 
 export default function Header() {
-  const pathname = usePathname();
+    const pathname = usePathname()
+    const [isMenuOpen, setIsMenuOpen] = useState(false)
+    
+    // Hide header on print-specific pages (when opened in new tab)
+    if (pathname.startsWith('/gerarListaMinicurso/') || pathname.startsWith('/gerarListaPalestras')) {
+        return null
+    }
 
-  const isActive = (path: string) => {
-    return pathname === path;
-  };
+    const navigationItems = [
+        { href: '/', label: 'Início', icon: Home },
+        { href: '/usuarios', label: 'Usuários', icon: Users },
+        { href: '/trabalhos', label: 'Trabalhos', icon: FileText },
+        { href: '/listas', label: 'Listas', icon: ClipboardList },
+        { href: '/presenca', label: 'Presença', icon: UserCheck },
+        { href: '/financeiro', label: 'Financeiro', icon: CreditCard },
+    ]
 
-  return (
-    <header className="header">
-      <div className="header-content">
-        <div className="header-left">
-          <Link href="/" className="logo">
-            COEPS Admin
-          </Link>
-        </div>
-        
-        <nav className="header-nav">
-          <Link 
-            href="/trabalhos" 
-            className={`nav-link ${isActive('/trabalhos') ? 'active' : ''}`}
-          >
-            Trabalhos
-          </Link>
-          <Link 
-            href="/listas" 
-            className={`nav-link ${isActive('/listas') ? 'active' : ''}`}
-          >
-            Participantes
-          </Link>
-          <Link 
-            href="/presenca" 
-            className={`nav-link ${isActive('/presenca') ? 'active' : ''}`}
-          >
-            Presença
-          </Link>
-        </nav>
+    const isActive = (href: string) => {
+        if (href === '/') {
+            return pathname === '/'
+        }
+        return pathname.startsWith(href)
+    }
 
-        <div className="header-right">
-          <div className="header-info">
-            <span className="header-status">Painel Administrativo</span>
-          </div>
-        </div>
-      </div>
-    </header>
-  )
+    const toggleMenu = () => {
+        setIsMenuOpen(!isMenuOpen)
+    }
+
+    return (
+        <header className="admin-header">
+            <div className="header-container">
+                {/* Logo e Título */}
+                <div className="header-brand">
+                    <Link href="/" className="header-logo">
+                        <Home size={24} />
+                        <span className="header-title">COEPS Admin</span>
+                    </Link>
+                </div>
+
+                                        {/* Navegação Desktop */}
+                        <nav className="header-nav">
+                            {navigationItems.map((item) => {
+                                const Icon = item.icon
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={`header-nav-item ${isActive(item.href) ? 'active' : ''}`}
+                                    >
+                                        <Icon size={18} />
+                                        <span className="header-nav-text">{item.label}</span>
+                                    </Link>
+                                )
+                            })}
+                        </nav>
+
+                {/* Botão de Menu Mobile */}
+                <button 
+                    className="header-menu-toggle"
+                    onClick={toggleMenu}
+                    aria-label="Toggle menu"
+                >
+                    {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                </button>
+            </div>
+
+            {/* Menu Mobile */}
+            <div className={`header-mobile-menu ${isMenuOpen ? 'open' : ''}`}>
+                <nav className="header-mobile-nav">
+                    {navigationItems.map((item) => {
+                        const Icon = item.icon
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                className={`header-mobile-nav-item ${isActive(item.href) ? 'active' : ''}`}
+                                onClick={() => setIsMenuOpen(false)}
+                            >
+                                <Icon size={20} />
+                                <span>{item.label}</span>
+                            </Link>
+                        )
+                    })}
+                </nav>
+            </div>
+
+            
+        </header>
+    )
 } 

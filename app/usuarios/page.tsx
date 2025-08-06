@@ -124,8 +124,8 @@ export default function Page() {
                         <BadgeAlert size={32} style={{marginBottom: '0.3rem', color: '#FF9800'}} />
                         <span className="usuarios-estatistica-valor">{pagamentoAberto}</span>
                         <span className="usuarios-estatistica-label">Pagamento Aberto</span>
-                    </div>
-                </div>
+                                </div>
+                            </div>
 
                 {/* Filtros */}
                 <div className="usuarios-filtros">
@@ -220,8 +220,8 @@ export default function Page() {
                                 <div key={user._id} className="usuarios-card">
                                     <div className="usuarios-card-header">
                                         <div className="usuarios-avatar">
-                                            <User className="h-6 w-6" />
-                                        </div>
+                                                <User className="h-6 w-6" />
+                                            </div>
                                         <div className="usuarios-user-info">
                                             <h3 className="usuarios-user-name" title={user.informacoes_usuario.nome}>
                                                 {user.informacoes_usuario.nome}
@@ -229,8 +229,8 @@ export default function Page() {
                                             <p className="usuarios-user-email" title={user.informacoes_usuario.email}>
                                                 <Mail className="h-4 w-4" />
                                                 {user.informacoes_usuario.email}
-                                            </p>
-                                        </div>
+                                                </p>
+                                            </div>
                                     </div>
                                     
                                     <div className="usuarios-card-content">
