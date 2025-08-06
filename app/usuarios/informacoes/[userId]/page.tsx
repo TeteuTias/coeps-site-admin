@@ -376,7 +376,7 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
 
         }
         dataFetch()
-    }, [])
+    }, [pagamento._eventID])
 
     //
     //

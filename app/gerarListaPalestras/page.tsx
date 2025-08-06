@@ -65,7 +65,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         };
 
         fetchData();
-    }, [params._id, data]); // O array vazio faz com que o efeito execute apenas uma vez ao montar
+    }, [params._id,]); // O array vazio faz com que o efeito execute apenas uma vez ao montar
 
     if (loading) {
         return <div className="text-center">Carregando...</div>;
@@ -98,7 +98,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                             <tr key={index} className="hover:bg-gray-100 " onClick={() => console.log(item)}>
                                 <td className="flex flex-row p-4 border border-gray-300 text-black">
                                     <p className='text-[10px]  p-1'>
-                                        {index+1}
+                                        {index + 1}
                                     </p>
                                     <p>
                                         {item.informacoes_usuario.nome}

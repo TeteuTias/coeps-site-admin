@@ -1,8 +1,6 @@
 import { connectToDatabase } from '../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { getAccessToken, withApiAuthRequired } from '@auth0/nextjs-auth0';
-import { ObjectId } from 'mongodb';
-import { getSession } from '@auth0/nextjs-auth0';
+import { withApiAuthRequired } from '@auth0/nextjs-auth0';
 //
 //
 // Exemplo de return:
@@ -24,7 +22,7 @@ export const GET = withApiAuthRequired(async function GET(request, response) {
 
 
         const response = await db.collection(colecao).find(
-            {}, { projection: { name: 1, description: 1, participants: 1, maxParticipants: 1 } }
+            {}, // { projection: { name: 1, description: 1, participants: 1, maxParticipants: 1 } } retirei.
         ).toArray() // 'buffer': 0, 'user_id': 0, 'size': 0
 
         return NextResponse.json({
