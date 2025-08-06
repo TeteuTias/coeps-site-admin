@@ -1,6 +1,8 @@
 'use client'
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
+import './style.css';
+import { Users, ClipboardList, UserPlus, UserMinus, CheckCircle, Loader2 } from 'lucide-react';
 
 interface Document {
   _id: string;
@@ -33,62 +35,13 @@ interface Usuario {
   maxParticipants: number,
 }
 
-const PrintableComponent = () => {
-  const printRef = useRef<HTMLDivElement>(null);
-
-  const handlePrint = () => {
-    if (printRef.current) {
-      const printContent = printRef.current.innerHTML;
-      const newWindow = window.open('', '', 'width=800,height=600');
-      newWindow?.document.write(`
-        <html>
-          <head>
-            <title>Print</title>
-            <style>
-              /* Adicione seus estilos personalizados para impressão aqui */
-              body { font-family: Arial, sans-serif; }
-            </style>
-          </head>
-          <body>
-            ${printContent}
-          </body>
-        </html>
-      `);
-      newWindow?.document.close();
-      newWindow?.focus();
-      newWindow?.print();
-      newWindow?.close();
-    }
-  };
-
-  return (
-    <div className="p-4">
-      <div ref={printRef} className="bg-white p-4 rounded-md shadow-md">
-        <h1 className="text-xl font-bold mb-4">Printable Component</h1>
-        <p>This is the content that will be printed.</p>
-        <ul className="list-disc ml-4">
-          <li>Item 1</li>
-          <li>Item 2</li>
-          <li>Item 3</li>
-        </ul>
-      </div>
-      <button
-        onClick={handlePrint}
-        className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition"
-      >
-        Print this Component
-      </button>
-    </div>
-  );
-};
-
-
 const MyComponent = () => {
   const [data, setData] = useState<DataStructure>({
     data: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -107,10 +60,28 @@ const MyComponent = () => {
     };
 
     fetchData();
-  }, []); // O array vazio faz com que o efeito execute apenas uma vez ao montar
+  }, []);
+
+  // Função para filtrar minicursos por nome ou ID
+  const filterMinicurso = (minicurso: Usuario) => {
+    const nome = minicurso.name?.toLowerCase() || "";
+    const id = minicurso._id?.toLowerCase() || "";
+    const termo = search.toLowerCase();
+    return nome.includes(termo) || id.includes(termo);
+  };
 
   if (loading) {
-    return <div className="text-center">Carregando...</div>;
+    return (
+      <div className="presenca-loading-container" style={{
+        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+        backgroundAttachment: 'fixed',
+        backgroundSize: 'cover',
+        backgroundRepeat: 'no-repeat'
+      }}>
+        <div className="presenca-spinner"><Loader2 size={48} className="animate-spin" /></div>
+        <span className="presenca-loading-text">Carregando minicursos...</span>
+      </div>
+    );
   }
 
   if (error) {
@@ -118,24 +89,51 @@ const MyComponent = () => {
   }
 
   return (
-    <div className="p-4 mb-10 space-y-5">
-      <h1 className="text-xl font-bold text-center" onClick={() => console.log(data)}>Selecione um Minicurso</h1>
-      <div className='space-y-5 p-1 flex content-center items-center justify-center'>
-        <div className='flex flex-col items-center content-center space-y-3 max-h-screen'>
-          {data.data.map((value) => {
-            return (
-              <div className='bg-white w-full lg:w-1/2 shadow-2xl md:p-5' key={value._id}>
-                <div className='p-[1px] bg-red-400' />
-                <p><span className='font-bold'>NOME: </span>{value.name}</p>
-                <h1><span className='font-bold'>TOTAL DE VAGAS: </span> {value.maxParticipants}</h1>
-                <h1><span className='font-bold'>TOTAL DE INSCRITOS: </span> {value.participants.length}</h1>
-                <h1><span className='font-bold'>TOTAL DE VAGAS REMANESCENTES: </span> {value.maxParticipants - value.participants.length}</h1>
-                <h1><span className='font-bold'>ID: </span> {value._id}</h1>
-                <Link target='_blank' href={`/presenca/gerarListaMinicursoPresenca/${value._id}`} prefetch={false} className='font-bold cursor-pointer p-1 bg-blue-600'>GERAR LISTA</Link >
-              </div>
-            )
-          })}
+    <div className="presenca-main-container" style={{
+      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+      backgroundAttachment: 'fixed',
+      backgroundSize: 'cover',
+      backgroundRepeat: 'no-repeat'
+    }}>
+      <h1 className="presenca-title">LISTA DE PRESENÇA</h1>
+      <div className="presenca-estatisticas">
+        <div className="presenca-estatistica-card">
+          <ClipboardList size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+          <span className="presenca-estatistica-valor">{data.data.length}</span>
+          <span className="presenca-estatistica-label">Total de Minicursos</span>
         </div>
+        <div className="presenca-estatistica-card">
+          <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
+          <span className="presenca-estatistica-valor">{data.data.reduce((acc, cur) => acc + cur.participants.length, 0)}</span>
+          <span className="presenca-estatistica-label">Total de Inscritos</span>
+        </div>
+      </div>
+      <div className="presenca-busca-container">
+        <input
+          type="text"
+          className="presenca-busca"
+          placeholder="Buscar por nome ou ID do minicurso..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      <div className="presenca-lista">
+        {data.data.filter(filterMinicurso).map((value, idx) => (
+          <div className="presenca-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }} key={value._id}>
+            <div className="presenca-card-header">
+              <h2 className="presenca-nome">{value.name}</h2>
+              <span className="presenca-id">ID: {value._id}</span>
+            </div>
+            <div className="presenca-card-estatisticas">
+              <div className="presenca-card-estatistica"><UserPlus size={18} /> {value.maxParticipants}</div>
+              <div className="presenca-card-estatistica"><CheckCircle size={18} /> {value.participants.length}</div>
+              <div className="presenca-card-estatistica"><UserMinus size={18} /> {value.maxParticipants - value.participants.length}</div>
+            </div>
+            <div className="presenca-card-actions">
+              <Link target='_blank' href={`/presenca/gerarListaMinicursoPresenca/${value._id}`} prefetch={false} className='presenca-link'>GERAR LISTA DE PRESENÇA</Link>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
