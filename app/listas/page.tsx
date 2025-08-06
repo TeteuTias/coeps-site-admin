@@ -1,6 +1,8 @@
 'use client'
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
+import './style.css';
+import { Users, ListChecks, UserPlus, UserMinus, ClipboardList, Loader2 } from 'lucide-react';
 
 interface Document {
   _id: string;
@@ -89,6 +91,7 @@ const MyComponent = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,8 +112,26 @@ const MyComponent = () => {
     fetchData();
   }, []); // O array vazio faz com que o efeito execute apenas uma vez ao montar
 
+  // Função para filtrar minicursos por nome ou ID
+  const filterMinicurso = (minicurso: Usuario) => {
+    const nome = minicurso.name?.toLowerCase() || "";
+    const id = minicurso._id?.toLowerCase() || "";
+    const termo = search.toLowerCase();
+    return nome.includes(termo) || id.includes(termo);
+  };
+
   if (loading) {
-    return <div className="text-center">Carregando...</div>;
+    return (
+      <div className="listas-loading-container" style={{
+        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+        backgroundAttachment: 'fixed',
+        backgroundSize: 'cover',
+        backgroundRepeat: 'no-repeat'
+      }}>
+        <div className="listas-spinner"><Loader2 size={48} className="animate-spin" /></div>
+        <span className="listas-loading-text">Carregando minicursos...</span>
+      </div>
+    );
   }
 
   if (error) {
@@ -118,28 +139,51 @@ const MyComponent = () => {
   }
 
   return (
-    <div className="p-4 mb-10">
-      <div className='flex flex-col items-center'>
-        <h1 className="text-xl font-bold text-center" onClick={() => console.log(data)}>Todos Participantes</h1>
-        <Link target='_blank' href={`/gerarListaPalestras/`} prefetch={false} className='font-bold cursor-pointer p-[0.5px] bg-blue-600'>GERAR LISTA</Link >
-      </div>
-      <h1 className="text-xl font-bold text-center" onClick={() => console.log(data)}>Selecione um Minicurso</h1>
-      <div className='space-y-5 p-1 flex content-center items-center justify-center'>
-        <div className='flex flex-col items-center content-center space-y-3 max-h-screen'>
-          {data.data.map((value) => {
-            return (
-              <div className='bg-white w-full lg:w-1/2 shadow-2xl md:p-5' key={value._id}>
-                <div className='p-[1px] bg-red-400' />
-                <p><span className='font-bold'>NOME: </span>{value.name}</p>
-                <h1><span className='font-bold'>TOTAL DE VAGAS: </span> {value.maxParticipants}</h1>
-                <h1><span className='font-bold'>TOTAL DE INSCRITOS: </span> {value.participants.length}</h1>
-                <h1><span className='font-bold'>TOTAL DE VAGAS REMANESCENTES: </span> {value.maxParticipants - value.participants.length}</h1>
-                <h1><span className='font-bold'>ID: </span> {value._id}</h1>
-                <Link target='_blank' href={`/gerarListaMinicurso/${value._id}`} prefetch={false} className='font-bold cursor-pointer p-1 bg-blue-600'>GERAR LISTA</Link >
-              </div>
-            )
-          })}
+    <div className="listas-main-container" style={{
+      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+      backgroundAttachment: 'fixed',
+      backgroundSize: 'cover',
+      backgroundRepeat: 'no-repeat'
+    }}>
+      <h1 className="listas-title">MINICURSOS E PARTICIPANTES</h1>
+      <div className="listas-estatisticas">
+        <div className="listas-estatistica-card">
+          <ClipboardList size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+          <span className="listas-estatistica-valor">{data.data.length}</span>
+          <span className="listas-estatistica-label">Total de Minicursos</span>
         </div>
+        <div className="listas-estatistica-card">
+          <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
+          <span className="listas-estatistica-valor">{data.data.reduce((acc, cur) => acc + cur.participants.length, 0)}</span>
+          <span className="listas-estatistica-label">Total de Inscritos</span>
+        </div>
+      </div>
+      <div className="listas-busca-container">
+        <input
+          type="text"
+          className="listas-busca"
+          placeholder="Buscar por nome ou ID do minicurso..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      <div className="listas-lista">
+        {data.data.filter(filterMinicurso).map((value, idx) => (
+          <div className="listas-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }} key={value._id}>
+            <div className="listas-card-header">
+              <h2 className="listas-nome">{value.name}</h2>
+              <span className="listas-id">ID: {value._id}</span>
+            </div>
+            <div className="listas-card-estatisticas">
+              <div className="listas-card-estatistica"><UserPlus size={18} /> {value.maxParticipants}</div>
+              <div className="listas-card-estatistica"><ListChecks size={18} /> {value.participants.length}</div>
+              <div className="listas-card-estatistica"><UserMinus size={18} /> {value.maxParticipants - value.participants.length}</div>
+            </div>
+            <div className="listas-card-actions">
+              <Link target='_blank' href={`/gerarListaMinicurso/${value._id}`} prefetch={false} className='listas-link'>GERAR LISTA</Link>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
