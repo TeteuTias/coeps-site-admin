@@ -5,6 +5,7 @@ import { ICourse } from "../lib/types/events/event.t";
 import LoadingModal from "./LoadingModal";
 import { ObjectId } from "bson";
 import { X, Plus, Trash } from "lucide-react";
+import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
 //
 // Props do componente, mantendo a sua estrutura
 interface CreateCourseModalProps {
@@ -296,7 +297,12 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ title = "Criar No
                             </div>
                             <div>
                                 <label htmlFor="emoji" className="block text-sm font-medium text-gray-700 mb-1">Emoji</label>
-                                <input type="text" id="emoji" name="emoji" value={newFormData.emoji} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+                                <div className="flex items-center gap-3">
+                                    <input type="text" id="emoji" name="emoji" value={newFormData.emoji} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+                                    <div className="flex items-center justify-center w-12 h-12 rounded-md bg-gray-50 border border-gray-200">
+                                        {renderEmojiAsLucide(newFormData.emoji, { size: 22, className: "text-indigo-600" })}
+                                    </div>
+                                </div>
                             </div>
                             <div className="md:col-span-2">
                                 <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>

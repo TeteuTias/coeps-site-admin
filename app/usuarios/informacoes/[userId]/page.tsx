@@ -2,6 +2,7 @@
 import { IPayment } from "@/app/lib/types/payments/payment.t"
 import { IUser } from "@/app/lib/types/user/user.t"
 import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight } from "lucide-react";
+import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
 import { useEffect, useState, FormEvent, ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -289,7 +290,7 @@ export const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
             {/* Cabeçalho do Card */}
             <div className="p-6">
                 <div className="flex justify-between items-end gap-4">
-                    <span className="text-5xl">{emoji || '🎓'}</span>
+                    <span className="text-5xl leading-none">{emoji ? renderEmojiAsLucide(emoji, { size: 44, className: "text-indigo-600" }) : '🎓'}</span>
                     <div className="text-right">
                         {isOpen ? (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">

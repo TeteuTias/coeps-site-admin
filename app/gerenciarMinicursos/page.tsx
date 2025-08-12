@@ -135,14 +135,14 @@ export default function Page() {
                 await hydrateData()
             }} />
             <LoadingModal isLoading={loading} />
-            <div className="space-y-5 py-10 px-5">
+            <div className="gm-page space-y-6">
                 <div className="w-full flex items-center justify-center content-center">
-                    <button className="bg-red-100 rounded-sm px-2 font-extrabold" onClick={() => { setCreateCourseModal(true) }}>
+                    <button className="gm-create-btn" onClick={() => { setCreateCourseModal(true) }}>
                         CRIAR NOVO MINICURSO
                     </button>
                 </div>
                 {/* --- PAINEL DE BUSCA E FILTROS --- */}
-                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm mb-8">
+                <div className="gm-toolbar mb-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="lg:col-span-4">
                             <label htmlFor="search" className="sr-only">Busca</label>
@@ -150,13 +150,13 @@ export default function Page() {
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                     <Search className="h-5 w-5 text-gray-400" />
                                 </div>
-                                <input id="search" type="text" placeholder="Buscar por nome ou ID do minicurso..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full rounded-md border-gray-300 pl-10 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
+                                <input id="search" type="text" placeholder="Buscar por nome ou ID do minicurso..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full rounded-md pl-10 shadow-sm sm:text-sm p-2.5" />
                             </div>
                         </div>
                         {/* Filtro showToUser */}
                         <div>
                             <label htmlFor="filterShowToUser" className="block text-sm font-medium text-gray-700 mb-1">Aberto ao público?</label>
-                            <select id="filterShowToUser" value={filterShowToUser} onChange={e => setFilterShowToUser(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+                            <select id="filterShowToUser" value={filterShowToUser} onChange={e => setFilterShowToUser(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Fechado</option>
                                 <option value="false">Aberto</option>
@@ -165,7 +165,7 @@ export default function Page() {
                         {/* Filtro Status */}
                         <div>
                             <label htmlFor="filterIsOpen" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                            <select id="filterIsOpen" value={filterIsOpen} onChange={e => setFilterIsOpen(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+                            <select id="filterIsOpen" value={filterIsOpen} onChange={e => setFilterIsOpen(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Inscrições Abertas</option>
                                 <option value="false">Inscrições Encerradas</option>
@@ -174,7 +174,7 @@ export default function Page() {
                         {/* Filtro Preço */}
                         <div>
                             <label htmlFor="filterIsFree" className="block text-sm font-medium text-gray-700 mb-1">Preço</label>
-                            <select id="filterIsFree" value={filterIsFree} onChange={e => setFilterIsFree(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+                            <select id="filterIsFree" value={filterIsFree} onChange={e => setFilterIsFree(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Gratuito</option>
                                 <option value="false">Pago</option>
@@ -183,7 +183,7 @@ export default function Page() {
                         {/* Filtro Tipo */}
                         <div>
                             <label htmlFor="filterType" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                            <select id="filterType" value={filterType} onChange={e => setFilterType(e.target.value)} className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+                            <select id="filterType" value={filterType} onChange={e => setFilterType(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos os Tipos</option>
                                 {courseTypes.map(type => <option key={type} value={type}>{type}</option>)}
                             </select>
@@ -191,7 +191,7 @@ export default function Page() {
                         {/* Botão Limpar */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1 invisible">Ação</label>
-                            <button onClick={handleResetFilters} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200 transition-colors">
+                            <button onClick={handleResetFilters} className="gm-filter-reset w-full inline-flex items-center justify-center gap-2">
                                 <FilterX className="h-4 w-4" />
                                 Limpar Filtros
                             </button>
@@ -210,17 +210,17 @@ export default function Page() {
                                 const percentualOcupado = vagasTotais > 0 ? (vagasOcupadas / vagasTotais) * 100 : 0;
 
                                 return (
-                                    <div className='bg-white rounded-lg border border-gray-200 shadow-md flex flex-col overflow-hidden hover:shadow-xl transition-shadow duration-300' key={value._id}>
-                                        <div className="w-full flex flex-row justify-between space-x-1">
-                                            <button className="text-white bg-red-600 w-fit px-2 rounded-sm text-white font-bold" onClick={() => { deleteACourse(value) }}>REMOVER</button>
+                                    <div className='gm-card flex flex-col overflow-hidden' key={value._id}>
+                                        <div className="gm-card-header">
+                                            <button className="gm-remove-btn" onClick={() => { deleteACourse(value) }}>REMOVER</button>
                                             {
                                                 !value.showToUser ?
-                                                    <p className="text-white bg-red-600 w-fit px-2 rounded-sm text-white font-bold">FECHADO AO USUÁRIO</p> :
-                                                    <p className="text-white bg-blue-600 w-fit px-2 rounded-sm text-white font-bold">ABERTO AO USUÁRIO</p>
+                                                    <p className="gm-badge gm-badge--danger">FECHADO AO USUÁRIO</p> :
+                                                    <p className="gm-badge gm-badge--info">ABERTO AO USUÁRIO</p>
                                             }
                                         </div>
-                                        <div className='p-6 flex-grow'>
-                                            <div className="border-b-4 border-indigo-500 w-16 mb-4"></div>
+                                        <div className='gm-card-body flex-grow'>
+                                            <div className="gm-divider"></div>
                                             <h2 className='text-xl font-bold text-gray-800 truncate' title={value.name}>{value.name}</h2>
                                             <p className="text-xs text-gray-400 font-mono mt-1 mb-6 truncate">ID: {value._id}</p>
                                             <div className="space-y-4">
@@ -230,12 +230,12 @@ export default function Page() {
                                                     <div><p className="text-2xl font-semibold text-gray-800">{vagasTotais}</p><p className="text-xs text-gray-500">Total</p></div>
                                                 </div>
                                                 <div>
-                                                    <div className="w-full bg-gray-200 rounded-full h-2.5"><div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${percentualOcupado}%` }}></div></div>
+                                                    <div className="gm-progress"><span style={{ width: `${percentualOcupado}%` }} /></div>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className='bg-gray-50 p-4 border-t border-gray-200'>
-                                            <Link href={`/gerenciarMinicursos/configurar/${value._id}`} prefetch={false} className='w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gray-800 rounded-lg hover:bg-gray-900 transition-colors'>
+                                        <div className='gm-footer'>
+                                            <Link href={`/gerenciarMinicursos/configurar/${value._id}`} prefetch={false} className='gm-config-btn w-full inline-flex items-center justify-center gap-2'>
                                                 <CogIcon className="h-4 w-4" />
                                                 Configurar
                                             </Link>
