@@ -127,7 +127,12 @@ export default function Page() {
 
     //
     return (
-        <>
+        <div className="main-container" style={{
+            background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+            backgroundAttachment: 'fixed',
+            backgroundSize: 'cover',
+            backgroundRepeat: 'no-repeat'
+        }}>
             <ConfirmationModal {...confirmationModalProps} />
             <CreateCourseModal isOpen={createCourseModal} onClose={() => {
                 setCreateCourseModal(false)
@@ -135,14 +140,14 @@ export default function Page() {
                 await hydrateData()
             }} />
             <LoadingModal isLoading={loading} />
-            <div className="gm-page space-y-6">
-                <div className="w-full flex items-center justify-center content-center">
+            <div className="w-full space-y-5 px-10">
+                <div className="w-full flex items-center justify-center">
                     <button className="gm-create-btn" onClick={() => { setCreateCourseModal(true) }}>
                         CRIAR NOVO MINICURSO
                     </button>
                 </div>
                 {/* --- PAINEL DE BUSCA E FILTROS --- */}
-                <div className="gm-toolbar mb-8">
+                <div className="space-y-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="lg:col-span-4">
                             <label htmlFor="search" className="sr-only">Busca</label>
@@ -154,8 +159,8 @@ export default function Page() {
                             </div>
                         </div>
                         {/* Filtro showToUser */}
-                        <div>
-                            <label htmlFor="filterShowToUser" className="block text-sm font-medium text-gray-700 mb-1">Aberto ao público?</label>
+                        <div className="">
+                            <label htmlFor="filterShowToUser" className="block text-sm font-medium text-white mb-1">Aberto ao público?</label>
                             <select id="filterShowToUser" value={filterShowToUser} onChange={e => setFilterShowToUser(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Fechado</option>
@@ -164,7 +169,7 @@ export default function Page() {
                         </div>
                         {/* Filtro Status */}
                         <div>
-                            <label htmlFor="filterIsOpen" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                            <label htmlFor="filterIsOpen" className="block text-sm font-medium text-white mb-1">Status</label>
                             <select id="filterIsOpen" value={filterIsOpen} onChange={e => setFilterIsOpen(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Inscrições Abertas</option>
@@ -173,7 +178,7 @@ export default function Page() {
                         </div>
                         {/* Filtro Preço */}
                         <div>
-                            <label htmlFor="filterIsFree" className="block text-sm font-medium text-gray-700 mb-1">Preço</label>
+                            <label htmlFor="filterIsFree" className="block text-sm font-medium text-white mb-1">Preço</label>
                             <select id="filterIsFree" value={filterIsFree} onChange={e => setFilterIsFree(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Gratuito</option>
@@ -182,15 +187,16 @@ export default function Page() {
                         </div>
                         {/* Filtro Tipo */}
                         <div>
-                            <label htmlFor="filterType" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                            <label htmlFor="filterType" className="block text-sm font-medium text-white mb-1">Tipo</label>
                             <select id="filterType" value={filterType} onChange={e => setFilterType(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
                                 <option value="all">Todos os Tipos</option>
                                 {courseTypes.map(type => <option key={type} value={type}>{type}</option>)}
                             </select>
                         </div>
                         {/* Botão Limpar */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1 invisible">Ação</label>
+                    </div>
+                    <div className="w-full flex content-center items-center justify-center">
+                        <div className="w-fit flex items-center justify-center content-center">
                             <button onClick={handleResetFilters} className="gm-filter-reset w-full inline-flex items-center justify-center gap-2">
                                 <FilterX className="h-4 w-4" />
                                 Limpar Filtros
@@ -252,7 +258,7 @@ export default function Page() {
                     )
                 }
             </div >
-        </>
+        </div>
     )
 }
 //

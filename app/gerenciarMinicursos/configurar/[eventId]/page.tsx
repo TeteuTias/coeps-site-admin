@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ICourse } from "@/app/lib/types/events/event.t"
 import LoadingModal from "@/app/components/LoadingModal"
 import CreateCourseModal from "@/app/components/CreateCourseModal"
@@ -14,21 +14,21 @@ export default function Page({ params }: { params: { eventId: string } }) {
 
     //
     //
-    const hydrateData = async () => {
-        const fetchData = await fetch(`/api/get/minicursoProps/${params.eventId}`)
+    const hydrateData = useCallback(async () => {
+        const fetchData = await fetch(`/api/get/minicursoProps/${params.eventId}`);
         if (!fetchData.ok) {
-            const response: { message: string } = await fetchData.json()
-            alert(response.message)
+            const response = await fetchData.json();
+            alert(response.message);
         }
-        const { data }: { data: ICourse } = await fetchData.json()
-        setDataCourse(data)
-        setLoading(false)
-    }
+        const { data } = await fetchData.json();
+        setDataCourse(data);
+        setLoading(false);
+    }, [params.eventId]);
 
     useEffect(() => {
         hydrateData()
 
-    }, [])
+    }, [hydrateData])
     //
 
 
@@ -48,7 +48,6 @@ export default function Page({ params }: { params: { eventId: string } }) {
             <div className="w-full flex flex-col">
                 <CreateCourseModal title={dataCourse.name} buttonText="Atualizar Minicurso" apiMethod="PUT" apiUrl="/api/put/minicursos/alterarInformacoes/" onClose={() => {
                     router.push("/gerenciarMinicursos/")
-
                 }} onSuccess={() => { window.location.reload() }} isOpen initialForms={{
                     ...dataCourse,
                     dateOpen: dataCourse.dateOpen.slice(0, -6), // ele vai consertar no próprio componente e vai colocar o fuso

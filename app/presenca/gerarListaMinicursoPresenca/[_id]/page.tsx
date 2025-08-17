@@ -6,8 +6,9 @@ import LoadingModal from '@/app/components/LoadingModal';
 import { useRef } from 'react';
 import { ICourse } from '@/app/lib/types/events/event.t';
 import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModal';
-//
-//
+import './style.css';
+import { Users, CheckCircle, XCircle, QrCode, UserPlus, Loader2, Calendar, Clock } from 'lucide-react';
+
 interface Usuario {
     _id: string,
     informacoes_usuario: {
@@ -38,19 +39,18 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             <>
                 <p className='text-black'></p>
             </>
-        ), // Tipo para qualquer elemento React válido
+        ),
         confirmText: "Continuar",
         cancelText: "Fechar",
     })
     const [isOpenAllUsers, setIsOpenAllUsers] = useState<boolean>(false)
 
-
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
     const [loadingContent, setLoadingContent] = useState<boolean>(false)
+
     const hydrateData = async () => {
         try {
-            // Função auxiliar para obter dados de participantes e lista de presença
             const fetchParticipantAndAttendanceData = async () => {
                 const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
                     fetch(`/api/get/participantesMinicursos/${params._id}`),
@@ -73,10 +73,9 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                 setCourseData(courseResult.data)
                 setAllUsers(allUsersResult.data)
 
-                return participantsResult.data; // Retorna a lista de participantes para uso no fetchUserInfo
+                return participantsResult.data;
             };
 
-            // Função auxiliar para buscar informações detalhadas dos usuários
             const fetchUserInfo = async (userIds: string[]) => {
                 const response = await fetch("/api/post/informacoesVariosUsuarios", {
                     method: "POST",
@@ -94,9 +93,8 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                 setData2(result.data);
             };
 
-            // Chamada das funções auxiliares
-            const participantIds = await fetchParticipantAndAttendanceData(); // Obtém a lista de participantes
-            await fetchUserInfo(participantIds); // Passa a lista para buscar informações detalhadas
+            const participantIds = await fetchParticipantAndAttendanceData();
+            await fetchUserInfo(participantIds);
 
         } catch (error) {
             setErrorBolean(true)
@@ -106,12 +104,9 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         }
     };
 
-    //
-    //
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // Função auxiliar para obter dados de participantes e lista de presença
                 const fetchParticipantAndAttendanceData = async () => {
                     const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
                         fetch(`/api/get/participantesMinicursos/${params._id}`),
@@ -134,10 +129,9 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                     setCourseData(courseResult.data)
                     setAllUsers(allUsersResult.data)
 
-                    return participantsResult.data; // Retorna a lista de participantes para uso no fetchUserInfo
+                    return participantsResult.data;
                 };
 
-                // Função auxiliar para buscar informações detalhadas dos usuários
                 const fetchUserInfo = async (userIds: string[]) => {
                     const response = await fetch("/api/post/informacoesVariosUsuarios", {
                         method: "POST",
@@ -155,9 +149,8 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                     setData2(result.data);
                 };
 
-                // Chamada das funções auxiliares
-                const participantIds = await fetchParticipantAndAttendanceData(); // Obtém a lista de participantes
-                await fetchUserInfo(participantIds); // Passa a lista para buscar informações detalhadas
+                const participantIds = await fetchParticipantAndAttendanceData();
+                await fetchUserInfo(participantIds);
 
             } catch (error) {
                 setErrorBolean(true)
@@ -169,86 +162,92 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         fetchData();
     }, [params._id]);
 
-
-
     if (loading) {
-        return <div className="w-full h-screen flex items-center content-center justify-center text-center">
-            <p>
-                CARREGANDO
-            </p>
-        </div>;
+        return (
+            <div className="presenca-lista-loading-container" style={{
+                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+                backgroundAttachment: 'fixed',
+                backgroundSize: 'cover',
+                backgroundRepeat: 'no-repeat'
+            }}>
+                <div className="presenca-lista-spinner"><Loader2 size={48} className="animate-spin" /></div>
+                <span className="presenca-lista-loading-text">Carregando lista de presença...</span>
+            </div>
+        );
     }
 
     if (error || !courseData) {
         return <div className="text-red-500">{error}</div>;
     }
 
+    const presentes = dataPresentes.length;
+    const ausentes = data2.length - presentes;
+
     return (
-        <div className="min-h-screen flex flex-col items-center py-5 space-y-5">
-            <h1>{courseData.name}</h1>{/* Título */}
+        <div className="presenca-lista-main-container" style={{
+            background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+            backgroundAttachment: 'fixed',
+            backgroundSize: 'cover',
+            backgroundRepeat: 'no-repeat'
+        }}>
+            <h1 className="presenca-lista-title">{courseData.name}</h1>
+            
+            <div className="presenca-lista-estatisticas">
+                <div className="presenca-lista-estatistica-card">
+                    <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+                    <span className="presenca-lista-estatistica-valor">{data2.length}</span>
+                    <span className="presenca-lista-estatistica-label">Total de Inscritos</span>
+                </div>
+                <div className="presenca-lista-estatistica-card">
+                    <CheckCircle size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
+                    <span className="presenca-lista-estatistica-valor">{presentes}</span>
+                    <span className="presenca-lista-estatistica-label">Presentes</span>
+                </div>
+                <div className="presenca-lista-estatistica-card">
+                    <XCircle size={32} style={{marginBottom: '0.3rem', color: '#ff6b6b'}} />
+                    <span className="presenca-lista-estatistica-valor">{ausentes}</span>
+                    <span className="presenca-lista-estatistica-label">Ausentes</span>
+                </div>
+            </div>
+
+            <div className="presenca-lista-info">
+                <div className="presenca-lista-info-item">
+                    <Calendar size={18} />
+                    <span>{new Date().toLocaleDateString('pt-BR')}</span>
+                </div>
+                <div className="presenca-lista-info-item">
+                    <Clock size={18} />
+                    <span>{new Date().toLocaleTimeString('pt-BR')}</span>
+                </div>
+            </div>
+
+            <div className="presenca-lista-actions">
             <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
-            <LoadingModal isLoading={loadingContent} />
-            <ConfirmationModal {...isModalProps} />
-            {
-                isOpenAllUsers &&
-                <AllUsersModal courseData={courseData} isOpen={true} onClose={() => { setIsOpenAllUsers(false) }} onUserSelect={async (userId: string) => {
-                    //
-                    setLoadingContent(true)
-                    // dar presença;
-                    const response = await fetch(`/api/post/darPresenca`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({
-                            eventId: params._id,
-                            userId: userId,
-                        }),
-                    });
-                    if (response.ok) {
-                        setDataPresente(prev => [...prev, userId])
-                    } else {
-                        alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                        setLoadingContent(false)
-                        return;
-                    }
-                    await hydrateData()
-                    setIsOpenAllUsers(false)
-                    setLoadingContent(false)
-                }} usersData={allUsers} />
-            }
             <button
-                onClick={() => {
-                    setIsOpenAllUsers(true)
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105"
-            >
+                    onClick={() => setIsOpenAllUsers(true)}
+                    className="presenca-lista-btn presenca-lista-btn-primary"
+                >
+                    <UserPlus size={18} />
                 Adicionar Usuário
             </button>
+            </div>
 
-            <div className="overflow-auto w-full lg:w-[80%]">
-                <table className="min-w-full table-auto border-collapse border border-gray-200">
+            <div className="presenca-lista-table-container">
+                <table className="presenca-lista-table">
                     <thead>
-                        <tr className="bg-gray-200">
-                            <th className="p-4 border border-gray-300 w-1/3">Lista de Presença</th>
-                            <th className="p-4 border border-gray-300 w-1/3">{new Date().toDateString()}</th>
-                            <th className="p-4 border border-gray-300 w-1/3">{new Date().toTimeString()}</th>
-                            <th className="p-4 border border-gray-300 w-1/3">-</th>
-                        </tr>
-                    </thead>
-                    <thead>
-                        <tr className="bg-gray-200">
-                            <th className="p-4 border border-gray-300 w-1/3">Nome</th>
-                            <th className="p-4 border border-gray-300 w-1/3">Email</th>
-                            <th className="p-4 border border-gray-300 w-1/3">Presença/Falta</th>
-                            <th className="p-4 border border-gray-300 w-1/3">Ação</th>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Email</th>
+                            <th>Status</th>
+                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data2.map((item, index) => (
-                            <tr key={index} className="hover:bg-gray-100">
-                                <td className="p-4 border border-gray-300 text-black text-center space-x-2">
-                                    <button className='bg-red-500 w-fit w-[25px] h-[25px] flex items-center content-center justify-center rounded-full font-extrabold text-white'
+                            <tr key={index} className="presenca-lista-row">
+                                <td className="presenca-lista-nome">
+                                    <button 
+                                        className="presenca-lista-remove-btn"
                                         onClick={() => {
                                             setIsModalProps(() => ({
                                                 isOpen: true,
@@ -270,39 +269,35 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                     await hydrateData()
                                                     setLoading(false)
                                                     setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-
                                                 },
                                                 title: "Atenção!",
                                                 children: (
                                                     <>
                                                         <p className='text-black'>Você está prestes a retirar a inscrição do usuário do minicurso. Essa opção <span className='font-extrabold text-red-500'>NÃO</span> estornará o valor ao congressista. Deseja mesmo continuar?</p>
                                                     </>
-                                                ), // Tipo para qualquer elemento React válido
-                                                confirmText: "Continuar", // Propriedade opcional
-                                                cancelText: "Fechar",  // Propriedade opcional
+                                                ),
+                                                confirmText: "Continuar",
+                                                cancelText: "Fechar",
                                             }))
                                         }}
                                     >
-                                        x
+                                        ×
                                     </button>
-                                    <p>
-                                        {index + 1}. {item.informacoes_usuario.nome}
-                                    </p>
+                                    <span>{index + 1}. {item.informacoes_usuario.nome}</span>
                                 </td>
-                                <td className="p-4 border border-gray-300 text-black text-center">
-                                    {item.informacoes_usuario.email}
+                                <td className="presenca-lista-email">{item.informacoes_usuario.email}</td>
+                                <td className="presenca-lista-status">
+                                    <span className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}>
+                                        {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
+                                    </span>
                                 </td>
-                                <td className="p-4 border border-gray-300 text-black text-center">
-                                    <p className=" p-2 w-full">{dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}</p>
-                                </td>
-                                <td className='w-full'>
-                                    <button className="bg-red-400 p-2 mx-1"
+                                <td className="presenca-lista-acoes">
+                                    <button 
+                                        className={`presenca-lista-btn ${dataPresentes.includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
                                         onClick={async () => {
                                             setLoadingContent(true)
                                             try {
-
                                                 if (dataPresentes.includes(item._id)) {
-                                                    // retirar a presença
                                                     const response = await fetch(`/api/post/retirarPresenca`, {
                                                         method: "POST",
                                                         headers: {
@@ -317,9 +312,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                         setDataPresente(prev => prev.filter(id => id !== item._id));
                                                     }
                                                     return;
-
                                                 }
-                                                // dar presença;
                                                 const response = await fetch(`/api/post/darPresenca`, {
                                                     method: "POST",
                                                     headers: {
@@ -341,14 +334,50 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                 setLoadingContent(false)
                                             }
                                         }}
-                                    >{dataPresentes.includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}</button>
+                                    >
+                                        {dataPresentes.includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
+                                    </button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
-        </div >
+
+            <LoadingModal isLoading={loadingContent} />
+            <ConfirmationModal {...isModalProps} />
+            {isOpenAllUsers && (
+                <AllUsersModal 
+                    courseData={courseData} 
+                    isOpen={true} 
+                    onClose={() => { setIsOpenAllUsers(false) }} 
+                    onUserSelect={async (userId: string) => {
+                        setLoadingContent(true)
+                        const response = await fetch(`/api/post/darPresenca`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                eventId: params._id,
+                                userId: userId,
+                            }),
+                        });
+                        if (response.ok) {
+                            setDataPresente(prev => [...prev, userId])
+                        } else {
+                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                            setLoadingContent(false)
+                            return;
+                        }
+                        await hydrateData()
+                        setIsOpenAllUsers(false)
+                        setLoadingContent(false)
+                    }} 
+                    usersData={allUsers} 
+                />
+            )}
+        </div>
     );
 };
 

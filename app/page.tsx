@@ -5,7 +5,12 @@ import { FileText, Users, Hand, CircleDollarSign, UserRound, Settings } from "lu
 
 export default function Page() {
   return (
-    <div className="main-container">
+    <div className="main-container" style={{
+      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+      backgroundAttachment: 'fixed',
+      backgroundSize: 'cover',
+      backgroundRepeat: 'no-repeat'
+    }}>
       <div className="content-area">
         <PaginaAreaDoCliente />
       </div>

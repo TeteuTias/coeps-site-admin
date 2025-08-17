@@ -1,6 +1,8 @@
 'use client'
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import './style.css';
+import { Download, Users, FileText } from 'lucide-react';
 interface Document {
   _id: string;
   name: string;
@@ -25,6 +27,26 @@ interface DataStructure {
   tradutor: Record<string, User>; // Mapeia userId para um único User
 }
 
+// Função utilitária para formatar CPF
+function formatCPF(cpf: string) {
+  if (!cpf) return '';
+  const cleaned = cpf.replace(/\D/g, '');
+  if (cleaned.length !== 11) return cpf;
+  return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+
+// Função utilitária para formatar telefone
+function formatPhone(phone: string) {
+  if (!phone) return '';
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.length === 11) {
+    return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  } else if (cleaned.length === 10) {
+    return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
+  }
+  return phone;
+}
+
 const MyComponent = () => {
   const [data, setData] = useState<DataStructure>({
     data: {},
@@ -32,6 +54,7 @@ const MyComponent = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -52,8 +75,31 @@ const MyComponent = () => {
     fetchData();
   }, []); // O array vazio faz com que o efeito execute apenas uma vez ao montar
 
+  // Função para filtrar usuários por nome, CPF ou telefone
+  const filterUser = (user: User) => {
+    const nome = user.informacoes_usuario.nome?.toLowerCase() || "";
+    const cpf = formatCPF(user.informacoes_usuario.cpf);
+    const telefone = formatPhone(user.informacoes_usuario.numero_telefone);
+    const termo = search.toLowerCase();
+    return (
+      nome.includes(termo) ||
+      cpf.replace(/\D/g, "").includes(termo.replace(/\D/g, "")) ||
+      telefone.replace(/\D/g, "").includes(termo.replace(/\D/g, ""))
+    );
+  };
+
   if (loading) {
-    return <div className="text-center">Carregando...</div>;
+    return (
+      <div className="trabalhos-loading-container" style={{
+        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+        backgroundAttachment: 'fixed',
+        backgroundSize: 'cover',
+        backgroundRepeat: 'no-repeat'
+      }}>
+        <div className="trabalhos-spinner"></div>
+        <span className="trabalhos-loading-text">Carregando trabalhos...</span>
+      </div>
+    );
   }
 
   if (error) {
@@ -61,41 +107,70 @@ const MyComponent = () => {
   }
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-bold">TRABALHOS RECEBIDOS</h1>
-      <p>Total de Pessoas: {Object.keys(data.data).length}</p>
-      <p>Total de Arquivos Recebidos: {Object.keys(data.data).reduce((accumulator, key) => {
-        return accumulator + data.data[key].length;
-      }, 0)}</p>
-      {Object.entries(data.data).map(([userId, documents]) => {
-        const userInfo = data.tradutor[userId]; // Acessa o primeiro usuário
-        return (
-          <div key={userId} className="border p-4 rounded max-w-[100%] overflow-auto">
-            {userInfo ? (
-              <>
-                <h2 className="font-bold">
-                  {userInfo.informacoes_usuario.nome}
-                </h2>
-                <h3 className="font-bold">
-                  {userInfo.informacoes_usuario.numero_telefone}
-                </h3>
-              </>
-            ) : (
-              <p>User not found</p>
-            )}
-
-            <ul className="list-disc pl-5">
-              {documents.map(doc => (
-                <li key={doc._id}>
-                  <Link target='_blank' href={doc.url} prefetch={true} className="text-blue-500 hover:underline">
-                    {doc.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        );
-      })}
+    <div className="trabalhos-main-container" style={{
+      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+      backgroundAttachment: 'fixed',
+      backgroundSize: 'cover',
+      backgroundRepeat: 'no-repeat'
+    }}>
+      <h1 className="trabalhos-title">TRABALHOS RECEBIDOS</h1>
+      <div className="trabalhos-estatisticas">
+        <div className="trabalhos-estatistica-card">
+          <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+          <span className="trabalhos-estatistica-valor">{Object.keys(data.data).length}</span>
+          <span className="trabalhos-estatistica-label">Total de Pessoas</span>
+        </div>
+        <div className="trabalhos-estatistica-card">
+          <FileText size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
+          <span className="trabalhos-estatistica-valor">{Object.keys(data.data).reduce((accumulator, key) => {
+            return accumulator + data.data[key].length;
+          }, 0)}</span>
+          <span className="trabalhos-estatistica-label">Total de Arquivos Recebidos</span>
+        </div>
+      </div>
+      <div className="trabalhos-busca-container">
+        <input
+          type="text"
+          className="trabalhos-busca"
+          placeholder="Buscar por nome, CPF ou telefone..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
+      <div className="trabalhos-lista">
+        {Object.entries(data.data)
+          .filter(([userId]) => {
+            const userInfo = data.tradutor[userId];
+            if (!userInfo) return false;
+            return filterUser(userInfo);
+          })
+          .map(([userId, documents], idx) => {
+            const userInfo = data.tradutor[userId];
+            return (
+              <div key={userId} className="trabalhos-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }}>
+                {userInfo ? (
+                  <>
+                    <h2 className="trabalhos-nome">{userInfo.informacoes_usuario.nome}</h2>
+                    <div className="trabalhos-cpf">{formatCPF(userInfo.informacoes_usuario.cpf)}</div>
+                    <h3 className="trabalhos-telefone">{formatPhone(userInfo.informacoes_usuario.numero_telefone)}</h3>
+                  </>
+                ) : (
+                  <p className="trabalhos-user-notfound">Usuário não encontrado</p>
+                )}
+                <ul className="trabalhos-arquivos">
+                  {documents.map(doc => (
+                    <li key={doc._id}>
+                      <Link target='_blank' href={doc.url} prefetch={true} className="trabalhos-link">
+                        <Download size={18} style={{marginRight: '0.4em', minWidth: 18}} />
+                        {doc.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+      </div>
     </div>
   );
 };

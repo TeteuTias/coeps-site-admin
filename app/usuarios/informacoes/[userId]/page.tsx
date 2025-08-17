@@ -157,7 +157,14 @@ export default function Page({ params }: { params: { userId: string } }) {
     //
     //
     return (
-        <div className="w-full min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 space-y-10">
+        <div className="w-full min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 space-y-10"
+            style={{
+                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+                backgroundAttachment: 'fixed',
+                backgroundSize: 'cover',
+                backgroundRepeat: 'no-repeat'
+            }}
+        >
             <div className="max-w-2xl mx-auto">
                 <div className="mb-6">
                     <Link href="/usuarios/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900">
@@ -250,7 +257,7 @@ export default function Page({ params }: { params: { userId: string } }) {
                     </div>
                 </form>
             </div>
-            <div className="w-full text-center font-bold text-2xl">
+            <div className="w-full text-center font-bold text-2xl text-white">
                 <h1>MINICURSOS INSCRITOS</h1>
             </div>
             <div className="max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5">
@@ -260,7 +267,7 @@ export default function Page({ params }: { params: { userId: string } }) {
                         dataCourses.map((minicurso) => <CourseCard key={minicurso._id} minicurso={{ ...minicurso }} />)
                 }
             </div>
-            <div className="w-full text-center font-bold text-2xl">
+            <div className="w-full text-center text-white font-bold text-2xl">
                 <h1>PAGAMENTOS</h1>
             </div>
             <div className="flex flex-col items-center justify-center content-center max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5 px-10">
@@ -274,15 +281,13 @@ export default function Page({ params }: { params: { userId: string } }) {
     )
 }
 
-export const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
+const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
     const router = useRouter()
     const { name, description, maxParticipants, participantsCount, timeline, isOpen, isFree, value, emoji } = minicurso;
 
     const vagasPercentual = maxParticipants > 0 ? (participantsCount / maxParticipants) * 100 : 0;
 
-    const dataInicio = new Date(timeline.date_init);
-    const dataFim = new Date(timeline.date_end);
-    const dataFormatada = `${dataInicio.toLocaleDateString('pt-BR')} das ${dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às ${dataFim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
 
     return (
         <div className="bg-white border border-gray-200 rounded-2xl shadow-md hover:shadow-xl transition-shadow duration-300 flex flex-col overflow-hidden w-full">
@@ -316,12 +321,32 @@ export const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
             {/* Detalhes com Ícones */}
             <div className="p-6 space-y-4 border-t border-gray-100">
                 <div className="flex items-center gap-3 text-sm">
-                    <Calendar className="h-5 w-5 text-indigo-500 flex-shrink-0" />
-                    <span className="text-gray-700 font-medium">{dataFormatada}</span>
+                    {
+                        minicurso.timeline.map((time) => {
+                            const dataInicio = new Date(time.date_init);
+                            const dataFim = new Date(time.date_end);
+                            const dataFormatada = `${dataInicio.toLocaleDateString('pt-BR')} das ${dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às ${dataFim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                            return (
+                                <div className="flex flex-row space-x-1" key={`${time._id}`}>
+                                    <Calendar className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                                    <span className="text-gray-700 font-medium">{dataFormatada}</span>
+                                </div>
+                            )
+                        })
+                    }
                 </div>
                 <div className="flex items-center gap-3 text-sm">
-                    <MapPin className="h-5 w-5 text-indigo-500 flex-shrink-0" />
-                    <span className="text-gray-700 font-medium">{timeline.local || "---"}</span>
+                    {
+                        timeline.map((line) =>
+                            <div className="flex flex-row space-x-1" key={`${line._id}`}>
+                                <MapPin className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                                <span className="text-gray-700 font-medium">{line?.local || "---"}</span>
+                                <span className="font-extrabold">-</span>
+                                <span className="">{new Date(line.date_init).toDateString()}</span>
+
+                            </div>
+                        )
+                    }
                 </div>
                 {/* Barra de Progresso de Vagas */}
                 <div>
