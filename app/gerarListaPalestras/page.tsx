@@ -98,7 +98,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                             <tr key={index} className="hover:bg-gray-100 " onClick={() => console.log(item)}>
                                 <td className="flex flex-row p-4 border border-gray-300 text-black">
                                     <p className='text-[10px]  p-1'>
-                                        {index+1}
+                                        {index + 1}
                                     </p>
                                     <p>
                                         {item.informacoes_usuario.nome}
