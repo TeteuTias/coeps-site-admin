@@ -1,17 +1,22 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import LoadingModal from "../components/LoadingModal"
 import { IPaymentConfig } from "../lib/types/payments/payment.t"
 import { IUser } from "../lib/types/user/user.t"
 import { useRouter } from "next/navigation"
 import './style.css'
-import { CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX } from 'lucide-react'
+import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX } from 'lucide-react'
 
 type IParcelamento = IPaymentConfig["parcelamentos"][0];
 
 export default function Page() {
     const [loading, setLoading] = useState<boolean>(true)
+    const [searchTerm, setSearchTerm] = useState<string>("")
+    const [selectedStatus, setSelectedStatus] = useState<string>("")
+    const [selectedPaymentType, setSelectedPaymentType] = useState<string>("")
+    const [startDate, setStartDate] = useState<string>("")
+    const [endDate, setEndDate] = useState<string>("")
     const [paymentData, setPaymentData] = useState<IPaymentConfig | null>(null)
     const [payedUsers, setPayedUsers] = useState<IUser[]>([])
     const [editableParcelamentos, setEditableParcelamentos] = useState<IParcelamento[]>([]);
@@ -40,6 +45,14 @@ export default function Page() {
         }
     };
 
+    const handleResetFilters = () => {
+        setSearchTerm("")
+        setSelectedStatus("")
+        setSelectedPaymentType("")
+        setStartDate("")
+        setEndDate("")
+    }
+
     const handleParcelamentoChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         const updatedParcelamentos = [...editableParcelamentos];
@@ -54,6 +67,24 @@ export default function Page() {
         const updatedParcelamentos = editableParcelamentos.filter(p => p.codigo !== codigoToDelete);
         setEditableParcelamentos(updatedParcelamentos);
     };
+
+    const filteredUsers = payedUsers.filter(user => {
+        const term = searchTerm.toLowerCase()
+        const creationDate = new Date(user.informacoes_usuario.data_criacao).toISOString().split('T')[0]
+
+        const searchMatch = term === "" ||
+            user?._id?.toLowerCase()?.includes(term) ||
+            user?.informacoes_usuario?.email?.toLowerCase()?.includes(term) ||
+            user?.informacoes_usuario?.nome.toLowerCase()?.includes(term) ||
+            user?.informacoes_usuario?.numero_telefone?.includes(term)
+
+        const statusMatch = selectedStatus === "" || user.pagamento.situacao === parseInt(selectedStatus, 10)
+        const paymentTypeMatch = selectedPaymentType === "" || user.pagamento.tipo_pagamento === selectedPaymentType
+        const startDateMatch = startDate === "" || creationDate >= startDate
+        const endDateMatch = endDate === "" || creationDate <= endDate
+
+        return searchMatch && statusMatch && paymentTypeMatch && startDateMatch && endDateMatch
+    })
 
     const handleSaveParcelamentos = async () => {
         try {
@@ -222,6 +253,12 @@ export default function Page() {
         alert("Pagamentos aceitos alterados com sucesso!")
     }
 
+    const paymentTypes = useMemo(() => {
+        if (!payedUsers.length) return []
+        const types = new Set(payedUsers.map(user => user.pagamento.tipo_pagamento).filter(Boolean))
+        return Array.from(types)
+    }, [payedUsers])
+
     if (loading) {
         return (
             <div className="financeiro-loading-container" style={{
@@ -243,7 +280,7 @@ export default function Page() {
     return (
         <>
             <LoadingModal isLoading={loading} />
-            
+
             <div className="financeiro-main-container" style={{
                 background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
                 backgroundAttachment: 'fixed',
@@ -255,17 +292,17 @@ export default function Page() {
                 {/* Estatísticas */}
                 <div className="financeiro-estatisticas">
                     <div className="financeiro-estatistica-card">
-                        <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+                        <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
                         <span className="financeiro-estatistica-valor">{payedUsers.length}</span>
                         <span className="financeiro-estatistica-label">Total de Inscritos</span>
                     </div>
                     <div className="financeiro-estatistica-card">
-                        <CreditCard size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
+                        <CreditCard size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
                         <span className="financeiro-estatistica-valor">{paymentData.pagamentosAceitos?.length || 0}</span>
                         <span className="financeiro-estatistica-label">Métodos de Pagamento</span>
                     </div>
                     <div className="financeiro-estatistica-card">
-                        <DollarSign size={32} style={{marginBottom: '0.3rem', color: '#4CAF50'}} />
+                        <DollarSign size={32} style={{ marginBottom: '0.3rem', color: '#4CAF50' }} />
                         <span className="financeiro-estatistica-valor">{paymentData.parcelamentos.length}</span>
                         <span className="financeiro-estatistica-label">Parcelamentos</span>
                     </div>
@@ -279,35 +316,35 @@ export default function Page() {
                     </h2>
                     <div className="financeiro-payment-types">
                         {allPaymentTypes.map((value) => {
-                                            const isSelected = paymentData.pagamentosAceitos?.includes(value);
-                                            return (
-                                                <button
-                                                    key={value}
+                            const isSelected = paymentData.pagamentosAceitos?.includes(value);
+                            return (
+                                <button
+                                    key={value}
                                     className={`financeiro-payment-type-btn ${isSelected ? 'active' : ''}`}
-                                                    onClick={() => {
-                                                        setPaymentData((prev) => {
-                                                            if (!prev) return prev;
-                                                            const atual = prev.pagamentosAceitos ?? [];
-                                                            const jaSelecionado = atual.includes(value);
-                                                            return {
-                                                                ...prev,
-                                                                pagamentosAceitos: jaSelecionado
-                                                                    ? atual.filter((item) => item !== value)
-                                                                    : [...atual, value],
-                                                            };
-                                                        });
-                                                    }}
-                                                >
-                                    {value === "CREDIT_CARD" ? "Cartão de Crédito" : 
-                                     value === "DEBIT_CARD" ? "Cartão de Débito" : value}
-                                                </button>
-                                            )
+                                    onClick={() => {
+                                        setPaymentData((prev) => {
+                                            if (!prev) return prev;
+                                            const atual = prev.pagamentosAceitos ?? [];
+                                            const jaSelecionado = atual.includes(value);
+                                            return {
+                                                ...prev,
+                                                pagamentosAceitos: jaSelecionado
+                                                    ? atual.filter((item) => item !== value)
+                                                    : [...atual, value],
+                                            };
+                                        });
+                                    }}
+                                >
+                                    {value === "CREDIT_CARD" ? "Cartão de Crédito" :
+                                        value === "DEBIT_CARD" ? "Cartão de Débito" : value}
+                                </button>
+                            )
                         })}
-                                </div>
+                    </div>
                     <button onClick={updateAllowedPayments} className="financeiro-btn financeiro-btn-primary">
                         <Save size={18} />
                         Salvar Alterações
-                                </button>
+                    </button>
                 </div>
 
                 {/* Informações Gerais */}
@@ -317,7 +354,7 @@ export default function Page() {
                         Informações Gerais de Pagamento
                     </h2>
 
-                                {isEditingInfo ? (
+                    {isEditingInfo ? (
                         <div className="financeiro-form">
                             <div className="financeiro-form-group">
                                 <label htmlFor="nome" className="financeiro-label">
@@ -326,75 +363,75 @@ export default function Page() {
                                         Este nome aparecerá na fatura do cartão
                                     </span>
                                 </label>
-                                            <input
-                                                type="text"
-                                                id="nome"
-                                                name="nome"
-                                                value={editableInfo.nome}
-                                                onChange={handleInfoInputChange}
+                                <input
+                                    type="text"
+                                    id="nome"
+                                    name="nome"
+                                    value={editableInfo.nome}
+                                    onChange={handleInfoInputChange}
                                     className="financeiro-input"
-                                            />
-                                        </div>
+                                />
+                            </div>
                             <div className="financeiro-form-row">
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorAVista" className="financeiro-label">Crédito à Vista (R$)</label>
-                                            <input
-                                                type="number"
-                                                id="valorAVista"
-                                                name="valorAVista"
-                                                value={editableInfo.valorAVista}
-                                                onChange={handleInfoInputChange}
+                                    <input
+                                        type="number"
+                                        id="valorAVista"
+                                        name="valorAVista"
+                                        value={editableInfo.valorAVista}
+                                        onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                            />
-                                        </div>
+                                    />
+                                </div>
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorDebito" className="financeiro-label">Débito (R$)</label>
-                                            <input
-                                                type="number"
-                                                id="valorDebito"
-                                                name="valorDebito"
-                                                value={editableInfo.valorDebito}
-                                                onChange={handleInfoInputChange}
+                                    <input
+                                        type="number"
+                                        id="valorDebito"
+                                        name="valorDebito"
+                                        value={editableInfo.valorDebito}
+                                        onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                            />
-                                        </div>
+                                    />
+                                </div>
                             </div>
                             <div className="financeiro-form-row">
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorBoleto" className="financeiro-label">Boleto (R$)</label>
-                                            <input
-                                                type="number"
-                                                id="valorBoleto"
-                                                name="valorBoleto"
-                                                value={editableInfo.valorBoleto}
-                                                onChange={handleInfoInputChange}
+                                    <input
+                                        type="number"
+                                        id="valorBoleto"
+                                        name="valorBoleto"
+                                        value={editableInfo.valorBoleto}
+                                        onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                            />
-                                        </div>
+                                    />
+                                </div>
                                 <div className="financeiro-form-group">
                                     <label htmlFor="valorPix" className="financeiro-label">PIX (R$)</label>
-                                            <input
-                                                type="number"
-                                                id="valorPix"
-                                                name="valorPix"
-                                                value={editableInfo.valorPix}
-                                                onChange={handleInfoInputChange}
+                                    <input
+                                        type="number"
+                                        id="valorPix"
+                                        name="valorPix"
+                                        value={editableInfo.valorPix}
+                                        onChange={handleInfoInputChange}
                                         className="financeiro-input"
-                                            />
-                                        </div>
+                                    />
+                                </div>
                             </div>
                             <div className="financeiro-form-actions">
                                 <button onClick={handleSaveChanges} className="financeiro-btn financeiro-btn-success">
                                     <Save size={18} />
-                                                Salvar
-                                            </button>
+                                    Salvar
+                                </button>
                                 <button onClick={handleCancelEdit} className="financeiro-btn financeiro-btn-secondary">
                                     <X size={18} />
-                                                Cancelar
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
                         <div className="financeiro-info-display">
                             <div className="financeiro-info-item">
                                 <span className="financeiro-info-label">Nome do Lote:</span>
@@ -422,7 +459,7 @@ export default function Page() {
                             <button onClick={() => setIsEditingInfo(true)} className="financeiro-btn financeiro-btn-primary">
                                 <Edit3 size={18} />
                                 Editar Informações
-                                            </button>
+                            </button>
                         </div>
                     )}
                 </div>
@@ -433,7 +470,7 @@ export default function Page() {
                         <AlertTriangle size={20} />
                         <span>Pagamentos já criados anteriormente manterão os valores antigos, a menos que sejam cancelados pelo banco.</span>
                     </div>
-                    
+
                     <h2 className="financeiro-section-title">
                         <CreditCard size={24} />
                         Formas de Parcelamento
@@ -460,71 +497,71 @@ export default function Page() {
                                             <span className="financeiro-parcelamento-total-value">R$ {(payment.valorCadaParcela * payment.totalParcelas).toFixed(2).replace('.', ',')}</span>
                                         </div>
                                     </div>
-                                                </div>
-                                            ))}
-                                        </div>
+                                </div>
+                            ))}
+                        </div>
                     ) : (
                         <div className="financeiro-parcelamentos-edit">
                             <div className="financeiro-parcelamentos-grid">
                                 {editableParcelamentos.map((payment, index) => (
                                     <div key={payment.codigo} className="financeiro-parcelamento-card financeiro-parcelamento-edit">
-                                        <button 
-                                            onClick={() => handleDeleteParcelamento(payment.codigo)} 
+                                        <button
+                                            onClick={() => handleDeleteParcelamento(payment.codigo)}
                                             className="financeiro-delete-btn"
                                         >
                                             <Trash2 size={16} />
-                                            </button>
+                                        </button>
                                         <div className="financeiro-parcelamento-header">
                                             <span className="financeiro-parcelamento-codigo">Código: {payment.codigo}</span>
                                         </div>
                                         <div className="financeiro-parcelamento-form">
                                             <div className="financeiro-form-group">
                                                 <label className="financeiro-label">Total de Parcelas</label>
-                                                        <input
-                                                            type="number"
-                                                            name="totalParcelas"
-                                                            value={payment.totalParcelas}
-                                                            onChange={(e) => handleParcelamentoChange(index, e)}
+                                                <input
+                                                    type="number"
+                                                    name="totalParcelas"
+                                                    value={payment.totalParcelas}
+                                                    onChange={(e) => handleParcelamentoChange(index, e)}
                                                     className="financeiro-input"
-                                                        />
-                                                    </div>
+                                                />
+                                            </div>
                                             <div className="financeiro-form-group">
                                                 <label className="financeiro-label">Valor por Parcela (R$)</label>
-                                                        <input
-                                                            type="number"
-                                                            name="valorCadaParcela"
-                                                            value={payment.valorCadaParcela}
-                                                            onChange={(e) => handleParcelamentoChange(index, e)}
+                                                <input
+                                                    type="number"
+                                                    name="valorCadaParcela"
+                                                    value={payment.valorCadaParcela}
+                                                    onChange={(e) => handleParcelamentoChange(index, e)}
                                                     className="financeiro-input"
-                                                        />
-                                                    </div>
+                                                />
+                                            </div>
                                             <div className="financeiro-parcelamento-total">
                                                 <span className="financeiro-parcelamento-label">Novo Valor Total:</span>
                                                 <span className="financeiro-parcelamento-total-value">R$ {(payment.valorCadaParcela * payment.totalParcelas).toFixed(2).replace('.', ',')}</span>
                                             </div>
                                         </div>
-                                                </div>
-                                            ))}
-                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                             <div className="financeiro-parcelamentos-actions">
                                 <button onClick={handleAddParcelamento} className="financeiro-btn financeiro-btn-secondary">
                                     <Plus size={18} />
                                     Adicionar Parcelamento
-                                            </button>
+                                </button>
                                 <div className="financeiro-form-actions">
                                     <button onClick={handleSaveParcelamentos} className="financeiro-btn financeiro-btn-success">
                                         <Save size={18} />
-                                                Salvar Alterações
-                                            </button>
+                                        Salvar Alterações
+                                    </button>
                                     <button onClick={handleCancelParcelamentosEdit} className="financeiro-btn financeiro-btn-secondary">
                                         <X size={18} />
-                                                Cancelar
-                                            </button>
-                                        </div>
-                                    </div>
+                                        Cancelar
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
-                    
+
                     {!isEditingParcelamentos && (
                         <button onClick={handleActivateEditParcelamentos} className="financeiro-btn financeiro-btn-primary">
                             <Edit3 size={18} />
@@ -539,54 +576,115 @@ export default function Page() {
                         <UserCheck size={24} />
                         Lista de Pagantes
                     </h2>
-                    
+
                     <div className="financeiro-users-info">
                         <div className="financeiro-users-stats">
                             <span className="financeiro-users-count">
-                                    Total de Inscrições: {payedUsers.length > 0 ? payedUsers.length : "Ainda não há inscrições"}
+                                Total de Inscrições: {payedUsers.length > 0 ? payedUsers.length : "Ainda não há inscrições"}
                             </span>
                             <span className="financeiro-users-note">
                                 Valor variável com a quantidade atual de inscrições
                             </span>
-                                </div>
+                        </div>
 
                         <div className="financeiro-users-actions">
-                            <button 
+                            <button
                                 className="financeiro-btn financeiro-btn-primary"
                                 onClick={() => router.push("/usuarios/")}
                             >
                                 <Users size={18} />
                                 Gerenciar Usuários
                             </button>
-                                        <button
+                            <button
                                 className="financeiro-btn financeiro-btn-danger"
-                                            onClick={async () => {
+                                onClick={async () => {
                                     if (confirm("Tem certeza que deseja remover TODAS as inscrições? Esta ação não pode ser desfeita.")) {
-                                                setLoading(true)
-                                                const data = await fetch(`/api/delete/pagamentos/removerInscricao/ALL`, {
-                                                    method: "DELETE"
-                                                })
+                                        setLoading(true)
+                                        const data = await fetch(`/api/delete/pagamentos/removerInscricao/ALL`, {
+                                            method: "DELETE"
+                                        })
 
-                                                if (!data.ok) {
-                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                    setLoading(false)
-                                                    return;
-                                                }
+                                        if (!data.ok) {
+                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                            setLoading(false)
+                                            return;
+                                        }
 
-                                                setPayedUsers([])
-                                                setLoading(false)
+                                        setPayedUsers([])
+                                        setLoading(false)
                                         alert("Todas as inscrições foram removidas com sucesso!")
                                     }
                                 }}
                             >
                                 <UserX size={18} />
                                 Remover Todas Inscrições
-                                        </button>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="usuarios-filtros">
+                        <div className="usuarios-filtros-grid">
+                            <div className="usuarios-filtro-busca">
+                                <label htmlFor="search" className="usuarios-label">
+                                    <Search className="h-5 w-5" />
+                                    Busca
+                                </label>
+                                <input
+                                    id="search"
+                                    type="text"
+                                    placeholder="Buscar por nome, e-mail, ID ou telefone..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="usuarios-input"
+                                />
+                            </div>
+
+                            <div className="usuarios-filtro-select">
+                                <label htmlFor="paymentType" className="usuarios-label">Tipo de Pagamento</label>
+                                <select
+                                    id="paymentType"
+                                    value={selectedPaymentType}
+                                    onChange={e => setSelectedPaymentType(e.target.value)}
+                                    className="usuarios-select"
+                                >
+                                    <option value="">Todos os Tipos</option>
+                                    {paymentTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="usuarios-filtro-datas">
+                                <div className="usuarios-filtro-data">
+                                    <label htmlFor="startDate" className="usuarios-label">Criado de</label>
+                                    <input
+                                        type="date"
+                                        id="startDate"
+                                        value={startDate}
+                                        onChange={e => setStartDate(e.target.value)}
+                                        className="usuarios-input"
+                                    />
+                                </div>
+                                <div className="usuarios-filtro-data">
+                                    <label htmlFor="endDate" className="usuarios-label">Criado até</label>
+                                    <input
+                                        type="date"
+                                        id="endDate"
+                                        value={endDate}
+                                        onChange={e => setEndDate(e.target.value)}
+                                        className="usuarios-input"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="usuarios-filtros-actions">
+                            <button onClick={handleResetFilters} className="usuarios-btn usuarios-btn-secondary">
+                                <FilterX className="h-5 w-5" />
+                                Limpar Filtros
+                            </button>
                         </div>
                     </div>
 
                     <div className="financeiro-users-grid">
-                        {payedUsers.length > 0 ? payedUsers.map((user) => (
+                        {filteredUsers.length > 0 ? payedUsers.map((user) => (
                             <div key={user._id} className="financeiro-user-card">
                                 <div className="financeiro-user-info">
                                     <div className="financeiro-user-item">
@@ -611,44 +709,44 @@ export default function Page() {
                                     </div>
                                 </div>
                                 <div className="financeiro-user-actions">
-                                                        <button
+                                    <button
                                         className="financeiro-btn financeiro-btn-success"
                                         onClick={() => router.push(`/usuarios/informacoes/${user._id}`)}
                                     >
                                         <UserCheck size={16} />
                                         Ver Perfil
                                     </button>
-                                                        <button
+                                    <button
                                         className="financeiro-btn financeiro-btn-danger"
-                                                            onClick={async () => {
+                                        onClick={async () => {
                                             if (confirm("Tem certeza que deseja remover esta inscrição?")) {
-                                                                setLoading(true)
-                                                                const data = await fetch(`/api/delete/pagamentos/removerInscricao/${user._id}`, {
-                                                                    method: "DELETE"
-                                                                })
+                                                setLoading(true)
+                                                const data = await fetch(`/api/delete/pagamentos/removerInscricao/${user._id}`, {
+                                                    method: "DELETE"
+                                                })
 
-                                                                if (!data.ok) {
-                                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                                    setLoading(false)
-                                                                    return;
-                                                                }
+                                                if (!data.ok) {
+                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                    setLoading(false)
+                                                    return;
+                                                }
 
-                                                                setPayedUsers((prev) => prev.filter((value) => `${value._id}` !== `${user._id}`))
-                                                                setLoading(false)
-                                                                alert("A inscrição foi removida com sucesso!")
-                                                            }
+                                                setPayedUsers((prev) => prev.filter((value) => `${value._id}` !== `${user._id}`))
+                                                setLoading(false)
+                                                alert("A inscrição foi removida com sucesso!")
+                                            }
                                         }}
                                     >
                                         <UserX size={16} />
-                                                            Remover Inscrição
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )) : (
+                                        Remover Inscrição
+                                    </button>
+                                </div>
+                            </div>
+                        )) : (
                             <div className="financeiro-empty-state">
                                 <Users size={48} />
                                 <p>Nenhum usuário pagante encontrado.</p>
-                                    </div>
+                            </div>
                         )}
                     </div>
                 </div>

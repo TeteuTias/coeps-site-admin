@@ -1,6 +1,5 @@
 import { ObjectId } from "bson"
 import { connectToDatabase } from '@/app/lib/mongodb';
-
 // volta o estado do pagamento do usuário para: 0 -> não inscrito e sem pagamento criado!
 
 /**
@@ -21,7 +20,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ userI
                     {},
                     {
                         $set: {
-                            "pagamento.situacao": 0
+                            "pagamento.situacao": 0,
+                            "pagamento.tipo_pagamento": "",
+                            "pagamento.situacao_animacao": false
                         },
                     }
                 );
@@ -41,7 +42,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ userI
             },
             {
                 $set: {
-                    "pagamento.situacao": 0
+                    "pagamento.situacao": 0,
+                    "pagamento.tipo_pagamento": "",
+                    "pagamento.situacao_animacao": false
                 },
             }
         );

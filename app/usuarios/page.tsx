@@ -93,7 +93,7 @@ export default function Page() {
     return (
         <>
             <LoadingModal isLoading={loading} />
-            
+
             <div className="usuarios-main-container" style={{
                 background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
                 backgroundAttachment: 'fixed',
@@ -106,26 +106,26 @@ export default function Page() {
                 {/* Estatísticas */}
                 <div className="usuarios-estatisticas">
                     <div className="usuarios-estatistica-card">
-                        <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+                        <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
                         <span className="usuarios-estatistica-valor">{totalUsers}</span>
                         <span className="usuarios-estatistica-label">Total de Usuários</span>
                     </div>
                     <div className="usuarios-estatistica-card">
-                        <BadgeCheck size={32} style={{marginBottom: '0.3rem', color: '#4CAF50'}} />
+                        <BadgeCheck size={32} style={{ marginBottom: '0.3rem', color: '#4CAF50' }} />
                         <span className="usuarios-estatistica-valor">{inscritos}</span>
                         <span className="usuarios-estatistica-label">Inscritos</span>
                     </div>
                     <div className="usuarios-estatistica-card">
-                        <BadgeX size={32} style={{marginBottom: '0.3rem', color: '#F44336'}} />
+                        <BadgeX size={32} style={{ marginBottom: '0.3rem', color: '#F44336' }} />
                         <span className="usuarios-estatistica-valor">{naoInscritos}</span>
                         <span className="usuarios-estatistica-label">Não Inscritos</span>
                     </div>
                     <div className="usuarios-estatistica-card">
-                        <BadgeAlert size={32} style={{marginBottom: '0.3rem', color: '#FF9800'}} />
+                        <BadgeAlert size={32} style={{ marginBottom: '0.3rem', color: '#FF9800' }} />
                         <span className="usuarios-estatistica-valor">{pagamentoAberto}</span>
                         <span className="usuarios-estatistica-label">Pagamento Aberto</span>
-                                </div>
-                            </div>
+                    </div>
+                </div>
 
                 {/* Filtros */}
                 <div className="usuarios-filtros">
@@ -135,22 +135,22 @@ export default function Page() {
                                 <Search className="h-5 w-5" />
                                 Busca
                             </label>
-                            <input 
-                                id="search" 
-                                type="text" 
-                                placeholder="Buscar por nome, e-mail, ID ou telefone..." 
-                                value={searchTerm} 
-                                onChange={(e) => setSearchTerm(e.target.value)} 
-                                className="usuarios-input" 
+                            <input
+                                id="search"
+                                type="text"
+                                placeholder="Buscar por nome, e-mail, ID ou telefone..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="usuarios-input"
                             />
                         </div>
 
                         <div className="usuarios-filtro-select">
                             <label htmlFor="status" className="usuarios-label">Status de Inscrição</label>
-                            <select 
-                                id="status" 
-                                value={selectedStatus} 
-                                onChange={e => setSelectedStatus(e.target.value)} 
+                            <select
+                                id="status"
+                                value={selectedStatus}
+                                onChange={e => setSelectedStatus(e.target.value)}
                                 className="usuarios-select"
                             >
                                 <option value="">Todos os Status</option>
@@ -162,10 +162,10 @@ export default function Page() {
 
                         <div className="usuarios-filtro-select">
                             <label htmlFor="paymentType" className="usuarios-label">Tipo de Pagamento</label>
-                            <select 
-                                id="paymentType" 
-                                value={selectedPaymentType} 
-                                onChange={e => setSelectedPaymentType(e.target.value)} 
+                            <select
+                                id="paymentType"
+                                value={selectedPaymentType}
+                                onChange={e => setSelectedPaymentType(e.target.value)}
                                 className="usuarios-select"
                             >
                                 <option value="">Todos os Tipos</option>
@@ -176,27 +176,27 @@ export default function Page() {
                         <div className="usuarios-filtro-datas">
                             <div className="usuarios-filtro-data">
                                 <label htmlFor="startDate" className="usuarios-label">Criado de</label>
-                                <input 
-                                    type="date" 
-                                    id="startDate" 
-                                    value={startDate} 
-                                    onChange={e => setStartDate(e.target.value)} 
-                                    className="usuarios-input" 
+                                <input
+                                    type="date"
+                                    id="startDate"
+                                    value={startDate}
+                                    onChange={e => setStartDate(e.target.value)}
+                                    className="usuarios-input"
                                 />
                             </div>
                             <div className="usuarios-filtro-data">
                                 <label htmlFor="endDate" className="usuarios-label">Criado até</label>
-                                <input 
-                                    type="date" 
-                                    id="endDate" 
-                                    value={endDate} 
-                                    onChange={e => setEndDate(e.target.value)} 
-                                    className="usuarios-input" 
+                                <input
+                                    type="date"
+                                    id="endDate"
+                                    value={endDate}
+                                    onChange={e => setEndDate(e.target.value)}
+                                    className="usuarios-input"
                                 />
                             </div>
                         </div>
                     </div>
-                    
+
                     <div className="usuarios-filtros-actions">
                         <button onClick={handleResetFilters} className="usuarios-btn usuarios-btn-secondary">
                             <FilterX className="h-5 w-5" />
@@ -214,14 +214,14 @@ export default function Page() {
                                 CLIQUE PARA VER DETALHES
                             </h2>
                         </div>
-                        
+
                         <div className="usuarios-grid">
                             {filteredUsers.map((user) => (
                                 <div key={user._id} className="usuarios-card">
                                     <div className="usuarios-card-header">
                                         <div className="usuarios-avatar">
-                                                <User className="h-6 w-6" />
-                                            </div>
+                                            <User className="h-6 w-6" />
+                                        </div>
                                         <div className="usuarios-user-info">
                                             <h3 className="usuarios-user-name" title={user.informacoes_usuario.nome}>
                                                 {user.informacoes_usuario.nome}
@@ -229,10 +229,10 @@ export default function Page() {
                                             <p className="usuarios-user-email" title={user.informacoes_usuario.email}>
                                                 <Mail className="h-4 w-4" />
                                                 {user.informacoes_usuario.email}
-                                                </p>
-                                            </div>
+                                            </p>
+                                        </div>
                                     </div>
-                                    
+
                                     <div className="usuarios-card-content">
                                         <div className="usuarios-info-item">
                                             <Hash className="h-4 w-4" />
@@ -252,7 +252,7 @@ export default function Page() {
                                             </span>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="usuarios-card-payment">
                                         <h4 className="usuarios-payment-title">
                                             <CreditCard className="h-5 w-5" />
@@ -271,9 +271,9 @@ export default function Page() {
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="usuarios-card-actions">
-                                        <button 
+                                        <button
                                             className="usuarios-btn usuarios-btn-primary"
                                             onClick={() => router.push(`/usuarios/informacoes/${user._id}`)}
                                         >
