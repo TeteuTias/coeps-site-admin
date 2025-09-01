@@ -1,91 +1,195 @@
 'use client'
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { Search, FileText, Download, Eye, MessageSquare, CheckCircle, XCircle, AlertCircle, Calendar, User, Filter, Tag, BookOpen, Save } from 'lucide-react';
 import './style.css';
-import { Download, Users, FileText } from 'lucide-react';
-interface Document {
-  _id: string;
-  name: string;
-  url: string;
-  userId: string;
-}
 
-interface User {
+interface TrabalhoCompleto {
   _id: string;
-  informacoes_usuario: {
-    cpf: string;
-    numero_telefone: string;
+  userId: string;
+  titulo: string;
+  modalidade: string;
+  autores: {
     nome: string;
     email: string;
-    data_criacao: string;
-    titulo_honorario: string;
+    cpf: string;
+    isOrientador: boolean;
+    isPagante: boolean;
+  }[];
+  arquivo: {
+    fileId: string;
+    fileName: string;
+    url: string;
+  };
+  topicos: {
+    intro: string;
+    obj: string;
+    met: string;
+    disc: string;
+    conc: string;
+    pchave: string;
+    ref: string;
+  };
+  palavrasChave: string[];
+  status: "Em Avaliação" | "Aceito" | "Recusado" | "Necessita de Alteração";
+  dataSubmissao: string;
+  avaliadorComentarios: string;
+  dataAvaliacao?: string;
+  avaliadorId?: string;
+  usuario: {
+    nome: string;
+    email: string;
+    cpf: string;
+    telefone: string;
   };
 }
 
-interface DataStructure {
-  data: Record<string, Document[]>;
-  tradutor: Record<string, User>; // Mapeia userId para um único User
+interface EstatisticasTrabalhos {
+  total: number;
+  emAvaliacao: number;
+  aceitos: number;
+  recusados: number;
+  necessitamAlteracao: number;
+  modalidades: string[];
+  topicos: { topico: string; quantidade: number; }[];
 }
 
-// Função utilitária para formatar CPF
-function formatCPF(cpf: string) {
-  if (!cpf) return '';
-  const cleaned = cpf.replace(/\D/g, '');
-  if (cleaned.length !== 11) return cpf;
-  return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-}
-
-// Função utilitária para formatar telefone
-function formatPhone(phone: string) {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 11) {
-    return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-  } else if (cleaned.length === 10) {
-    return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-  }
-  return phone;
-}
-
-const MyComponent = () => {
-  const [data, setData] = useState<DataStructure>({
-    data: {},
-    tradutor: {}
+const TrabalhosPainel = () => {
+  const [trabalhos, setTrabalhos] = useState<TrabalhoCompleto[]>([]);
+  const [estatisticas, setEstatisticas] = useState<EstatisticasTrabalhos>({
+    total: 0,
+    emAvaliacao: 0,
+    aceitos: 0,
+    recusados: 0,
+    necessitamAlteracao: 0,
+    modalidades: [],
+    topicos: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
-  const [search, setSearch] = useState("");
+  
+  // Filtros
+  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
+  const [filtroModalidade, setFiltroModalidade] = useState<string>("todos");
+  const [buscaTexto, setBuscaTexto] = useState("");
+  
+  // Estados para avaliação
+  const [avaliacaoAtiva, setAvaliacaoAtiva] = useState<string | null>(null);
+  const [comentarios, setComentarios] = useState<{[key: string]: string}>({});
+  const [salvandoAvaliacao, setSalvandoAvaliacao] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch('/api/get/trabalhos');
-        if (!response.ok) {
-          throw new Error('Erro na resposta da rede');
-        }
-        const result = await response.json();
-        setData(result);
-      } catch (error) {
-        setError("OCORREU ALGO ERRADO. RECARREGUE");
-      } finally {
-        setLoading(false);
+    fetchTrabalhos();
+  }, []);
+
+  const fetchTrabalhos = async () => {
+    try {
+      const response = await fetch('/api/get/trabalhos-dados');
+      if (!response.ok) {
+        throw new Error('Erro na resposta da rede');
       }
-    };
+      const result = await response.json();
+      setTrabalhos(result.trabalhos);
+      setEstatisticas(result.estatisticas);
+      
+      // Inicializar comentários com os existentes
+      const comentariosIniciais: {[key: string]: string} = {};
+      result.trabalhos.forEach((trabalho: TrabalhoCompleto) => {
+        comentariosIniciais[trabalho._id] = trabalho.avaliadorComentarios || '';
+      });
+      setComentarios(comentariosIniciais);
+    } catch (error) {
+      setError("Erro ao carregar trabalhos. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchData();
-  }, []); // O array vazio faz com que o efeito execute apenas uma vez ao montar
+  // Função para salvar avaliação
+  const salvarAvaliacao = async (trabalhoId: string, status: string) => {
+    setSalvandoAvaliacao(trabalhoId);
+    
+    try {
+      const response = await fetch('/api/post/avaliar-trabalho-dados', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trabalhoId,
+          status,
+          comentarios: comentarios[trabalhoId] || '',
+        }),
+      });
 
-  // Função para filtrar usuários por nome, CPF ou telefone
-  const filterUser = (user: User) => {
-    const nome = user.informacoes_usuario.nome?.toLowerCase() || "";
-    const cpf = formatCPF(user.informacoes_usuario.cpf);
-    const telefone = formatPhone(user.informacoes_usuario.numero_telefone);
-    const termo = search.toLowerCase();
-    return (
-      nome.includes(termo) ||
-      cpf.replace(/\D/g, "").includes(termo.replace(/\D/g, "")) ||
-      telefone.replace(/\D/g, "").includes(termo.replace(/\D/g, ""))
-    );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao salvar avaliação');
+      }
+
+      // Atualizar trabalho localmente
+      setTrabalhos(prev => prev.map(trabalho => 
+        trabalho._id === trabalhoId 
+          ? { 
+              ...trabalho, 
+              status: status as any,
+              avaliadorComentarios: comentarios[trabalhoId] || '',
+              dataAvaliacao: new Date().toISOString()
+            }
+          : trabalho
+      ));
+
+      // Atualizar estatísticas
+      fetchTrabalhos();
+      
+      alert('Avaliação salva com sucesso!');
+    } catch (error: any) {
+      alert(error.message || 'Erro ao salvar avaliação. Tente novamente.');
+    } finally {
+      setSalvandoAvaliacao(null);
+    }
+  };
+
+  // Função para filtrar trabalhos
+  const trabalhosFiltrados = trabalhos.filter(trabalho => {
+    
+    
+    const statusMatch = filtroStatus === 'todos' || trabalho.status === filtroStatus;
+    const modalidadeMatch = filtroModalidade === 'todos' || trabalho.modalidade === filtroModalidade;
+    
+    return statusMatch && modalidadeMatch;
+  });
+
+  // Função para obter cor do status
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Aceito': return '#10b981';
+      case 'Recusado': return '#ef4444';
+      case 'Necessita de Alteração': return '#f59e0b';
+      default: return '#6b7280';
+    }
+  };
+
+  // Função para obter ícone do status
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'Aceito': return <CheckCircle size={18} />;
+      case 'Recusado': return <XCircle size={18} />;
+      case 'Necessita de Alteração': return <AlertCircle size={18} />;
+      default: return <Eye size={18} />;
+    }
+  };
+
+  // Função para formatar data
+  const formatarData = (dataString: string): string => {
+    const data = new Date(dataString);
+    return data.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   if (loading) {
@@ -97,13 +201,25 @@ const MyComponent = () => {
         backgroundRepeat: 'no-repeat'
       }}>
         <div className="trabalhos-spinner"></div>
-        <span className="trabalhos-loading-text">Carregando trabalhos...</span>
+        <span className="trabalhos-loading-text">Carregando trabalhos para avaliação...</span>
       </div>
     );
   }
 
   if (error) {
-    return <div className="text-red-500">{error}</div>;
+    return (
+      <div className="trabalhos-error-container" style={{
+        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+        backgroundAttachment: 'fixed',
+        backgroundSize: 'cover',
+        backgroundRepeat: 'no-repeat'
+      }}>
+        <div className="error-message">{error}</div>
+        <button onClick={fetchTrabalhos} className="btn-retry">
+          Tentar Novamente
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -113,66 +229,241 @@ const MyComponent = () => {
       backgroundSize: 'cover',
       backgroundRepeat: 'no-repeat'
     }}>
-      <h1 className="trabalhos-title">TRABALHOS RECEBIDOS</h1>
-      <div className="trabalhos-estatisticas">
-        <div className="trabalhos-estatistica-card">
-          <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
-          <span className="trabalhos-estatistica-valor">{Object.keys(data.data).length}</span>
-          <span className="trabalhos-estatistica-label">Total de Pessoas</span>
+      <div className="trabalhos-container">
+        <h1 className="trabalhos-title">AVALIAÇÃO DE TRABALHOS</h1>
+        
+        {/* Estatísticas */}
+        <div className="trabalhos-estatisticas">
+          <div className="trabalhos-estatistica-card">
+            <FileText size={32} style={{color: 'var(--azul)'}} />
+            <span className="trabalhos-estatistica-valor">{estatisticas.total}</span>
+            <span className="trabalhos-estatistica-label">Total de Trabalhos</span>
+          </div>
+          <div className="trabalhos-estatistica-card">
+            <Eye size={32} style={{color: '#6b7280'}} />
+            <span className="trabalhos-estatistica-valor">{estatisticas.emAvaliacao}</span>
+            <span className="trabalhos-estatistica-label">Em Avaliação</span>
+          </div>
+          <div className="trabalhos-estatistica-card">
+            <CheckCircle size={32} style={{color: '#10b981'}} />
+            <span className="trabalhos-estatistica-valor">{estatisticas.aceitos}</span>
+            <span className="trabalhos-estatistica-label">Aceitos</span>
+          </div>
+          <div className="trabalhos-estatistica-card">
+            <XCircle size={32} style={{color: '#ef4444'}} />
+            <span className="trabalhos-estatistica-valor">{estatisticas.recusados}</span>
+            <span className="trabalhos-estatistica-label">Recusados</span>
+          </div>
+          <div className="trabalhos-estatistica-card">
+            <AlertCircle size={32} style={{color: '#f59e0b'}} />
+            <span className="trabalhos-estatistica-valor">{estatisticas.necessitamAlteracao}</span>
+            <span className="trabalhos-estatistica-label">Necessitam Alteração</span>
+          </div>
         </div>
-        <div className="trabalhos-estatistica-card">
-          <FileText size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
-          <span className="trabalhos-estatistica-valor">{Object.keys(data.data).reduce((accumulator, key) => {
-            return accumulator + data.data[key].length;
-          }, 0)}</span>
-          <span className="trabalhos-estatistica-label">Total de Arquivos Recebidos</span>
+
+        {/* Filtros */}
+        <div className="trabalhos-filtros-container">
+          
+          
+          <div className="trabalhos-filtro-status">
+            <select 
+              value={filtroStatus} 
+              onChange={e => setFiltroStatus(e.target.value)}
+              className="trabalhos-select-status"
+            >
+              <option value="todos">Todos os Status</option>
+              <option value="Em Avaliação">Em Avaliação</option>
+              <option value="Aceito">Aceito</option>
+              <option value="Recusado">Recusado</option>
+              <option value="Necessita de Alteração">Necessita de Alteração</option>
+            </select>
+          </div>
+
+          <div className="trabalhos-filtro-modalidade">
+            <select 
+              value={filtroModalidade} 
+              onChange={e => setFiltroModalidade(e.target.value)}
+              className="trabalhos-select-status"
+            >
+              <option value="todos">Todas as Modalidades</option>
+              {estatisticas.modalidades.map(modalidade => (
+                <option key={modalidade} value={modalidade}>{modalidade}</option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
-      <div className="trabalhos-busca-container">
-        <input
-          type="text"
-          className="trabalhos-busca"
-          placeholder="Buscar por nome, CPF ou telefone..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-      </div>
-      <div className="trabalhos-lista">
-        {Object.entries(data.data)
-          .filter(([userId]) => {
-            const userInfo = data.tradutor[userId];
-            if (!userInfo) return false;
-            return filterUser(userInfo);
-          })
-          .map(([userId, documents], idx) => {
-            const userInfo = data.tradutor[userId];
-            return (
-              <div key={userId} className="trabalhos-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }}>
-                {userInfo ? (
-                  <>
-                    <h2 className="trabalhos-nome">{userInfo.informacoes_usuario.nome}</h2>
-                    <div className="trabalhos-cpf">{formatCPF(userInfo.informacoes_usuario.cpf)}</div>
-                    <h3 className="trabalhos-telefone">{formatPhone(userInfo.informacoes_usuario.numero_telefone)}</h3>
-                  </>
-                ) : (
-                  <p className="trabalhos-user-notfound">Usuário não encontrado</p>
-                )}
-                <ul className="trabalhos-arquivos">
-                  {documents.map(doc => (
-                    <li key={doc._id}>
-                      <Link target='_blank' href={doc.url} prefetch={true} className="trabalhos-link">
-                        <Download size={18} style={{marginRight: '0.4em', minWidth: 18}} />
-                        {doc.name}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+
+      
+        {/* Lista de Trabalhos */}
+        <div className="trabalhos-lista">
+          {trabalhosFiltrados.map((trabalho, idx) => (
+            <div key={trabalho._id} className="trabalhos-card-avaliacao fadeInUp" style={{ animationDelay: `${0.05 * idx}s` }}>
+              <div className="trabalho-header">
+                <div className="trabalho-info-principal">
+                  <h2 className="trabalho-titulo">{trabalho.titulo}</h2>
+                  <div className="trabalho-modalidade">
+                    <BookOpen size={16} />
+                    <span>{trabalho.modalidade}</span>
+                  </div>
+                  <div className="trabalho-data">
+                    <Calendar size={16} />
+                    <span>Submetido em: {formatarData(trabalho.dataSubmissao)}</span>
+                  </div>
+                </div>
+                
+                <div className="trabalho-status-container">
+                  <div className="documento-status" style={{ color: getStatusColor(trabalho.status) }}>
+                    {getStatusIcon(trabalho.status)}
+                    <span>{trabalho.status}</span>
+                  </div>
+                </div>
               </div>
-            );
-          })}
+
+              {/* Informações dos Autores */}
+              <div className="trabalho-autores">
+                <h4>Autores:</h4>
+                {trabalho.autores.map((autor, index) => (
+                  <div key={index} className="autor-item">
+                    <User size={14} />
+                    <span>{autor.nome}</span>
+                    {autor.isOrientador && <span className="badge-orientador">Orientador</span>}
+                    {autor.isPagante && <span className="badge-pagante">Pagante</span>}
+                  </div>
+                ))}
+              </div>
+
+              {/* Arquivo */}
+              <div className="trabalho-arquivo">
+                <Link target='_blank' href={trabalho.arquivo.url} className="trabalhos-link">
+                  <Download size={18} />
+                  {trabalho.arquivo.fileName}
+                </Link>
+                <Link target='_blank' href={trabalho.arquivo.url} className="btn-visualizar-arquivo">
+                  <Eye size={16} />
+                  Visualizar
+                </Link>
+              </div>
+
+            
+              <div className="trabalho-topicos-detalhes">
+                <div className="topicos-resumo">
+                  <h4>Resumo dos Tópicos:</h4>
+                   <div className="topico-item">
+                    <strong>Resumo:</strong> {(trabalho.topicos?.intro || "").substring(0, 5000)}
+                  </div>
+                  <div className="topico-item">
+                    <strong>Introdução:</strong> {(trabalho.topicos?.intro || "").substring(0, 500)}
+                  </div>
+                  <div className="topico-item">
+                    <strong>Objetivos:</strong> {(trabalho.topicos?.obj || "").substring(0, 500)}
+                  </div>
+                  <div className="topico-item">
+                    <strong>Metodologia:</strong> {(trabalho.topicos?.met || "").substring(0, 500)}
+                  </div>
+                  <div className="topico-item">
+                    <strong>Discussão:</strong> {(trabalho.topicos?.disc || "").substring(0, 500)}
+                  </div>
+                  <div className="topico-item">
+                    <strong>Conclusão:</strong> {(trabalho.topicos?.conc || "").substring(0, 500)}
+                  </div>
+                  <div className="topico-item">
+                    <strong>Palavras-Chave:</strong> {(trabalho.topicos?.pchave || "").substring(0, 100)}
+                  </div>
+                  <div className="topico-item">
+                    <strong>Referências:</strong> {(trabalho.topicos?.ref || "").substring(0, 100)}
+                  </div>
+                </div>
+                
+                {trabalho.palavrasChave?.length > 0 && (
+  <div className="palavras-chave-container">
+    <h4>Palavras-chave:</h4>
+    <div className="palavras-chave-tags">
+      {trabalho.palavrasChave.map((palavra, index) => (
+        <span key={index} className="palavra-tag">{palavra}</span>
+      ))}
+    </div>
+  </div>
+)}
+              </div>
+
+              {/* Seção de Avaliação */}
+              <div className="avaliacao-section">
+                <div className="botoes-avaliacao">
+                  <button 
+                    className={`btn-avaliacao btn-aceitar ${trabalho.status === 'Aceito' ? 'active' : ''}`}
+                    onClick={() => salvarAvaliacao(trabalho._id, 'Aceito')}
+                    disabled={salvandoAvaliacao === trabalho._id}
+                  >
+                    <CheckCircle size={16} />
+                    Aceitar
+                  </button>
+                  
+                  <button 
+                    className={`btn-avaliacao btn-necessita-alteracao ${trabalho.status === 'Necessita de Alteração' ? 'active' : ''}`}
+                    onClick={() => salvarAvaliacao(trabalho._id, 'Necessita de Alteração')}
+                    disabled={salvandoAvaliacao === trabalho._id}
+                  >
+                    <AlertCircle size={16} />
+                    Necessita Alteração
+                  </button>
+                  
+                  <button 
+                    className={`btn-avaliacao btn-recusar ${trabalho.status === 'Recusado' ? 'active' : ''}`}
+                    onClick={() => salvarAvaliacao(trabalho._id, 'Recusado')}
+                    disabled={salvandoAvaliacao === trabalho._id}
+                  >
+                    <XCircle size={16} />
+                    Recusar
+                  </button>
+                </div>
+
+                <div className="comentarios-section">
+                  <label className="comentarios-label">
+                    <MessageSquare size={16} />
+                    Comentários do Avaliador:
+                  </label>
+                  <textarea
+                    className="comentarios-textarea"
+                    placeholder="Adicione comentários sobre o trabalho (obrigatório para 'Necessita de Alteração')..."
+                    value={comentarios[trabalho._id] || ''}
+                    onChange={(e) => setComentarios(prev => ({
+                      ...prev,
+                      [trabalho._id]: e.target.value
+                    }))}
+                    rows={3}
+                  />
+                  
+                  <button 
+                    className="btn-salvar-comentario"
+                    onClick={() => salvarAvaliacao(trabalho._id, trabalho.status)}
+                    disabled={salvandoAvaliacao === trabalho._id}
+                  >
+                    <Save size={16} />
+                    {salvandoAvaliacao === trabalho._id ? 'Salvando...' : 'Salvar Comentários'}
+                  </button>
+                </div>
+
+                {trabalho.dataAvaliacao && (
+                  <div className="avaliacao-info">
+                    <small>Última avaliação: {formatarData(trabalho.dataAvaliacao)}</small>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {trabalhosFiltrados.length === 0 && (
+          <div className="sem-trabalhos">
+            <FileText size={64} style={{color: 'white', opacity: 0.5}} />
+            <h3>Nenhum trabalho encontrado</h3>
+            <p>Tente ajustar os filtros de busca.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default MyComponent;
+export default TrabalhosPainel;
+

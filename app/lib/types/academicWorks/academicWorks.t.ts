@@ -1,15 +1,33 @@
 export default interface IAcademicWorks {
-    "data_inicio_submissao": string,
-    "data_limite_submissao": string,
-    "data_publicacao_resultados": string,
-    "autores_por_trabalho": number,
-    "trabalhos_por_usuario": number,
-    "resultados": {
-        link: string,
-        titulo: string,
-        data_publicacao: string
-    }[],
-    "link_edital": string,
-    "isOpen": boolean
+    _id: string;
+    userId: string;
+    titulo: string;
+    modalidade: string;
+    autores: {
+        nome: string;
+        email: string;
+        cpf: string;
+        isOrientador: boolean;
+        isPagante: boolean;
+    }[];
+    arquivo: {
+        fileId: string;
+        fileName: string;
+        url: string;
+    };
+    topicos: {
+        intro: string;
+        obj: string;
+        met: string;
+        disc: string;
+        conc: string;
+        pchave: string;
+        ref: string;
+    };
+    status: "Em Avaliação" | "Aceito" | "Recusado" | "Necessita de Alteração";
+    dataSubmissao: string;
+    avaliadorComentarios: string;
+    dataAvaliacao?: string;
+    avaliadorId?: string;
 }
 

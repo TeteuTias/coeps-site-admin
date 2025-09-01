@@ -1,0 +1,265 @@
+/* Estilos específicos para a página de avaliação de trabalhos */
+
+.trabalhos-card-avaliacao {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.trabalhos-card-avaliacao:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.trabalhos-filtros-container {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+}
+
+.trabalhos-filtro-status {
+  min-width: 200px;
+}
+
+.trabalhos-select-status {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 1rem;
+  color: var(--azul);
+  transition: all 0.3s ease;
+}
+
+.trabalhos-select-status:focus {
+  outline: none;
+  border-color: var(--azul);
+  box-shadow: 0 0 0 3px rgba(var(--azul-rgb), 0.1);
+}
+
+.trabalhos-documentos {
+  margin-top: 1rem;
+}
+
+.trabalho-documento-item {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.documento-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.documento-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.avaliacao-section {
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  padding-top: 1rem;
+}
+
+.botoes-avaliacao {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-avaliacao {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border: 2px solid;
+  border-radius: 6px;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 140px;
+  justify-content: center;
+}
+
+.btn-avaliacao:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-aceitar {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.btn-aceitar:hover:not(:disabled) {
+  background: #10b981;
+  color: white;
+}
+
+.btn-aceitar.active {
+  background: #10b981;
+  color: white;
+}
+
+.btn-necessita-alteracao {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.btn-necessita-alteracao:hover:not(:disabled) {
+  background: #f59e0b;
+  color: white;
+}
+
+.btn-necessita-alteracao.active {
+  background: #f59e0b;
+  color: white;
+}
+
+.btn-recusar {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.btn-recusar:hover:not(:disabled) {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-recusar.active {
+  background: #ef4444;
+  color: white;
+}
+
+.comentarios-section {
+  margin-top: 1rem;
+}
+
+.comentarios-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--azul);
+  margin-bottom: 0.5rem;
+}
+
+.comentarios-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 80px;
+  transition: border-color 0.3s ease;
+}
+
+.comentarios-textarea:focus {
+  outline: none;
+  border-color: var(--azul);
+}
+
+.comentarios-textarea::placeholder {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.btn-salvar-comentario {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: var(--azul);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 0.5rem;
+}
+
+.btn-salvar-comentario:hover:not(:disabled) {
+  background: var(--azul-escuro);
+  transform: translateY(-1px);
+}
+
+.btn-salvar-comentario:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.avaliacao-info {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+/* Variáveis CSS para cores */
+:root {
+  --verde: #10b981;
+  --vermelho: #ef4444;
+  --laranja: #f59e0b;
+  --cinza: #6b7280;
+  --azul-escuro: #1e40af;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .trabalhos-filtros-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .trabalhos-filtro-status {
+    min-width: auto;
+  }
+  
+  .documento-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .botoes-avaliacao {
+    flex-direction: column;
+  }
+  
+  .btn-avaliacao {
+    min-width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .trabalhos-card-avaliacao {
+    padding: 1rem;
+  }
+  
+  .trabalho-documento-item {
+    padding: 0.75rem;
+  }
+}
+
