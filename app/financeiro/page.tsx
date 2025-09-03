@@ -683,6 +683,11 @@ export default function Page() {
                         </div>
                     </div>
 
+                    <div className="w-full text-center">
+                        <h2 className="financeiro-section-title">
+                            Congressistas - ({filteredUsers.length})
+                        </h2>
+                    </div>
                     <div className="financeiro-users-grid">
                         {filteredUsers.length > 0 ? payedUsers.map((user) => (
                             <div key={user._id} className="financeiro-user-card">

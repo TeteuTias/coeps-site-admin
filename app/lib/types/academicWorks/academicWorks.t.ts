@@ -10,6 +10,7 @@ export default interface IAcademicWorks {
         data_publicacao: string
     }[],
     "link_edital": string,
+    "link_guia"?: string,
     "isOpen": boolean
 }
 
