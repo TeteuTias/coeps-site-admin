@@ -1,386 +1,333 @@
 'use client'
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { Download, Users, FileText, Eye, CheckCircle, XCircle, AlertCircle, MessageSquare, Save } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Link as Linkk } from 'lucide-react';
 import './style.css';
+import {IAcademicWorks} from '@/app/lib/types/academicWorks/academicWorks.t';
+import LoadingModal from '@/app/components/LoadingModal';
 
-interface Document {
-  _id: string;
-  name: string;
-  url: string;
-  userId: string;
-}
 
-interface User {
-  _id: string;
-  informacoes_usuario: {
-    cpf: string;
-    numero_telefone: string;
-    nome: string;
-    email: string;
-    data_criacao: string;
-    titulo_honorario: string;
-  };
-}
-
-interface TrabalhoAvaliacao {
-  _id: string;
-  userId: string;
-  documentId: string;
-  status: 'pendente' | 'aceito' | 'recusado' | 'necessita_alteracao';
-  avaliadorComentarios: string;
-  dataAvaliacao?: string;
-  avaliadorId?: string;
-}
-
-interface DataStructure {
-  data: Record<string, Document[]>;
-  tradutor: Record<string, User>;
-  avaliacoes: Record<string, TrabalhoAvaliacao[]>;
-}
-
-// Função utilitária para formatar CPF
-function formatCPF(cpf: string) {
-  if (!cpf) return '';
-  const cleaned = cpf.replace(/\D/g, '');
-  if (cleaned.length !== 11) return cpf;
-  return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-}
-
-// Função utilitária para formatar telefone
-function formatPhone(phone: string) {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 11) {
-    return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-  } else if (cleaned.length === 10) {
-    return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-  }
-  return phone;
-}
-
-const AvaliarTrabalhos = () => {
-  const [data, setData] = useState<DataStructure>({
-    data: {},
-    tradutor: {},
-    avaliacoes: {}
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
-  const [search, setSearch] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
-  const [comentarios, setComentarios] = useState<Record<string, string>>({});
-  const [salvandoAvaliacao, setSalvandoAvaliacao] = useState<Record<string, boolean>>({});
-
+// /api/get/trabalhos-avaliacoes
+// /api/post/avaliar-trabalho
+export default function AvaliarTrabalho() {
+  //
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [trabalhos, setTrabalhos] = useState<IAcademicWorks[]>([]);
+  const hydrateData = useMemo(() => async () => {
+    setIsLoading(true)
+    const trabalhos: { data: IAcademicWorks[] } = await fetch('/api/get/trabalhos-avaliacoes').then(res => res.json());
+    setTrabalhos(trabalhos.data);
+    setIsLoading(false)
+  }, [])
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch('/api/get/trabalhos-avaliacoes');
-        if (!response.ok) {
-          throw new Error('Erro na resposta da rede');
-        }
-        const result = await response.json();
-        setData(result);
-        
-        // Inicializar comentários com os existentes
-        const comentariosIniciais: Record<string, string> = {};
-        Object.values(result.avaliacoes).flat().forEach((avaliacao: TrabalhoAvaliacao) => {
-          comentariosIniciais[avaliacao.documentId] = avaliacao.avaliadorComentarios || '';
-        });
-        setComentarios(comentariosIniciais);
-      } catch (error) {
-        setError("OCORREU ALGO ERRADO. RECARREGUE");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    hydrateData()
   }, []);
 
-  // Função para filtrar usuários por nome, CPF ou telefone
-  const filterUser = (user: User) => {
-    const nome = user.informacoes_usuario.nome?.toLowerCase() || "";
-    const cpf = formatCPF(user.informacoes_usuario.cpf);
-    const telefone = formatPhone(user.informacoes_usuario.numero_telefone);
-    const termo = search.toLowerCase();
-    return (
-      nome.includes(termo) ||
-      cpf.replace(/\D/g, "").includes(termo.replace(/\D/g, "")) ||
-      telefone.replace(/\D/g, "").includes(termo.replace(/\D/g, ""))
-    );
-  };
-
-  // Função para obter status de um documento
-  const getDocumentStatus = (documentId: string, userId: string): TrabalhoAvaliacao | null => {
-    const avaliacoesUsuario = data.avaliacoes[userId];
-    if (!avaliacoesUsuario) return null;
-    return avaliacoesUsuario.find(av => av.documentId === documentId) || null;
-  };
-
-  // Função para salvar avaliação
-  const salvarAvaliacao = async (documentId: string, userId: string, status: string) => {
-    setSalvandoAvaliacao(prev => ({ ...prev, [documentId]: true }));
-    
-    try {
-      const response = await fetch('/api/post/avaliar-trabalho', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          documentId,
-          userId,
-          status,
-          avaliadorComentarios: comentarios[documentId] || '',
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Erro ao salvar avaliação');
-      }
-
-      // Atualizar dados localmente
-      const novaAvaliacao: TrabalhoAvaliacao = {
-        _id: `${documentId}_${userId}`,
-        userId,
-        documentId,
-        status: status as any,
-        avaliadorComentarios: comentarios[documentId] || '',
-        dataAvaliacao: new Date().toISOString(),
-      };
-
-      setData(prev => ({
-        ...prev,
-        avaliacoes: {
-          ...prev.avaliacoes,
-          [userId]: [
-            ...(prev.avaliacoes[userId] || []).filter(av => av.documentId !== documentId),
-            novaAvaliacao
-          ]
+  //
+  //
+  return (
+    <main className='w-full min-h-screen py-10'>
+      <LoadingModal isLoading={isLoading} />
+      <div>
+        {
+          !isLoading && trabalhos.length !== 0 &&
+          trabalhos.map((trabalho) => <TrabalhoComponent hydrateData={hydrateData} key={`${trabalho._id}`} data={trabalho} />)
         }
-      }));
-
-      alert('Avaliação salva com sucesso!');
-    } catch (error) {
-      alert('Erro ao salvar avaliação. Tente novamente.');
-    } finally {
-      setSalvandoAvaliacao(prev => ({ ...prev, [documentId]: false }));
-    }
-  };
-
-  // Função para obter cor do status
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'aceito': return 'var(--verde)';
-      case 'recusado': return 'var(--vermelho)';
-      case 'necessita_alteracao': return 'var(--laranja)';
-      default: return 'var(--cinza)';
-    }
-  };
-
-  // Função para obter ícone do status
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'aceito': return <CheckCircle size={18} />;
-      case 'recusado': return <XCircle size={18} />;
-      case 'necessita_alteracao': return <AlertCircle size={18} />;
-      default: return <Eye size={18} />;
-    }
-  };
-
-  // Filtrar trabalhos por status
-  const filtrarPorStatus = (userId: string, documents: Document[]) => {
-    if (filtroStatus === 'todos') return true;
-    
-    return documents.some(doc => {
-      const avaliacao = getDocumentStatus(doc._id, userId);
-      const status = avaliacao?.status || 'pendente';
-      return status === filtroStatus;
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="trabalhos-loading-container" style={{
-        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-        backgroundAttachment: 'fixed',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat'
-      }}>
-        <div className="trabalhos-spinner"></div>
-        <span className="trabalhos-loading-text">Carregando trabalhos para avaliação...</span>
       </div>
-    );
-  }
+    </main>
+  )
 
-  if (error) {
-    return <div className="text-red-500">{error}</div>;
-  }
+}
+
+
+
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const TrabalhoComponent: React.FC<{ data: IAcademicWorks, hydrateData: () => Promise<void> }> = ({ data, hydrateData }) => {
+  const [selectedStatus, setSelectedStatus] = useState<IAcademicWorks['status']>(data.status);
+  const [showAutores, setShowAutores] = useState(false);
+  const [showArquivos, setShowArquivos] = useState(false);
+  const [showTopicos, setShowTopicos] = useState(false);
+  const [newComentario, setNewComentario] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const toggleSection = (section: string) => {
+    if (section === 'autores') setShowAutores(!showAutores);
+    if (section === 'arquivos') setShowArquivos(!showArquivos);
+    if (section === 'topicos') setShowTopicos(!showTopicos);
+  };
+
+  const handleAddComentario = async () => {
+    if (!newComentario.trim()) {
+      setError('O comentário não pode estar vazio.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+
+    try {
+      await fetch("/api/post/avaliar-trabalho", {
+        method: "POST", body: JSON.stringify({
+          documentId: data._id,
+          userId: data.userId,
+          status: selectedStatus,
+          avaliadorComentarios: newComentario
+        })
+      })
+      await hydrateData();
+      setNewComentario('');
+      setSuccess('Comentário adicionado com sucesso!');
+    } catch (err: any) {
+      setError(err.message || 'Erro desconhecido ao adicionar o comentário.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="trabalhos-main-container" style={{
-      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-      backgroundAttachment: 'fixed',
-      backgroundSize: 'cover',
-      backgroundRepeat: 'no-repeat'
-    }}>
-      <h1 className="trabalhos-title">AVALIAÇÃO DE TRABALHOS</h1>
-      
-      <div className="trabalhos-estatisticas">
-        <div className="trabalhos-estatistica-card">
-          <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
-          <span className="trabalhos-estatistica-valor">{Object.keys(data.data).length}</span>
-          <span className="trabalhos-estatistica-label">Total de Pessoas</span>
-        </div>
-        <div className="trabalhos-estatistica-card">
-          <FileText size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
-          <span className="trabalhos-estatistica-valor">{Object.keys(data.data).reduce((accumulator, key) => {
-            return accumulator + data.data[key].length;
-          }, 0)}</span>
-          <span className="trabalhos-estatistica-label">Total de Trabalhos</span>
+    <div className="bg-white p-6 rounded-lg shadow-xl max-w-4xl mx-auto my-10 border border-gray-200">
+      {/* Título e informações básicas */}
+      <div className="pb-4 border-b border-gray-200 mb-4">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+          {data.titulo}
+        </h1>
+        <div className="flex items-center text-sm text-gray-500 space-x-4">
+          <span>
+            <strong className="text-gray-700">Modalidade:</strong>{' '}
+            {data.modalidade}
+          </span>
+          <span>
+            <strong className="text-gray-700">Status:</strong> {data.status}
+          </span>
         </div>
       </div>
 
-      <div className="trabalhos-filtros-container">
-        <div className="trabalhos-busca-container">
-          <input
-            type="text"
-            className="trabalhos-busca"
-            placeholder="Buscar por nome, CPF ou telefone..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      {/* Seção de Autores */}
+      <div className="py-4 border-b border-gray-200">
+        <div
+          className="flex justify-between items-center cursor-pointer"
+          onClick={() => toggleSection('autores')}
+        >
+          <div className="flex items-center space-x-2">
+            <Users className="w-5 h-5 text-gray-500" />
+            <h2 className="text-xl font-semibold text-gray-700">
+              Autores ({data.autores.length})
+            </h2>
+          </div>
+          {showAutores ? (
+            <ChevronUp className="w-5 h-5 text-gray-500" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-500" />
+          )}
         </div>
-        
-        <div className="trabalhos-filtro-status">
-          <select 
-            value={filtroStatus} 
-            onChange={e => setFiltroStatus(e.target.value)}
-            className="trabalhos-select-status"
-          >
-            <option value="todos">Todos os Status</option>
-            <option value="pendente">Pendente</option>
-            <option value="aceito">Aceito</option>
-            <option value="recusado">Recusado</option>
-            <option value="necessita_alteracao">Necessita Alteração</option>
-          </select>
-        </div>
+        {showAutores && (
+          <ul className="mt-4 space-y-2">
+            {data.autores.map((autor, index) => (
+              <li
+                key={index}
+                className="bg-gray-50 p-3 rounded-md border border-gray-100"
+              >
+                <p className="font-medium text-gray-800">
+                  {autor.nome}{' '}
+                  {autor.isOrientador && (
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-normal ml-2">
+                      Orientador
+                    </span>
+                  )}
+                </p>
+                <p className="text-sm text-gray-600">Email: {autor.email}</p>
+                <p className="text-sm text-gray-600">CPF: {autor.cpf}</p>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      <div className="trabalhos-lista">
-        {Object.entries(data.data)
-          .filter(([userId, documents]) => {
-            const userInfo = data.tradutor[userId];
-            if (!userInfo) return false;
-            return filterUser(userInfo) && filtrarPorStatus(userId, documents);
-          })
-          .map(([userId, documents], idx) => {
-            const userInfo = data.tradutor[userId];
-            return (
-              <div key={userId} className="trabalhos-card-avaliacao fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }}>
-                {userInfo ? (
-                  <>
-                    <h2 className="trabalhos-nome">{userInfo.informacoes_usuario.nome}</h2>
-                    <div className="trabalhos-cpf">{formatCPF(userInfo.informacoes_usuario.cpf)}</div>
-                    <h3 className="trabalhos-telefone">{formatPhone(userInfo.informacoes_usuario.numero_telefone)}</h3>
-                  </>
-                ) : (
-                  <p className="trabalhos-user-notfound">Usuário não encontrado</p>
-                )}
-                
-                <div className="trabalhos-documentos">
-                  {documents.map(doc => {
-                    const avaliacao = getDocumentStatus(doc._id, userId);
-                    const status = avaliacao?.status || 'pendente';
-                    
-                    return (
-                      <div key={doc._id} className="trabalho-documento-item">
-                        <div className="documento-header">
-                          <Link target='_blank' href={doc.url} prefetch={true} className="trabalhos-link">
-                            <Download size={18} style={{marginRight: '0.4em', minWidth: 18}} />
-                            {doc.name}
-                          </Link>
-                          
-                          <div className="documento-status" style={{ color: getStatusColor(status) }}>
-                            {getStatusIcon(status)}
-                            <span>{status.replace('_', ' ').toUpperCase()}</span>
-                          </div>
-                        </div>
-
-                        <div className="avaliacao-section">
-                          <div className="botoes-avaliacao">
-                            <button 
-                              className={`btn-avaliacao btn-aceitar ${status === 'aceito' ? 'active' : ''}`}
-                              onClick={() => salvarAvaliacao(doc._id, userId, 'aceito')}
-                              disabled={salvandoAvaliacao[doc._id]}
-                            >
-                              <CheckCircle size={16} />
-                              Aceitar
-                            </button>
-                            
-                            <button 
-                              className={`btn-avaliacao btn-necessita-alteracao ${status === 'necessita_alteracao' ? 'active' : ''}`}
-                              onClick={() => salvarAvaliacao(doc._id, userId, 'necessita_alteracao')}
-                              disabled={salvandoAvaliacao[doc._id]}
-                            >
-                              <AlertCircle size={16} />
-                              Necessita Alteração
-                            </button>
-                            
-                            <button 
-                              className={`btn-avaliacao btn-recusar ${status === 'recusado' ? 'active' : ''}`}
-                              onClick={() => salvarAvaliacao(doc._id, userId, 'recusado')}
-                              disabled={salvandoAvaliacao[doc._id]}
-                            >
-                              <XCircle size={16} />
-                              Recusar
-                            </button>
-                          </div>
-
-                          <div className="comentarios-section">
-                            <label className="comentarios-label">
-                              <MessageSquare size={16} />
-                              Comentários do Avaliador:
-                            </label>
-                            <textarea
-                              className="comentarios-textarea"
-                              placeholder="Adicione comentários sobre o trabalho (obrigatório para 'Necessita Alteração')..."
-                              value={comentarios[doc._id] || ''}
-                              onChange={(e) => setComentarios(prev => ({
-                                ...prev,
-                                [doc._id]: e.target.value
-                              }))}
-                              rows={3}
-                            />
-                            
-                            <button 
-                              className="btn-salvar-comentario"
-                              onClick={() => salvarAvaliacao(doc._id, userId, status)}
-                              disabled={salvandoAvaliacao[doc._id]}
-                            >
-                              <Save size={16} />
-                              {salvandoAvaliacao[doc._id] ? 'Salvando...' : 'Salvar Comentários'}
-                            </button>
-                          </div>
-
-                          {avaliacao?.dataAvaliacao && (
-                            <div className="avaliacao-info">
-                              <small>Última avaliação: {new Date(avaliacao.dataAvaliacao).toLocaleString('pt-BR')}</small>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+      {/* Seção de Arquivos */}
+      <div className="py-4 border-b border-gray-200">
+        <div
+          className="flex justify-between items-center cursor-pointer"
+          onClick={() => toggleSection('arquivos')}
+        >
+          <div className="flex items-center space-x-2">
+            <Paperclip className="w-5 h-5 text-gray-500" />
+            <h2 className="text-xl font-semibold text-gray-700">
+              Arquivos ({data.arquivos.length})
+            </h2>
+          </div>
+          {showArquivos ? (
+            <ChevronUp className="w-5 h-5 text-gray-500" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-500" />
+          )}
+        </div>
+        {showArquivos && (
+          <ul className="mt-4 space-y-2">
+            {data.arquivos.map((arquivo, index) => (
+              <li
+                key={index}
+                className="bg-gray-50 p-3 rounded-md flex justify-between items-center border border-gray-100"
+              >
+                <div>
+                  <p className="font-medium text-gray-800">
+                    {arquivo.originalName}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Tamanho: {formatBytes(arquivo.size)}
+                  </p>
                 </div>
+                <a
+                  href={arquivo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  <Linkk className="w-5 h-5" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Seção de Tópicos */}
+      <div className="py-4 border-b border-gray-200">
+        <div
+          className="flex justify-between items-center cursor-pointer"
+          onClick={() => toggleSection('topicos')}
+        >
+          <div className="flex items-center space-x-2">
+            <FileText className="w-5 h-5 text-gray-500" />
+            <h2 className="text-xl font-semibold text-gray-700">Tópicos</h2>
+          </div>
+          {showTopicos ? (
+            <ChevronUp className="w-5 h-5 text-gray-500" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-500" />
+          )}
+        </div>
+        {showTopicos && (
+          <div className="mt-4 space-y-4">
+            {Object.entries(data.topicos).map(([key, value]) => (
+              <div key={key} className="bg-gray-50 p-3 rounded-md border border-gray-100">
+                <p className="font-semibold text-gray-800 capitalize">
+                  {key}
+                </p>
+                <p className="text-gray-600 mt-1">{value || 'Nenhum texto fornecido.'}</p>
               </div>
-            );
-          })}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Seção de Comentários do Avaliador */}
+      <div className="py-4">
+        <h2 className="text-xl font-semibold text-gray-700 mb-4">
+          Avaliação
+        </h2>
+        <div className="space-y-4">
+          {data.avaliadorComentarios.length === 0 ? (
+            <p className="text-gray-500 text-sm">Nenhuma avaliação foi feita ainda.</p>
+          ) : (
+            <>
+              <p className='w-full text-center'>Avaliações já realizadas</p>
+              {
+                data.avaliadorComentarios.reverse().map((comentario, index) => (
+                  <div
+                    key={index}
+                    className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 transition-all duration-300 hover:shadow-md"
+                  >
+                    <p className="text-gray-800 font-normal leading-relaxed mb-3">
+                      {comentario.comentario}
+                    </p>
+                    <div className="flex flex-wrap items-center text-sm text-gray-500 gap-x-4 gap-y-2">
+                      <p>
+                        <span className="font-medium text-gray-700">Data:</span>{' '}
+                        {new Date(comentario.date).toLocaleDateString('pt-BR', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })} às {new Date(comentario.date).toLocaleTimeString('pt-BR')}
+                      </p>
+                      <span
+                        className={`
+        px-3 py-1 rounded-full text-xs font-semibold
+        ${comentario.status === 'Aceito'
+                            ? 'bg-green-100 text-green-800'
+                            : comentario.status === 'Recusado'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }
+      `}
+                      >
+                        {comentario.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              }
+            </>
+          )}
+        </div>
+
+        <div className="mt-6 p-4 bg-white rounded-md border border-gray-200">
+          <h3 className="text-lg font-medium text-gray-700 mb-3">
+            Adicionar Novo Comentário
+          </h3>
+          <textarea
+            className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            rows={4}
+            value={newComentario}
+            onChange={(e) => setNewComentario(e.target.value)}
+            placeholder="Escreva seu comentário aqui..."
+          ></textarea>
+          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+          {success && <p className="text-green-500 text-sm mt-2">{success}</p>}
+          <div className='flex flex-row space-x-5'>
+            <button onClick={() => setSelectedStatus("Em Avaliação")}
+              className='p-5' style={{
+                backgroundColor: selectedStatus === "Em Avaliação" ? "blue" : "gray",
+                color: "white"
+              }}>Em Avaliação</button>
+            <button onClick={() => setSelectedStatus("Aceito")}
+              className='p-5' style={{
+                backgroundColor: selectedStatus === "Aceito" ? "blue" : "gray",
+                color: "white"
+              }}>Aceito</button>
+            <button onClick={() => setSelectedStatus("Recusado")}
+              className='p-5' style={{
+                backgroundColor: selectedStatus === "Recusado" ? "blue" : "gray",
+                color: "white"
+              }}>Recusado</button>
+            <button onClick={() => setSelectedStatus("Necessita de Alteração")}
+              className='p-5' style={{
+                backgroundColor: selectedStatus === "Necessita de Alteração" ? "blue" : "gray",
+                color: "white"
+              }}>Necessita de Alteração</button>
+          </div>
+          <button
+            onClick={handleAddComentario}
+            disabled={loading}
+            className={`mt-4 w-full sm:w-auto px-6 py-3 rounded-md font-semibold text-white transition-colors duration-200 ${loading
+              ? 'bg-blue-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+          >
+            {loading ? 'Enviando...' : 'Enviar Avaliação'}
+          </button>
+        </div>
       </div>
     </div>
   );
 };
-
-export default AvaliarTrabalhos;
-

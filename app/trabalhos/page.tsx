@@ -3,46 +3,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Search, FileText, Download, Eye, MessageSquare, CheckCircle, XCircle, AlertCircle, Calendar, User, Filter, Tag, BookOpen, Save } from 'lucide-react';
 import './style.css';
+import { IAcademicWorks } from '../lib/types/academicWorks/academicWorks.t';
 
-interface TrabalhoCompleto {
-  _id: string;
-  userId: string;
-  titulo: string;
-  modalidade: string;
-  autores: {
-    nome: string;
-    email: string;
-    cpf: string;
-    isOrientador: boolean;
-    isPagante: boolean;
-  }[];
-  arquivo: {
-    fileId: string;
-    fileName: string;
-    url: string;
-  };
-  topicos: {
-    intro: string;
-    obj: string;
-    met: string;
-    disc: string;
-    conc: string;
-    pchave: string;
-    ref: string;
-  };
-  palavrasChave: string[];
-  status: "Em Avaliação" | "Aceito" | "Recusado" | "Necessita de Alteração";
-  dataSubmissao: string;
-  avaliadorComentarios: string;
-  dataAvaliacao?: string;
-  avaliadorId?: string;
-  usuario: {
-    nome: string;
-    email: string;
-    cpf: string;
-    telefone: string;
-  };
-}
 
 interface EstatisticasTrabalhos {
   total: number;
@@ -55,7 +17,7 @@ interface EstatisticasTrabalhos {
 }
 
 const TrabalhosPainel = () => {
-  const [trabalhos, setTrabalhos] = useState<TrabalhoCompleto[]>([]);
+  const [trabalhos, setTrabalhos] = useState<IAcademicWorks[]>([]);
   const [estatisticas, setEstatisticas] = useState<EstatisticasTrabalhos>({
     total: 0,
     emAvaliacao: 0,
@@ -67,15 +29,15 @@ const TrabalhosPainel = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
-  
+
   // Filtros
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroModalidade, setFiltroModalidade] = useState<string>("todos");
   const [buscaTexto, setBuscaTexto] = useState("");
-  
+
   // Estados para avaliação
   const [avaliacaoAtiva, setAvaliacaoAtiva] = useState<string | null>(null);
-  const [comentarios, setComentarios] = useState<{[key: string]: string}>({});
+  const [comentarios, setComentarios] = useState<{ [key: string]: string }>({});
   const [salvandoAvaliacao, setSalvandoAvaliacao] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,10 +53,10 @@ const TrabalhosPainel = () => {
       const result = await response.json();
       setTrabalhos(result.trabalhos);
       setEstatisticas(result.estatisticas);
-      
+
       // Inicializar comentários com os existentes
-      const comentariosIniciais: {[key: string]: string} = {};
-      result.trabalhos.forEach((trabalho: TrabalhoCompleto) => {
+      const comentariosIniciais: { [key: string]: string } = {};
+      result.trabalhos.forEach((trabalho: IAcademicWorks) => {
         comentariosIniciais[trabalho._id] = trabalho.avaliadorComentarios || '';
       });
       setComentarios(comentariosIniciais);
@@ -108,7 +70,7 @@ const TrabalhosPainel = () => {
   // Função para salvar avaliação
   const salvarAvaliacao = async (trabalhoId: string, status: string) => {
     setSalvandoAvaliacao(trabalhoId);
-    
+
     try {
       const response = await fetch('/api/post/avaliar-trabalho-dados', {
         method: 'POST',
@@ -128,20 +90,20 @@ const TrabalhosPainel = () => {
       }
 
       // Atualizar trabalho localmente
-      setTrabalhos(prev => prev.map(trabalho => 
-        trabalho._id === trabalhoId 
-          ? { 
-              ...trabalho, 
-              status: status as any,
-              avaliadorComentarios: comentarios[trabalhoId] || '',
-              dataAvaliacao: new Date().toISOString()
-            }
+      setTrabalhos(prev => prev.map(trabalho =>
+        trabalho._id === trabalhoId
+          ? {
+            ...trabalho,
+            status: status as any,
+            avaliadorComentarios: comentarios[trabalhoId] || '',
+            dataAvaliacao: new Date().toISOString()
+          }
           : trabalho
       ));
 
       // Atualizar estatísticas
       fetchTrabalhos();
-      
+
       alert('Avaliação salva com sucesso!');
     } catch (error: any) {
       alert(error.message || 'Erro ao salvar avaliação. Tente novamente.');
@@ -152,11 +114,11 @@ const TrabalhosPainel = () => {
 
   // Função para filtrar trabalhos
   const trabalhosFiltrados = trabalhos.filter(trabalho => {
-    
-    
+
+
     const statusMatch = filtroStatus === 'todos' || trabalho.status === filtroStatus;
     const modalidadeMatch = filtroModalidade === 'todos' || trabalho.modalidade === filtroModalidade;
-    
+
     return statusMatch && modalidadeMatch;
   });
 
@@ -231,31 +193,31 @@ const TrabalhosPainel = () => {
     }}>
       <div className="trabalhos-container">
         <h1 className="trabalhos-title">AVALIAÇÃO DE TRABALHOS</h1>
-        
+
         {/* Estatísticas */}
         <div className="trabalhos-estatisticas">
           <div className="trabalhos-estatistica-card">
-            <FileText size={32} style={{color: 'var(--azul)'}} />
+            <FileText size={32} style={{ color: 'var(--azul)' }} />
             <span className="trabalhos-estatistica-valor">{estatisticas.total}</span>
             <span className="trabalhos-estatistica-label">Total de Trabalhos</span>
           </div>
           <div className="trabalhos-estatistica-card">
-            <Eye size={32} style={{color: '#6b7280'}} />
+            <Eye size={32} style={{ color: '#6b7280' }} />
             <span className="trabalhos-estatistica-valor">{estatisticas.emAvaliacao}</span>
             <span className="trabalhos-estatistica-label">Em Avaliação</span>
           </div>
           <div className="trabalhos-estatistica-card">
-            <CheckCircle size={32} style={{color: '#10b981'}} />
+            <CheckCircle size={32} style={{ color: '#10b981' }} />
             <span className="trabalhos-estatistica-valor">{estatisticas.aceitos}</span>
             <span className="trabalhos-estatistica-label">Aceitos</span>
           </div>
           <div className="trabalhos-estatistica-card">
-            <XCircle size={32} style={{color: '#ef4444'}} />
+            <XCircle size={32} style={{ color: '#ef4444' }} />
             <span className="trabalhos-estatistica-valor">{estatisticas.recusados}</span>
             <span className="trabalhos-estatistica-label">Recusados</span>
           </div>
           <div className="trabalhos-estatistica-card">
-            <AlertCircle size={32} style={{color: '#f59e0b'}} />
+            <AlertCircle size={32} style={{ color: '#f59e0b' }} />
             <span className="trabalhos-estatistica-valor">{estatisticas.necessitamAlteracao}</span>
             <span className="trabalhos-estatistica-label">Necessitam Alteração</span>
           </div>
@@ -263,11 +225,11 @@ const TrabalhosPainel = () => {
 
         {/* Filtros */}
         <div className="trabalhos-filtros-container">
-          
-          
+
+
           <div className="trabalhos-filtro-status">
-            <select 
-              value={filtroStatus} 
+            <select
+              value={filtroStatus}
               onChange={e => setFiltroStatus(e.target.value)}
               className="trabalhos-select-status"
             >
@@ -280,8 +242,8 @@ const TrabalhosPainel = () => {
           </div>
 
           <div className="trabalhos-filtro-modalidade">
-            <select 
-              value={filtroModalidade} 
+            <select
+              value={filtroModalidade}
               onChange={e => setFiltroModalidade(e.target.value)}
               className="trabalhos-select-status"
             >
@@ -293,7 +255,7 @@ const TrabalhosPainel = () => {
           </div>
         </div>
 
-      
+
         {/* Lista de Trabalhos */}
         <div className="trabalhos-lista">
           {trabalhosFiltrados.map((trabalho, idx) => (
@@ -310,7 +272,7 @@ const TrabalhosPainel = () => {
                     <span>Submetido em: {formatarData(trabalho.dataSubmissao)}</span>
                   </div>
                 </div>
-                
+
                 <div className="trabalho-status-container">
                   <div className="documento-status" style={{ color: getStatusColor(trabalho.status) }}>
                     {getStatusIcon(trabalho.status)}
@@ -344,11 +306,11 @@ const TrabalhosPainel = () => {
                 </Link>
               </div>
 
-            
+
               <div className="trabalho-topicos-detalhes">
                 <div className="topicos-resumo">
                   <h4>Resumo dos Tópicos:</h4>
-                   <div className="topico-item">
+                  <div className="topico-item">
                     <strong>Resumo:</strong> {(trabalho.topicos?.intro || "").substring(0, 5000)}
                   </div>
                   <div className="topico-item">
@@ -373,23 +335,23 @@ const TrabalhosPainel = () => {
                     <strong>Referências:</strong> {(trabalho.topicos?.ref || "").substring(0, 100)}
                   </div>
                 </div>
-                
+
                 {trabalho.palavrasChave?.length > 0 && (
-  <div className="palavras-chave-container">
-    <h4>Palavras-chave:</h4>
-    <div className="palavras-chave-tags">
-      {trabalho.palavrasChave.map((palavra, index) => (
-        <span key={index} className="palavra-tag">{palavra}</span>
-      ))}
-    </div>
-  </div>
-)}
+                  <div className="palavras-chave-container">
+                    <h4>Palavras-chave:</h4>
+                    <div className="palavras-chave-tags">
+                      {trabalho.palavrasChave.map((palavra, index) => (
+                        <span key={index} className="palavra-tag">{palavra}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Seção de Avaliação */}
               <div className="avaliacao-section">
                 <div className="botoes-avaliacao">
-                  <button 
+                  <button
                     className={`btn-avaliacao btn-aceitar ${trabalho.status === 'Aceito' ? 'active' : ''}`}
                     onClick={() => salvarAvaliacao(trabalho._id, 'Aceito')}
                     disabled={salvandoAvaliacao === trabalho._id}
@@ -397,8 +359,8 @@ const TrabalhosPainel = () => {
                     <CheckCircle size={16} />
                     Aceitar
                   </button>
-                  
-                  <button 
+
+                  <button
                     className={`btn-avaliacao btn-necessita-alteracao ${trabalho.status === 'Necessita de Alteração' ? 'active' : ''}`}
                     onClick={() => salvarAvaliacao(trabalho._id, 'Necessita de Alteração')}
                     disabled={salvandoAvaliacao === trabalho._id}
@@ -406,8 +368,8 @@ const TrabalhosPainel = () => {
                     <AlertCircle size={16} />
                     Necessita Alteração
                   </button>
-                  
-                  <button 
+
+                  <button
                     className={`btn-avaliacao btn-recusar ${trabalho.status === 'Recusado' ? 'active' : ''}`}
                     onClick={() => salvarAvaliacao(trabalho._id, 'Recusado')}
                     disabled={salvandoAvaliacao === trabalho._id}
@@ -432,8 +394,8 @@ const TrabalhosPainel = () => {
                     }))}
                     rows={3}
                   />
-                  
-                  <button 
+
+                  <button
                     className="btn-salvar-comentario"
                     onClick={() => salvarAvaliacao(trabalho._id, trabalho.status)}
                     disabled={salvandoAvaliacao === trabalho._id}
@@ -455,7 +417,7 @@ const TrabalhosPainel = () => {
 
         {trabalhosFiltrados.length === 0 && (
           <div className="sem-trabalhos">
-            <FileText size={64} style={{color: 'white', opacity: 0.5}} />
+            <FileText size={64} style={{ color: 'white', opacity: 0.5 }} />
             <h3>Nenhum trabalho encontrado</h3>
             <p>Tente ajustar os filtros de busca.</p>
           </div>

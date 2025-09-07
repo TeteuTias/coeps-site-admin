@@ -15,7 +15,7 @@ export const POST = withApiAuthRequired(async function POST(request) {
         
         // Obter dados do FormData
         const formData = await request.formData();
-        const file = formData.get('file') as File;
+        const file = formData.get('file') // as File;
 
         if (!file) {
             return NextResponse.json({ 
