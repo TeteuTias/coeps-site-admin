@@ -1,431 +1,480 @@
 'use client'
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { Search, FileText, Download, Eye, MessageSquare, CheckCircle, XCircle, AlertCircle, Calendar, User, Filter, Tag, BookOpen, Save } from 'lucide-react';
-import './style.css';
-import { IAcademicWorks } from '../lib/types/academicWorks/academicWorks.t';
+import { useEffect, useState, useMemo } from 'react';
+import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Link as Linkk } from 'lucide-react';
 
+import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
+import LoadingModal from '@/app/components/LoadingModal';
+import { ObjectId } from 'bson';
 
-interface EstatisticasTrabalhos {
-  total: number;
-  emAvaliacao: number;
-  aceitos: number;
-  recusados: number;
-  necessitamAlteracao: number;
-  modalidades: string[];
-  topicos: { topico: string; quantidade: number; }[];
-}
-
-const TrabalhosPainel = () => {
+// /api/get/trabalhos-avaliacoes
+// /api/post/avaliar-trabalho
+export default function AvaliarTrabalho() {
+  //
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [trabalhos, setTrabalhos] = useState<IAcademicWorks[]>([]);
-  const [estatisticas, setEstatisticas] = useState<EstatisticasTrabalhos>({
-    total: 0,
-    emAvaliacao: 0,
-    aceitos: 0,
-    recusados: 0,
-    necessitamAlteracao: 0,
-    modalidades: [],
-    topicos: []
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>("");
 
-  // Filtros
-  const [filtroStatus, setFiltroStatus] = useState<string>("todos");
-  const [filtroModalidade, setFiltroModalidade] = useState<string>("todos");
-  const [buscaTexto, setBuscaTexto] = useState("");
+  const toggleFichaAvalicaoProps = (
+    fichaId: ObjectId,
+    indexAcademicWork: number,
+    newProps: Partial<IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"][number]>
+  ) => {
+    setTrabalhos((prevTrabalhos) => {
+      // 1. Crie uma cópia do array principal de trabalhos.
+      const updatedTrabalhos = [...prevTrabalhos];
 
-  // Estados para avaliação
-  const [avaliacaoAtiva, setAvaliacaoAtiva] = useState<string | null>(null);
-  const [comentarios, setComentarios] = useState<{ [key: string]: string }>({});
-  const [salvandoAvaliacao, setSalvandoAvaliacao] = useState<string | null>(null);
+      // 2. Acesse o trabalho específico que você deseja atualizar.
+      const trabalhoToUpdate = updatedTrabalhos[indexAcademicWork];
 
+      if (!trabalhoToUpdate) {
+        // Retorne o estado original se o trabalho não for encontrado.
+        return prevTrabalhos;
+      }
+
+      // 3. Crie uma cópia da ficha de avaliação desse trabalho.
+      const updatedFichaAvaliacao = [...trabalhoToUpdate.configuracaoModalidade.ficha_avalicao];
+
+      // 4. Encontre o índice do item na ficha de avaliação com base no _id.
+      const fichaIndex = updatedFichaAvaliacao.findIndex((ficha) =>
+        `${ficha._id}` === `${fichaId}`
+      );
+
+      if (fichaIndex === -1) {
+        // Retorne o estado original se a ficha de avaliação não for encontrada.
+        return prevTrabalhos;
+      }
+
+      // 5. Crie uma cópia do item da ficha de avaliação e atualize com as novas propriedades.
+      const fichaToUpdate = {
+        ...updatedFichaAvaliacao[fichaIndex],
+        ...newProps,
+      };
+
+      // 6. Coloque o item atualizado de volta no array de fichas.
+      updatedFichaAvaliacao[fichaIndex] = fichaToUpdate;
+
+      // 7. Atualize o objeto do trabalho com a nova ficha de avaliação.
+      const finalUpdatedTrabalho = {
+        ...trabalhoToUpdate,
+        configuracaoModalidade: {
+          ...trabalhoToUpdate.configuracaoModalidade,
+          ficha_avalicao: updatedFichaAvaliacao,
+        },
+      };
+
+      // 8. Coloque o trabalho atualizado de volta no array principal de trabalhos.
+      updatedTrabalhos[indexAcademicWork] = finalUpdatedTrabalho;
+
+      // 9. Retorne o novo array de trabalhos para atualizar o estado.
+      return updatedTrabalhos;
+    });
+  };
+
+  const hydrateData = useMemo(() => async () => {
+    setIsLoading(true)
+    const trabalhos: { data: IAcademicWorks[] } = await fetch('/api/get/trabalhos-avaliacoes').then(res => res.json());
+    setTrabalhos(trabalhos.data);
+    setIsLoading(false)
+  }, [])
   useEffect(() => {
-    fetchTrabalhos();
+    hydrateData()
   }, []);
 
-  const fetchTrabalhos = async () => {
-    try {
-      const response = await fetch('/api/get/trabalhos-dados');
-      if (!response.ok) {
-        throw new Error('Erro na resposta da rede');
-      }
-      const result = await response.json();
-      setTrabalhos(result.trabalhos);
-      setEstatisticas(result.estatisticas);
+  //
+  //
+  return (
+    <main className='w-full min-h-screen py-10'>
+      <LoadingModal isLoading={isLoading} />
+      <div>
+        {
+          !isLoading && trabalhos.length !== 0 &&
+          trabalhos.reverse().map((trabalho, indexTrabalho) => <TrabalhoComponent indexTrabalho={indexTrabalho} toggleFichaAvalicaoProps={toggleFichaAvalicaoProps} hydrateData={hydrateData} key={`${trabalho._id}`} data={trabalho} />)
+        }
+      </div>
+    </main>
+  )
 
-      // Inicializar comentários com os existentes
-      const comentariosIniciais: { [key: string]: string } = {};
-      result.trabalhos.forEach((trabalho: IAcademicWorks) => {
-        comentariosIniciais[trabalho._id] = trabalho.avaliadorComentarios || '';
-      });
-      setComentarios(comentariosIniciais);
-    } catch (error) {
-      setError("Erro ao carregar trabalhos. Tente novamente.");
+}
+
+
+
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const TrabalhoComponent: React.FC<{
+  data: IAcademicWorks,
+  indexTrabalho: number,
+  hydrateData: () => Promise<void>,
+  toggleFichaAvalicaoProps: (
+    fichaId: ObjectId,
+    indexAcademicWork: number,
+    newProps: Partial<IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"][number]>
+  ) => void
+
+}> = ({ data, hydrateData, toggleFichaAvalicaoProps, indexTrabalho }) => {
+  const [selectedStatus, setSelectedStatus] = useState<IAcademicWorks['status']>(data.status);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [showAutores, setShowAutores] = useState(false);
+  const [showArquivos, setShowArquivos] = useState(false);
+  const [showTopicos, setShowTopicos] = useState(false);
+  const [newComentario, setNewComentario] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const toggleSection = (section: string) => {
+    if (section === 'autores') setShowAutores(!showAutores);
+    if (section === 'arquivos') setShowArquivos(!showArquivos);
+    if (section === 'topicos') setShowTopicos(!showTopicos);
+  };
+
+  const handleAddComentario = async () => {
+    if (!newComentario.trim()) {
+      setError('O comentário não pode estar vazio.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+
+    try {
+      await fetch("/api/post/avaliar-trabalho", {
+        method: "POST", body: JSON.stringify({
+          documentId: data._id,
+          userId: data.userId,
+          status: selectedStatus,
+          avaliadorComentarios: newComentario,
+          ficha_avalicao: data.configuracaoModalidade.ficha_avalicao
+        })
+      })
+      await hydrateData();
+      setNewComentario('');
+      setSuccess('Comentário adicionado com sucesso!');
+    } catch (err: any) {
+      setError(err.message || 'Erro desconhecido ao adicionar o comentário.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Função para salvar avaliação
-  const salvarAvaliacao = async (trabalhoId: string, status: string) => {
-    setSalvandoAvaliacao(trabalhoId);
-
-    try {
-      const response = await fetch('/api/post/avaliar-trabalho-dados', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          trabalhoId,
-          status,
-          comentarios: comentarios[trabalhoId] || '',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Erro ao salvar avaliação');
-      }
-
-      // Atualizar trabalho localmente
-      setTrabalhos(prev => prev.map(trabalho =>
-        trabalho._id === trabalhoId
-          ? {
-            ...trabalho,
-            status: status as any,
-            avaliadorComentarios: comentarios[trabalhoId] || '',
-            dataAvaliacao: new Date().toISOString()
-          }
-          : trabalho
-      ));
-
-      // Atualizar estatísticas
-      fetchTrabalhos();
-
-      alert('Avaliação salva com sucesso!');
-    } catch (error: any) {
-      alert(error.message || 'Erro ao salvar avaliação. Tente novamente.');
-    } finally {
-      setSalvandoAvaliacao(null);
-    }
-  };
-
-  // Função para filtrar trabalhos
-  const trabalhosFiltrados = trabalhos.filter(trabalho => {
-
-
-    const statusMatch = filtroStatus === 'todos' || trabalho.status === filtroStatus;
-    const modalidadeMatch = filtroModalidade === 'todos' || trabalho.modalidade === filtroModalidade;
-
-    return statusMatch && modalidadeMatch;
-  });
-
-  // Função para obter cor do status
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Aceito': return '#10b981';
-      case 'Recusado': return '#ef4444';
-      case 'Necessita de Alteração': return '#f59e0b';
-      default: return '#6b7280';
-    }
-  };
-
-  // Função para obter ícone do status
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'Aceito': return <CheckCircle size={18} />;
-      case 'Recusado': return <XCircle size={18} />;
-      case 'Necessita de Alteração': return <AlertCircle size={18} />;
-      default: return <Eye size={18} />;
-    }
-  };
-
-  // Função para formatar data
-  const formatarData = (dataString: string): string => {
-    const data = new Date(dataString);
-    return data.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="trabalhos-loading-container" style={{
-        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-        backgroundAttachment: 'fixed',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat'
-      }}>
-        <div className="trabalhos-spinner"></div>
-        <span className="trabalhos-loading-text">Carregando trabalhos para avaliação...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="trabalhos-error-container" style={{
-        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-        backgroundAttachment: 'fixed',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat'
-      }}>
-        <div className="error-message">{error}</div>
-        <button onClick={fetchTrabalhos} className="btn-retry">
-          Tentar Novamente
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="trabalhos-main-container" style={{
-      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-      backgroundAttachment: 'fixed',
-      backgroundSize: 'cover',
-      backgroundRepeat: 'no-repeat'
-    }}>
-      <div className="trabalhos-container">
-        <h1 className="trabalhos-title">AVALIAÇÃO DE TRABALHOS</h1>
-
-        {/* Estatísticas */}
-        <div className="trabalhos-estatisticas">
-          <div className="trabalhos-estatistica-card">
-            <FileText size={32} style={{ color: 'var(--azul)' }} />
-            <span className="trabalhos-estatistica-valor">{estatisticas.total}</span>
-            <span className="trabalhos-estatistica-label">Total de Trabalhos</span>
-          </div>
-          <div className="trabalhos-estatistica-card">
-            <Eye size={32} style={{ color: '#6b7280' }} />
-            <span className="trabalhos-estatistica-valor">{estatisticas.emAvaliacao}</span>
-            <span className="trabalhos-estatistica-label">Em Avaliação</span>
-          </div>
-          <div className="trabalhos-estatistica-card">
-            <CheckCircle size={32} style={{ color: '#10b981' }} />
-            <span className="trabalhos-estatistica-valor">{estatisticas.aceitos}</span>
-            <span className="trabalhos-estatistica-label">Aceitos</span>
-          </div>
-          <div className="trabalhos-estatistica-card">
-            <XCircle size={32} style={{ color: '#ef4444' }} />
-            <span className="trabalhos-estatistica-valor">{estatisticas.recusados}</span>
-            <span className="trabalhos-estatistica-label">Recusados</span>
-          </div>
-          <div className="trabalhos-estatistica-card">
-            <AlertCircle size={32} style={{ color: '#f59e0b' }} />
-            <span className="trabalhos-estatistica-valor">{estatisticas.necessitamAlteracao}</span>
-            <span className="trabalhos-estatistica-label">Necessitam Alteração</span>
-          </div>
+    <div className="bg-white p-6 rounded-lg shadow-xl max-w-4xl mx-auto my-10 border border-gray-200">
+      {/* Título e informações básicas */}
+      <div className="pb-4 border-b border-gray-200 mb-4" onClick={() => setIsOpen(!isOpen)} style={{ cursor: 'pointer' }}>
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+          {data.titulo}
+        </h1>
+        <div className="flex items-center text-sm text-gray-500 space-x-4">
+          <span>
+            <strong className="text-gray-700">Modalidade:</strong>{' '}
+            {data.modalidade}
+          </span>
+          <span>
+            <strong className="text-gray-700">Status:</strong> {data.status}
+          </span>
+          <span>
+            <strong className="text-gray-700">Data de Submissão:</strong>{' '}
+            {new Date(data.dataSubmissao).toLocaleDateString('pt-BR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })} às {new Date(data.dataSubmissao).toLocaleTimeString('pt-BR')}
+          </span>
         </div>
+      </div>
 
-        {/* Filtros */}
-        <div className="trabalhos-filtros-container">
-
-
-          <div className="trabalhos-filtro-status">
-            <select
-              value={filtroStatus}
-              onChange={e => setFiltroStatus(e.target.value)}
-              className="trabalhos-select-status"
+      {/* Seção de Autores */}
+      {
+        isOpen &&
+        <>
+          <div className="py-4 border-b border-gray-200">
+            <div
+              className="flex justify-between items-center cursor-pointer"
+              onClick={() => toggleSection('autores')}
             >
-              <option value="todos">Todos os Status</option>
-              <option value="Em Avaliação">Em Avaliação</option>
-              <option value="Aceito">Aceito</option>
-              <option value="Recusado">Recusado</option>
-              <option value="Necessita de Alteração">Necessita de Alteração</option>
-            </select>
-          </div>
-
-          <div className="trabalhos-filtro-modalidade">
-            <select
-              value={filtroModalidade}
-              onChange={e => setFiltroModalidade(e.target.value)}
-              className="trabalhos-select-status"
-            >
-              <option value="todos">Todas as Modalidades</option>
-              {estatisticas.modalidades.map(modalidade => (
-                <option key={modalidade} value={modalidade}>{modalidade}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-
-        {/* Lista de Trabalhos */}
-        <div className="trabalhos-lista">
-          {trabalhosFiltrados.map((trabalho, idx) => (
-            <div key={trabalho._id} className="trabalhos-card-avaliacao fadeInUp" style={{ animationDelay: `${0.05 * idx}s` }}>
-              <div className="trabalho-header">
-                <div className="trabalho-info-principal">
-                  <h2 className="trabalho-titulo">{trabalho.titulo}</h2>
-                  <div className="trabalho-modalidade">
-                    <BookOpen size={16} />
-                    <span>{trabalho.modalidade}</span>
-                  </div>
-                  <div className="trabalho-data">
-                    <Calendar size={16} />
-                    <span>Submetido em: {formatarData(trabalho.dataSubmissao)}</span>
-                  </div>
-                </div>
-
-                <div className="trabalho-status-container">
-                  <div className="documento-status" style={{ color: getStatusColor(trabalho.status) }}>
-                    {getStatusIcon(trabalho.status)}
-                    <span>{trabalho.status}</span>
-                  </div>
-                </div>
+              <div className="flex items-center space-x-2">
+                <Users className="w-5 h-5 text-gray-500" />
+                <h2 className="text-xl font-semibold text-gray-700">
+                  Autores ({data.autores.length})
+                </h2>
               </div>
+              {showAutores ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </div>
+            {showAutores && (
+              <ul className="mt-4 space-y-2">
+                {data.autores.map((autor, index) => (
+                  <li
+                    key={index}
+                    className="bg-gray-50 p-3 rounded-md border border-gray-100"
+                  >
+                    <p className="font-medium text-gray-800">
+                      {autor.nome}{' '}
+                      {autor.isOrientador && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-normal ml-2">
+                          Orientador
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-sm text-gray-600">Email: {autor.email}</p>
+                    <p className="text-sm text-gray-600">CPF: {autor.cpf}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
-              {/* Informações dos Autores */}
-              <div className="trabalho-autores">
-                <h4>Autores:</h4>
-                {trabalho.autores.map((autor, index) => (
-                  <div key={index} className="autor-item">
-                    <User size={14} />
-                    <span>{autor.nome}</span>
-                    {autor.isOrientador && <span className="badge-orientador">Orientador</span>}
-                    {autor.isPagante && <span className="badge-pagante">Pagante</span>}
+          {/* Seção de Arquivos */}
+          <div className="py-4 border-b border-gray-200">
+            <div
+              className="flex justify-between items-center cursor-pointer"
+              onClick={() => toggleSection('arquivos')}
+            >
+              <div className="flex items-center space-x-2">
+                <Paperclip className="w-5 h-5 text-gray-500" />
+                <h2 className="text-xl font-semibold text-gray-700">
+                  Arquivos ({data.arquivos.length})
+                </h2>
+              </div>
+              {showArquivos ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </div>
+            {showArquivos && (
+              <ul className="mt-4 space-y-2">
+                {data.arquivos.map((arquivo, index) => (
+                  <li
+                    key={index}
+                    className="bg-gray-50 p-3 rounded-md flex justify-between items-center border border-gray-100"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {arquivo.originalName}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Tamanho: {formatBytes(arquivo.size)}
+                      </p>
+                    </div>
+                    <a
+                      href={arquivo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 transition-colors"
+                    >
+                      <Linkk className="w-5 h-5" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Seção de Tópicos */}
+          <div className="py-4 border-b border-gray-200">
+            <div
+              className="flex justify-between items-center cursor-pointer"
+              onClick={() => toggleSection('topicos')}
+            >
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-gray-500" />
+                <h2 className="text-xl font-semibold text-gray-700">Tópicos</h2>
+              </div>
+              {showTopicos ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </div>
+            {showTopicos && (
+              <div className="mt-4 space-y-4">
+                {Object.entries(data.topicos).map(([key, value]) => (
+                  <div key={key} className="bg-gray-50 p-3 rounded-md border border-gray-100">
+                    <p className="font-semibold text-gray-800 capitalize">
+                      {key}
+                    </p>
+                    <p className="text-gray-600 mt-1">{value || 'Nenhum texto fornecido.'}</p>
                   </div>
                 ))}
               </div>
-
-              {/* Arquivo */}
-              <div className="trabalho-arquivo">
-                <Link target='_blank' href={trabalho.arquivo.url} className="trabalhos-link">
-                  <Download size={18} />
-                  {trabalho.arquivo.fileName}
-                </Link>
-                <Link target='_blank' href={trabalho.arquivo.url} className="btn-visualizar-arquivo">
-                  <Eye size={16} />
-                  Visualizar
-                </Link>
-              </div>
-
-
-              <div className="trabalho-topicos-detalhes">
-                <div className="topicos-resumo">
-                  <h4>Resumo dos Tópicos:</h4>
-                  <div className="topico-item">
-                    <strong>Resumo:</strong> {(trabalho.topicos?.intro || "").substring(0, 5000)}
-                  </div>
-                  <div className="topico-item">
-                    <strong>Introdução:</strong> {(trabalho.topicos?.intro || "").substring(0, 500)}
-                  </div>
-                  <div className="topico-item">
-                    <strong>Objetivos:</strong> {(trabalho.topicos?.obj || "").substring(0, 500)}
-                  </div>
-                  <div className="topico-item">
-                    <strong>Metodologia:</strong> {(trabalho.topicos?.met || "").substring(0, 500)}
-                  </div>
-                  <div className="topico-item">
-                    <strong>Discussão:</strong> {(trabalho.topicos?.disc || "").substring(0, 500)}
-                  </div>
-                  <div className="topico-item">
-                    <strong>Conclusão:</strong> {(trabalho.topicos?.conc || "").substring(0, 500)}
-                  </div>
-                  <div className="topico-item">
-                    <strong>Palavras-Chave:</strong> {(trabalho.topicos?.pchave || "").substring(0, 100)}
-                  </div>
-                  <div className="topico-item">
-                    <strong>Referências:</strong> {(trabalho.topicos?.ref || "").substring(0, 100)}
-                  </div>
-                </div>
-
-                {trabalho.palavrasChave?.length > 0 && (
-                  <div className="palavras-chave-container">
-                    <h4>Palavras-chave:</h4>
-                    <div className="palavras-chave-tags">
-                      {trabalho.palavrasChave.map((palavra, index) => (
-                        <span key={index} className="palavra-tag">{palavra}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Seção de Avaliação */}
-              <div className="avaliacao-section">
-                <div className="botoes-avaliacao">
-                  <button
-                    className={`btn-avaliacao btn-aceitar ${trabalho.status === 'Aceito' ? 'active' : ''}`}
-                    onClick={() => salvarAvaliacao(trabalho._id, 'Aceito')}
-                    disabled={salvandoAvaliacao === trabalho._id}
-                  >
-                    <CheckCircle size={16} />
-                    Aceitar
-                  </button>
-
-                  <button
-                    className={`btn-avaliacao btn-necessita-alteracao ${trabalho.status === 'Necessita de Alteração' ? 'active' : ''}`}
-                    onClick={() => salvarAvaliacao(trabalho._id, 'Necessita de Alteração')}
-                    disabled={salvandoAvaliacao === trabalho._id}
-                  >
-                    <AlertCircle size={16} />
-                    Necessita Alteração
-                  </button>
-
-                  <button
-                    className={`btn-avaliacao btn-recusar ${trabalho.status === 'Recusado' ? 'active' : ''}`}
-                    onClick={() => salvarAvaliacao(trabalho._id, 'Recusado')}
-                    disabled={salvandoAvaliacao === trabalho._id}
-                  >
-                    <XCircle size={16} />
-                    Recusar
-                  </button>
-                </div>
-
-                <div className="comentarios-section">
-                  <label className="comentarios-label">
-                    <MessageSquare size={16} />
-                    Comentários do Avaliador:
-                  </label>
-                  <textarea
-                    className="comentarios-textarea"
-                    placeholder="Adicione comentários sobre o trabalho (obrigatório para 'Necessita de Alteração')..."
-                    value={comentarios[trabalho._id] || ''}
-                    onChange={(e) => setComentarios(prev => ({
-                      ...prev,
-                      [trabalho._id]: e.target.value
-                    }))}
-                    rows={3}
-                  />
-
-                  <button
-                    className="btn-salvar-comentario"
-                    onClick={() => salvarAvaliacao(trabalho._id, trabalho.status)}
-                    disabled={salvandoAvaliacao === trabalho._id}
-                  >
-                    <Save size={16} />
-                    {salvandoAvaliacao === trabalho._id ? 'Salvando...' : 'Salvar Comentários'}
-                  </button>
-                </div>
-
-                {trabalho.dataAvaliacao && (
-                  <div className="avaliacao-info">
-                    <small>Última avaliação: {formatarData(trabalho.dataAvaliacao)}</small>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {trabalhosFiltrados.length === 0 && (
-          <div className="sem-trabalhos">
-            <FileText size={64} style={{ color: 'white', opacity: 0.5 }} />
-            <h3>Nenhum trabalho encontrado</h3>
-            <p>Tente ajustar os filtros de busca.</p>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* Seção de Comentários do Avaliador */}
+          <div className="py-4">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4">
+              Avaliação
+            </h2>
+            <div className="space-y-4">
+              {data.avaliadorComentarios.length === 0 ? (
+                <p className="text-gray-500 text-sm">Nenhuma avaliação foi feita ainda.</p>
+              ) : (
+                <>
+                  <p className='w-full text-center'>Avaliações já realizadas</p>
+                  {
+                    data.avaliadorComentarios.reverse().map((comentario, index) => (
+                      <div
+                        key={index}
+                        className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 transition-all duration-300 hover:shadow-md"
+                      >
+                        <p className="text-gray-800 font-normal leading-relaxed mb-3">
+                          {comentario.comentario}
+                        </p>
+                        <div className="flex flex-wrap items-center text-sm text-gray-500 gap-x-4 gap-y-2">
+                          <p>
+                            <span className="font-medium text-gray-700">Data:</span>{' '}
+                            {new Date(comentario.date).toLocaleDateString('pt-BR', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })} às {new Date(comentario.date).toLocaleTimeString('pt-BR')}
+                          </p>
+                          <span
+                            className={`
+        px-3 py-1 rounded-full text-xs font-semibold
+        ${comentario.status === 'Aceito'
+                                ? 'bg-green-100 text-green-800'
+                                : comentario.status === 'Recusado'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }
+      `}
+                          >
+                            {comentario.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </>
+              )}
+            </div>
+
+            <div className="mt-6 p-4 bg-white rounded-md border border-gray-200 space-y-5">
+              <div>
+                {
+                  // ………
+                }
+              </div>
+              <h3 className="text-lg font-medium text-gray-700 mb-3" onClick={() => console.log(data)}>
+                Adicionar Nova Avaliação
+              </h3>
+              {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+              {success && <p className="text-green-500 text-sm mt-2">{success}</p>}
+              <div className='flex flex-row space-x-5'>
+                <button onClick={() => setSelectedStatus("Em Avaliação")}
+                  className='p-5' style={{
+                    backgroundColor: selectedStatus === "Em Avaliação" ? "blue" : "gray",
+                    color: "white"
+                  }}>Em Avaliação</button>
+                <button onClick={() => setSelectedStatus("Aceito")}
+                  className='p-5' style={{
+                    backgroundColor: selectedStatus === "Aceito" ? "blue" : "gray",
+                    color: "white"
+                  }}>Aceito</button>
+                <button onClick={() => setSelectedStatus("Recusado")}
+                  className='p-5' style={{
+                    backgroundColor: selectedStatus === "Recusado" ? "blue" : "gray",
+                    color: "white"
+                  }}>Recusado</button>
+                <button onClick={() => setSelectedStatus("Necessita de Alteração")}
+                  className='p-5' style={{
+                    backgroundColor: selectedStatus === "Necessita de Alteração" ? "blue" : "gray",
+                    color: "white"
+                  }}>Necessita de Alteração</button>
+              </div>
+              {/* --- --- --- */}
+              <div className="space-y-6">
+                {
+                  data.configuracaoModalidade.ficha_avalicao.map((item, index) => (
+                    <div key={index} className="p-4 border border-gray-200 rounded-md bg-gray-50">
+                      <h4 className="text-md font-semibold text-gray-700 mb-3">{item.nome}</h4>
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+                          <label className="w-full sm:w-1/3 text-gray-700 font-medium">
+                            Nota (Mín: {item.notaMinima}, Máx: {item.notaMaxima}, Peso: {item.peso})
+                          </label>
+                          <input
+                            type="number"
+                            min={item.notaMinima}
+                            max={item.notaMaxima}
+                            className="w-full sm:w-1/3 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            value={item.notasRecebidas[0]}
+                            onChange={(e) => {
+                              item.notasRecebidas[0] = Number(e.target.value)
+                              if (item.notasRecebidas[0] > item.notaMaxima || item.notasRecebidas[0] < item.notaMinima) {
+                                return
+                              }
+
+                              console.log(item.notasRecebidas[0])
+                              toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, item)
+
+                            }}
+                          />
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+                          <label className="w-full sm:w-1/3 text-gray-700 font-medium">
+                            Justificativa
+                          </label>
+                          <textarea
+                            className="w-full sm:w-2/3 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            rows={2}
+                            value={item.justificativa[0] || ''}
+                            onChange={(e) => {
+                              const novaJustificativa = e.target.value;
+                              item.justificativa[0] = novaJustificativa
+                              toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, item)
+                            }}
+                          ></textarea>
+                        </div>
+                      </div>
+
+                    </div>
+                  ))
+                }
+              </div>
+              {/* --- --- --- */}
+              <textarea
+                className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                rows={4}
+                value={newComentario}
+                onChange={(e) => setNewComentario(e.target.value)}
+                placeholder="Escreva seu comentário aqui..."
+              ></textarea>
+              <button
+                onClick={handleAddComentario}
+                disabled={loading}
+                className={`mt-4 w-full sm:w-auto px-6 py-3 rounded-md font-semibold text-white transition-colors duration-200 ${loading
+                  ? 'bg-blue-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+              >
+                {loading ? 'Enviando...' : 'Enviar Avaliação'}
+              </button>
+            </div>
+          </div>
+        </>
+      }
     </div>
   );
 };
 
-export default TrabalhosPainel;
 
+
+const ChecklistAvaliacao: React.FC<{ ficha: IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"] }> = ({ ficha }) => {
+
+  return (
+    <h1>asdasdf</h1>
+  );
+};

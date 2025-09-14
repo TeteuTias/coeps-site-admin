@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { ObjectId } from 'bson';
 import { getSession } from '@auth0/nextjs-auth0';
-import {IAcademicWorks} from '@/app/lib/types/academicWorks/academicWorks.t';
+import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 
 export const dynamic = 'force-dynamic'
 
@@ -17,12 +17,12 @@ export const POST = withApiAuthRequired(async function POST(request) {
 
         // Obter dados do corpo da requisição
         const body = await request.json();
-        const { documentId, userId, status, avaliadorComentarios } = body;
-
+        const { documentId, userId, status, avaliadorComentarios, ficha_avalicao } = body;
+        ficha_avalicao as IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"]
         // Validar dados obrigatórios
-        if (!documentId || !userId || !status) {
+        if (!documentId || !userId || !status || !ficha_avalicao) {
             return NextResponse.json({
-                "message": "DocumentId, userId e status são obrigatórios"
+                "message": "DocumentId, userId, ficha_avalicao e status são obrigatórios"
             }, { status: 400 });
         }
 
@@ -41,13 +41,12 @@ export const POST = withApiAuthRequired(async function POST(request) {
             }, { status: 400 });
         }
 
-        let dadosTrabalho = await db.collection(colecaoAvaliacoes).findOne(
+        let dadosTrabalho: IAcademicWorks = await db.collection(colecaoAvaliacoes).findOne(
             {
                 _id: new ObjectId(documentId),
                 userId: new ObjectId(userId)
             },
         );
-
         //
         //
         if (!dadosTrabalho) {
@@ -57,6 +56,15 @@ export const POST = withApiAuthRequired(async function POST(request) {
         }
         //
         //
+        dadosTrabalho.configuracaoModalidade.ficha_avalicao.forEach((fichaData) => {
+            ficha_avalicao.forEach((fichaPayload: IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"][number]) => {
+                if (`${fichaPayload._id}` == `${fichaData._id}`) {
+                    fichaData["justificativa"].unshift(fichaPayload.justificativa[0]) // em zero porque sempre to alterando o 0 no lado do cliente
+                    fichaData["notasRecebidas"].unshift(fichaPayload.notasRecebidas[0]) // em zero porque sempre to alterando o 0 no lado do cliente
+                }
+            })
+        })
+
         const payloadComentario: IAcademicWorks["avaliadorComentarios"][0] =
         {
             comentario: avaliadorComentarios,
@@ -64,6 +72,10 @@ export const POST = withApiAuthRequired(async function POST(request) {
             date: new Date(),
             status: status
         };
+
+
+        const payloadFichaAvaliacao: IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"] = dadosTrabalho.configuracaoModalidade.ficha_avalicao
+
         await db.collection(colecaoAvaliacoes).updateOne(
             {
                 _id: new ObjectId(documentId),
@@ -74,7 +86,8 @@ export const POST = withApiAuthRequired(async function POST(request) {
                     avaliadorComentarios: payloadComentario
                 },
                 $set: {
-                    status: status
+                    status: status,
+                    "configuracaoModalidade.ficha_avalicao": payloadFichaAvaliacao
                 }
             }
         );
