@@ -1,11 +1,15 @@
 'use client'
-import Link from 'next/link';
+import DOMPurify from 'dompurify';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css'; // Importa os estilos CSS do editor
 import { useEffect, useState, useMemo } from 'react';
 import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Link as Linkk } from 'lucide-react';
 
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 import LoadingModal from '@/app/components/LoadingModal';
 import { ObjectId } from 'bson';
+import { IUser } from '../lib/types/user/user.t';
+import { useRouter } from 'next/navigation';
 
 // /api/get/trabalhos-avaliacoes
 // /api/post/avaliar-trabalho
@@ -13,6 +17,7 @@ export default function AvaliarTrabalho() {
   //
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [trabalhos, setTrabalhos] = useState<IAcademicWorks[]>([]);
+  const [users, setUsers] = useState<IUser[]>([])
 
   const toggleFichaAvalicaoProps = (
     fichaId: ObjectId,
@@ -72,8 +77,9 @@ export default function AvaliarTrabalho() {
 
   const hydrateData = useMemo(() => async () => {
     setIsLoading(true)
-    const trabalhos: { data: IAcademicWorks[] } = await fetch('/api/get/trabalhos-avaliacoes').then(res => res.json());
+    const trabalhos: { data: IAcademicWorks[], users: IUser[] } = await fetch('/api/get/trabalhos-avaliacoes').then(res => res.json());
     setTrabalhos(trabalhos.data);
+    setUsers(trabalhos.users)
     setIsLoading(false)
   }, [])
   useEffect(() => {
@@ -88,7 +94,9 @@ export default function AvaliarTrabalho() {
       <div>
         {
           !isLoading && trabalhos.length !== 0 &&
-          trabalhos.reverse().map((trabalho, indexTrabalho) => <TrabalhoComponent indexTrabalho={indexTrabalho} toggleFichaAvalicaoProps={toggleFichaAvalicaoProps} hydrateData={hydrateData} key={`${trabalho._id}`} data={trabalho} />)
+          trabalhos.reverse().map((trabalho, indexTrabalho) =>
+            <TrabalhoComponent key={`${trabalho._id}`} user={users.find((user) => `${user._id}` === `${trabalho.userId}`)} indexTrabalho={indexTrabalho} toggleFichaAvalicaoProps={toggleFichaAvalicaoProps} hydrateData={hydrateData} data={trabalho} />
+          )
         }
       </div>
     </main>
@@ -108,6 +116,7 @@ const formatBytes = (bytes: number): string => {
 
 const TrabalhoComponent: React.FC<{
   data: IAcademicWorks,
+  user: IUser | undefined,
   indexTrabalho: number,
   hydrateData: () => Promise<void>,
   toggleFichaAvalicaoProps: (
@@ -116,8 +125,10 @@ const TrabalhoComponent: React.FC<{
     newProps: Partial<IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"][number]>
   ) => void
 
-}> = ({ data, hydrateData, toggleFichaAvalicaoProps, indexTrabalho }) => {
+}> = ({ data, hydrateData, toggleFichaAvalicaoProps, indexTrabalho, user }) => {
   const [selectedStatus, setSelectedStatus] = useState<IAcademicWorks['status']>(data.status);
+  const [isOpenPrevEvaluations, setIsOpenPrevEvaluations] = useState<boolean>(false)
+  const [isOpenAddNewEvaluation, setIsOpenAddNewEvaluation] = useState<boolean>(false)
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [showAutores, setShowAutores] = useState(false);
   const [showArquivos, setShowArquivos] = useState(false);
@@ -126,6 +137,7 @@ const TrabalhoComponent: React.FC<{
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const router = useRouter()
 
   const toggleSection = (section: string) => {
     if (section === 'autores') setShowAutores(!showAutores);
@@ -168,6 +180,9 @@ const TrabalhoComponent: React.FC<{
     <div className="bg-white p-6 rounded-lg shadow-xl max-w-4xl mx-auto my-10 border border-gray-200">
       {/* Título e informações básicas */}
       <div className="pb-4 border-b border-gray-200 mb-4" onClick={() => setIsOpen(!isOpen)} style={{ cursor: 'pointer' }}>
+        <h1 className='p-2 bg-red-500 text-white font-extrabold w-fit' onClick={() => router.push(`/usuarios/informacoes/${user?._id}`)}>
+          {user?.informacoes_usuario.nome}
+        </h1>
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
           {data.titulo}
         </h1>
@@ -313,53 +328,56 @@ const TrabalhoComponent: React.FC<{
 
           {/* Seção de Comentários do Avaliador */}
           <div className="py-4">
-            <h2 className="text-xl font-semibold text-gray-700 mb-4">
-              Avaliação
+            <h2 className="text-xl font-semibold text-gray-700 mb-4 cursor-pointer" onClick={() => setIsOpenPrevEvaluations((prev) => (!prev))}>
+              Avaliações Prévias
             </h2>
-            <div className="space-y-4">
-              {data.avaliadorComentarios.length === 0 ? (
-                <p className="text-gray-500 text-sm">Nenhuma avaliação foi feita ainda.</p>
-              ) : (
-                <>
-                  <p className='w-full text-center'>Avaliações já realizadas</p>
-                  {
-                    data.avaliadorComentarios.reverse().map((comentario, index) => (
-                      <div
-                        key={index}
-                        className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 transition-all duration-300 hover:shadow-md"
-                      >
-                        <p className="text-gray-800 font-normal leading-relaxed mb-3">
-                          {comentario.comentario}
-                        </p>
-                        <div className="flex flex-wrap items-center text-sm text-gray-500 gap-x-4 gap-y-2">
-                          <p>
-                            <span className="font-medium text-gray-700">Data:</span>{' '}
-                            {new Date(comentario.date).toLocaleDateString('pt-BR', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })} às {new Date(comentario.date).toLocaleTimeString('pt-BR')}
+            {
+              isOpenPrevEvaluations &&
+              <div className="space-y-4">
+                {data.avaliadorComentarios.length === 0 ? (
+                  <p className="text-gray-500 text-sm">Nenhuma avaliação foi feita ainda.</p>
+                ) : (
+                  <>
+                    <p className='w-full text-center'>Avaliações já realizadas</p>
+                    {
+                      data.avaliadorComentarios.reverse().map((comentario, index) => (
+                        <div
+                          key={index}
+                          className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 transition-all duration-300 hover:shadow-md"
+                        >
+                          <p className="mb-3">
+                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(comentario.comentario) }} />
                           </p>
-                          <span
-                            className={`
+                          <div className="flex flex-wrap items-center text-sm text-gray-500 gap-x-4 gap-y-2">
+                            <p>
+                              <span className="font-medium text-gray-700">Data:</span>{' '}
+                              {new Date(comentario.date).toLocaleDateString('pt-BR', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                              })} às {new Date(comentario.date).toLocaleTimeString('pt-BR')}
+                            </p>
+                            <span
+                              className={`
         px-3 py-1 rounded-full text-xs font-semibold
         ${comentario.status === 'Aceito'
-                                ? 'bg-green-100 text-green-800'
-                                : comentario.status === 'Recusado'
-                                  ? 'bg-red-100 text-red-800'
-                                  : 'bg-yellow-100 text-yellow-800'
-                              }
+                                  ? 'bg-green-100 text-green-800'
+                                  : comentario.status === 'Recusado'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }
       `}
-                          >
-                            {comentario.status}
-                          </span>
+                            >
+                              {comentario.status}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))
-                  }
-                </>
-              )}
-            </div>
+                      ))
+                    }
+                  </>
+                )}
+              </div>
+            }
 
             <div className="mt-6 p-4 bg-white rounded-md border border-gray-200 space-y-5">
               <div>
@@ -367,101 +385,124 @@ const TrabalhoComponent: React.FC<{
                   // ………
                 }
               </div>
-              <h3 className="text-lg font-medium text-gray-700 mb-3" onClick={() => console.log(data)}>
+              <h3 className="text-lg font-medium text-gray-700 mb-3 cursor-pointer" onClick={() => setIsOpenAddNewEvaluation((prev) => (!prev))}>
                 Adicionar Nova Avaliação
               </h3>
-              {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-              {success && <p className="text-green-500 text-sm mt-2">{success}</p>}
-              <div className='flex flex-row space-x-5'>
-                <button onClick={() => setSelectedStatus("Em Avaliação")}
-                  className='p-5' style={{
-                    backgroundColor: selectedStatus === "Em Avaliação" ? "blue" : "gray",
-                    color: "white"
-                  }}>Em Avaliação</button>
-                <button onClick={() => setSelectedStatus("Aceito")}
-                  className='p-5' style={{
-                    backgroundColor: selectedStatus === "Aceito" ? "blue" : "gray",
-                    color: "white"
-                  }}>Aceito</button>
-                <button onClick={() => setSelectedStatus("Recusado")}
-                  className='p-5' style={{
-                    backgroundColor: selectedStatus === "Recusado" ? "blue" : "gray",
-                    color: "white"
-                  }}>Recusado</button>
-                <button onClick={() => setSelectedStatus("Necessita de Alteração")}
-                  className='p-5' style={{
-                    backgroundColor: selectedStatus === "Necessita de Alteração" ? "blue" : "gray",
-                    color: "white"
-                  }}>Necessita de Alteração</button>
-              </div>
-              {/* --- --- --- */}
-              <div className="space-y-6">
-                {
-                  data.configuracaoModalidade.ficha_avalicao.map((item, index) => (
-                    <div key={index} className="p-4 border border-gray-200 rounded-md bg-gray-50">
-                      <h4 className="text-md font-semibold text-gray-700 mb-3">{item.nome}</h4>
-                      <div className="space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-                          <label className="w-full sm:w-1/3 text-gray-700 font-medium">
-                            Nota (Mín: {item.notaMinima}, Máx: {item.notaMaxima}, Peso: {item.peso})
-                          </label>
-                          <input
-                            type="number"
-                            min={item.notaMinima}
-                            max={item.notaMaxima}
-                            className="w-full sm:w-1/3 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            value={item.notasRecebidas[0]}
-                            onChange={(e) => {
-                              item.notasRecebidas[0] = Number(e.target.value)
-                              if (item.notasRecebidas[0] > item.notaMaxima || item.notasRecebidas[0] < item.notaMinima) {
-                                return
-                              }
+              {
+                isOpenAddNewEvaluation &&
+                <>
+                  {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                  {success && <p className="text-green-500 text-sm mt-2">{success}</p>}
+                  <div className='flex flex-row space-x-5'>
+                    <button onClick={() => setSelectedStatus("Em Avaliação")}
+                      className='p-5' style={{
+                        backgroundColor: selectedStatus === "Em Avaliação" ? "blue" : "gray",
+                        color: "white"
+                      }}>Em Avaliação</button>
+                    <button onClick={() => setSelectedStatus("Aceito")}
+                      className='p-5' style={{
+                        backgroundColor: selectedStatus === "Aceito" ? "blue" : "gray",
+                        color: "white"
+                      }}>Aceito</button>
+                    <button onClick={() => setSelectedStatus("Recusado")}
+                      className='p-5' style={{
+                        backgroundColor: selectedStatus === "Recusado" ? "blue" : "gray",
+                        color: "white"
+                      }}>Recusado</button>
+                    <button onClick={() => setSelectedStatus("Necessita de Alteração")}
+                      className='p-5' style={{
+                        backgroundColor: selectedStatus === "Necessita de Alteração" ? "blue" : "gray",
+                        color: "white"
+                      }}>Necessita de Alteração</button>
+                  </div>
+                  {/* --- --- --- */}
+                  <div className="space-y-6">
+                    {
+                      data.configuracaoModalidade.ficha_avalicao.map((item, index) => (
+                        <div key={index} className="p-4 border border-gray-200 rounded-md bg-gray-50">
+                          <h4 className="text-md font-semibold text-gray-700 mb-3">{item.nome}</h4>
+                          <div className="space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+                              <label className="w-full sm:w-1/3 text-gray-700 font-medium">
+                                Nota (Mín: {item.notaMinima}, Máx: {item.notaMaxima}, Peso: {item.peso})
+                              </label>
+                              <input
+                                type="number"
+                                min={item.notaMinima}
+                                max={item.notaMaxima}
+                                className="w-full sm:w-1/3 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                value={item.notasRecebidas[0]}
+                                onChange={(e) => {
+                                  item.notasRecebidas[0] = Number(e.target.value)
+                                  if (item.notasRecebidas[0] > item.notaMaxima || item.notasRecebidas[0] < item.notaMinima) {
+                                    return
+                                  }
 
-                              console.log(item.notasRecebidas[0])
-                              toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, item)
+                                  console.log(item.notasRecebidas[0])
+                                  toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, item)
 
-                            }}
-                          />
+                                }}
+                              />
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
+                              <label className="w-full sm:w-1/3 text-gray-700 font-medium">
+                                Justificativa
+                              </label>
+                              <textarea
+                                className="w-full sm:w-2/3 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                rows={2}
+                                value={item.justificativa[0] || ''}
+                                onChange={(e) => {
+                                  const novaJustificativa = e.target.value;
+                                  item.justificativa[0] = novaJustificativa
+                                  toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, item)
+                                }}
+                              ></textarea>
+                            </div>
+                          </div>
+
                         </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4">
-                          <label className="w-full sm:w-1/3 text-gray-700 font-medium">
-                            Justificativa
-                          </label>
-                          <textarea
-                            className="w-full sm:w-2/3 p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            rows={2}
-                            value={item.justificativa[0] || ''}
-                            onChange={(e) => {
-                              const novaJustificativa = e.target.value;
-                              item.justificativa[0] = novaJustificativa
-                              toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, item)
-                            }}
-                          ></textarea>
-                        </div>
-                      </div>
+                      ))
+                    }
+                  </div>
+                  {/* --- --- --- */}
+                  <ReactQuill
+                    theme="snow" // O tema 'snow' oferece a barra de ferramentas padrão
+                    value={newComentario}
+                    onChange={setNewComentario}
+                    modules={{
+                      toolbar: [
+                        [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+                        ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+                        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                        [{ 'script': 'sub' }, { 'script': 'super' }],
+                        [{ 'indent': '-1' }, { 'indent': '+1' }],
+                        [{ 'direction': 'rtl' }],
 
-                    </div>
-                  ))
-                }
-              </div>
-              {/* --- --- --- */}
-              <textarea
-                className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                rows={4}
-                value={newComentario}
-                onChange={(e) => setNewComentario(e.target.value)}
-                placeholder="Escreva seu comentário aqui..."
-              ></textarea>
-              <button
-                onClick={handleAddComentario}
-                disabled={loading}
-                className={`mt-4 w-full sm:w-auto px-6 py-3 rounded-md font-semibold text-white transition-colors duration-200 ${loading
-                  ? 'bg-blue-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-              >
-                {loading ? 'Enviando...' : 'Enviar Avaliação'}
-              </button>
+                        [{ 'size': ['small', false, 'large', 'huge'] }],
+                        [{ 'color': [] }, { 'background': [] }],
+                        [{ 'font': [] }],
+                        [{ 'align': [] }],
+
+                        ['link', 'image', 'video'],
+
+                        ['clean']
+                      ],
+                    }}
+                    placeholder="Escreva seu comentário aqui..."
+                  />
+                  <button
+                    onClick={handleAddComentario}
+                    disabled={loading}
+                    className={`mt-4 w-full sm:w-auto px-6 py-3 rounded-md font-semibold text-white transition-colors duration-200 ${loading
+                      ? 'bg-blue-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                  >
+                    {loading ? 'Enviando...' : 'Enviar Avaliação'}
+                  </button>
+                </>
+              }
             </div>
           </div>
         </>
