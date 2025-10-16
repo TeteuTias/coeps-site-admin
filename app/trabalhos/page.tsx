@@ -567,12 +567,3 @@ const TrabalhoComponent: React.FC<{
     </div>
   );
 };
-
-
-
-const ChecklistAvaliacao: React.FC<{ ficha: IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"] }> = ({ ficha }) => {
-
-  return (
-    <h1>asdasdf</h1>
-  );
-};
