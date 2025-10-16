@@ -25,9 +25,9 @@ function PaginaAreaDoCliente() {
       <div className="cards-grid">
         <Link href="/trabalhos" className="glass-card">
           <div className="card-icon">
-            <FileText size={48} />
+            <BriefcaseBusiness size={48} />
           </div>
-          <h2 className="card-title">Lista de Trabalhos</h2>
+          <h2 className="card-title">Trabalhos</h2>
         </Link>
         <Link href="/listas" className="glass-card">
           <div className="card-icon">
@@ -52,12 +52,6 @@ function PaginaAreaDoCliente() {
             <UserRound size={48} />
           </div>
           <h2 className="card-title">Usuários</h2>
-        </Link>
-        <Link href="/trabalhos" className="glass-card">
-          <div className="card-icon">
-            <BriefcaseBusiness size={48} />
-          </div>
-          <h2 className="card-title">Trabalhos</h2>
         </Link>
       </div>
     </>
