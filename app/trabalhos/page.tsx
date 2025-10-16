@@ -128,6 +128,7 @@ const TrabalhoComponent: React.FC<{
 }> = ({ data, hydrateData, toggleFichaAvalicaoProps, indexTrabalho, user }) => {
   const [selectedStatus, setSelectedStatus] = useState<IAcademicWorks['status']>(data.status);
   const [isOpenPrevEvaluations, setIsOpenPrevEvaluations] = useState<boolean>(false)
+  const [showComentarios, setShowComentarios] = useState<boolean>(false)
   const [isOpenAddNewEvaluation, setIsOpenAddNewEvaluation] = useState<boolean>(false)
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [showAutores, setShowAutores] = useState(false);
@@ -181,6 +182,8 @@ const TrabalhoComponent: React.FC<{
       {/* Título e informações básicas */}
       <div className="pb-4 border-b border-gray-200 mb-4" onClick={() => setIsOpen(!isOpen)} style={{ cursor: 'pointer' }}>
         <h1 className='p-2 bg-red-500 text-white font-extrabold w-fit' onClick={() => router.push(`/usuarios/informacoes/${user?._id}`)}>
+          <span>Usuário que postou</span>
+          <span>Colocar um lucide-react aqui para mostrar que pode clicar e abrir</span>
           {user?.informacoes_usuario.nome}
         </h1>
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
@@ -209,6 +212,53 @@ const TrabalhoComponent: React.FC<{
       {
         isOpen &&
         <>
+          <div>
+            <div
+              className="flex justify-between items-center cursor-pointer"
+              onClick={() => setShowComentarios((prev) => (!prev))}
+            >
+              <div className="flex items-center space-x-2">
+                <Users className="w-5 h-5 text-gray-500" />
+                <h2 className="text-xl font-semibold text-gray-700">
+                  Comentários Anteriores ({data.avaliadorComentarios.length})
+                </h2>
+              </div>
+              {showComentarios ? (
+                <ChevronUp className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-gray-500" />
+              )}
+            </div>
+            <div>
+              {
+                showComentarios && (
+                  data.avaliadorComentarios.length > 0 ?
+                    <div>
+                      {
+                        data.avaliadorComentarios.map((avaliacao) =>
+                          <div>
+                            <div>
+                              <p>{`${avaliacao.avaliadorId}`}</p>
+                            </div>
+                            <div>
+                              <p>{`${new Date(avaliacao.date).toLocaleString()}`}</p>
+                            </div>
+                            <div>
+                              <p>{`${avaliacao.comentario}`}</p>
+                            </div>
+                          </div>
+                        )
+                      }
+                    </div> :
+                    <div>
+                      <h1>Nenhum comentário adicionado ainda</h1>
+                    </div>
+
+                )
+              }
+            </div>
+          </div>
+          {/* */}
           <div className="py-4 border-b border-gray-200">
             <div
               className="flex justify-between items-center cursor-pointer"
@@ -418,6 +468,13 @@ const TrabalhoComponent: React.FC<{
                   {/* --- --- --- */}
                   <div className="space-y-6">
                     {
+                      selectedStatus === "Aceito" &&
+                      <div className='w-full text-center'>
+                        <h1>Preencha a ficha de avaliação para "Aceitar" o trabalho</h1>
+                      </div>
+                    }
+                    {
+                      selectedStatus === "Aceito" &&
                       data.configuracaoModalidade.ficha_avalicao.map((item, index) => (
                         <div key={index} className="p-4 border border-gray-200 rounded-md bg-gray-50">
                           <h4 className="text-md font-semibold text-gray-700 mb-3">{item.nome}</h4>
