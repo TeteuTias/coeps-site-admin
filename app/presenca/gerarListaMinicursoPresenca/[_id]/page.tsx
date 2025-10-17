@@ -7,7 +7,8 @@ import { useRef } from 'react';
 import { ICourse } from '@/app/lib/types/events/event.t';
 import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModal';
 import './style.css';
-import { Users, CheckCircle, XCircle, QrCode, UserPlus, Loader2, Calendar, Clock } from 'lucide-react';
+import { Users, CheckCircle, XCircle, QrCode, UserPlus, Loader2, Calendar, Clock, Table } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface Usuario {
     _id: string,
@@ -191,20 +192,19 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             backgroundRepeat: 'no-repeat'
         }}>
             <h1 className="presenca-lista-title">{courseData.name}</h1>
-            
             <div className="presenca-lista-estatisticas">
                 <div className="presenca-lista-estatistica-card">
-                    <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+                    <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
                     <span className="presenca-lista-estatistica-valor">{data2.length}</span>
                     <span className="presenca-lista-estatistica-label">Total de Inscritos</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
-                    <CheckCircle size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
+                    <CheckCircle size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
                     <span className="presenca-lista-estatistica-valor">{presentes}</span>
                     <span className="presenca-lista-estatistica-label">Presentes</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
-                    <XCircle size={32} style={{marginBottom: '0.3rem', color: '#ff6b6b'}} />
+                    <XCircle size={32} style={{ marginBottom: '0.3rem', color: '#ff6b6b' }} />
                     <span className="presenca-lista-estatistica-valor">{ausentes}</span>
                     <span className="presenca-lista-estatistica-label">Ausentes</span>
                 </div>
@@ -222,14 +222,15 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             </div>
 
             <div className="presenca-lista-actions">
-            <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
-            <button
+                <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
+                <button
                     onClick={() => setIsOpenAllUsers(true)}
                     className="presenca-lista-btn presenca-lista-btn-primary"
                 >
                     <UserPlus size={18} />
-                Adicionar Usuário
-            </button>
+                    Adicionar Usuário
+                </button>
+                <ExportButton inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
             </div>
 
             <div className="presenca-lista-table-container">
@@ -246,7 +247,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                         {data2.map((item, index) => (
                             <tr key={index} className="presenca-lista-row">
                                 <td className="presenca-lista-nome">
-                                    <button 
+                                    <button
                                         className="presenca-lista-remove-btn"
                                         onClick={() => {
                                             setIsModalProps(() => ({
@@ -292,7 +293,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                     </span>
                                 </td>
                                 <td className="presenca-lista-acoes">
-                                    <button 
+                                    <button
                                         className={`presenca-lista-btn ${dataPresentes.includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
                                         onClick={async () => {
                                             setLoadingContent(true)
@@ -347,10 +348,10 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             <LoadingModal isLoading={loadingContent} />
             <ConfirmationModal {...isModalProps} />
             {isOpenAllUsers && (
-                <AllUsersModal 
-                    courseData={courseData} 
-                    isOpen={true} 
-                    onClose={() => { setIsOpenAllUsers(false) }} 
+                <AllUsersModal
+                    courseData={courseData}
+                    isOpen={true}
+                    onClose={() => { setIsOpenAllUsers(false) }}
                     onUserSelect={async (userId: string) => {
                         setLoadingContent(true)
                         const response = await fetch(`/api/post/darPresenca`, {
@@ -373,20 +374,13 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                         await hydrateData()
                         setIsOpenAllUsers(false)
                         setLoadingContent(false)
-                    }} 
-                    usersData={allUsers} 
+                    }}
+                    usersData={allUsers}
                 />
             )}
         </div>
     );
 };
-
-
-
-
-
-
-//
 //
 //
 const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<void> }> = ({ courseData, hydrateData }) => {
@@ -787,5 +781,45 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     );
 };
 
+function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: string[], presentes: string[], todosUsuarios: Usuario[] }) {
+    const data = presentes.map(usuarioId => {
+        const usuario = todosUsuarios.find(u => u._id === usuarioId);
+        return {
+            NOME: usuario?.informacoes_usuario.nome,
+            CPF: usuario?.informacoes_usuario.cpf,
+            EMAIL: usuario?.informacoes_usuario.email,
+        };
+    });
+
+    const handleDownload = () => {
+        // 1. Crie uma nova planilha a partir dos seus dados JSON
+        const worksheet = XLSX.utils.json_to_sheet(data);
+
+        // 2. Crie um novo livro (workbook) e adicione a planilha a ele
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados'); // "Dados" é o nome da aba da planilha
+
+        // 3. Personalize a largura das colunas (opcional)
+        worksheet['!cols'] = [
+            { wch: 20 }, // Coluna "nome" com 20 caracteres de largura
+            { wch: 15 }, // Coluna "categoria" com 15
+            { wch: 10 }, // Coluna "preco" com 10
+            { wch: 10 }, // Coluna "estoque" com 10
+        ];
+
+        // 4. Gere o arquivo e acione o download
+        XLSX.writeFile(workbook, 'MinhaPlanilha.xlsx');
+    };
+
+    return (
+        <button
+            onClick={handleDownload}
+            className="presenca-lista-btn presenca-lista-btn-primary"
+        >
+            <Table size={18} />
+            Gerar Planilha
+        </button>
+    );
+}
 
 export default MyComponent;

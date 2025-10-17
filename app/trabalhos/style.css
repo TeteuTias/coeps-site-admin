@@ -424,3 +424,313 @@
     align-items: flex-start;
   }
 }
+
+/* Estilos específicos para a interface de avaliação */
+
+.trabalhos-card-avaliacao {
+  background: rgba(216, 217, 218, 0.18);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1.5px solid rgba(216, 217, 218, 0.22);
+  border-radius: 24px;
+  padding: 2rem 2.5rem;
+  box-shadow: 0 8px 32px rgba(27, 48, 95, 0.18), 0 1.5px 8px rgba(84, 26, 44, 0.10);
+  transition: box-shadow 0.3s, transform 0.3s, background 0.3s;
+  animation: fadeInUp 0.6s ease forwards;
+  margin-bottom: 2rem;
+}
+
+.trabalhos-card-avaliacao:hover {
+  box-shadow: 0 16px 48px rgba(27, 48, 95, 0.22), 0 2px 12px rgba(84, 26, 44, 0.13);
+  background: rgba(216, 217, 218, 0.28);
+  transform: translateY(-6px) scale(1.025);
+}
+
+.trabalhos-filtros-container {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 900px;
+}
+
+.trabalhos-filtro-status {
+  min-width: 200px;
+}
+
+.trabalhos-select-status {
+  width: 100%;
+  padding: 0.7em 1.2em;
+  border-radius: 12px;
+  border: 1.5px solid rgba(216, 217, 218, 0.22);
+  background: rgba(216, 217, 218, 0.13);
+  color: var(--cinza);
+  font-size: 1.08rem;
+  font-weight: 500;
+  outline: none;
+  box-shadow: 0 2px 12px rgba(27, 48, 95, 0.07);
+  transition: border 0.2s, box-shadow 0.2s;
+}
+
+.trabalhos-select-status:focus {
+  border: 1.5px solid var(--carmin);
+  box-shadow: 0 4px 18px rgba(84, 26, 44, 0.13);
+  background: rgba(216, 217, 218, 0.18);
+}
+
+.trabalhos-documentos {
+  margin-top: 1.5rem;
+}
+
+.trabalho-documento-item {
+  border: 1.5px solid rgba(216, 217, 218, 0.22);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  background: rgba(216, 217, 218, 0.08);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.trabalho-documento-item:hover {
+  background: rgba(216, 217, 218, 0.15);
+  border-color: var(--carmin);
+}
+
+.documento-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.documento-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.avaliacao-section {
+  border-top: 1.5px solid rgba(216, 217, 218, 0.22);
+  padding-top: 1.5rem;
+}
+
+.botoes-avaliacao {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-avaliacao {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.2rem;
+  border: 2px solid;
+  border-radius: 8px;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 160px;
+  justify-content: center;
+}
+
+.btn-avaliacao:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-aceitar {
+  border-color: #10b981;
+  color: #10b981;
+}
+
+.btn-aceitar:hover:not(:disabled) {
+  background: #10b981;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.btn-aceitar.active {
+  background: #10b981;
+  color: white;
+}
+
+.btn-necessita-alteracao {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.btn-necessita-alteracao:hover:not(:disabled) {
+  background: #f59e0b;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.btn-necessita-alteracao.active {
+  background: #f59e0b;
+  color: white;
+}
+
+.btn-recusar {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.btn-recusar:hover:not(:disabled) {
+  background: #ef4444;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.btn-recusar.active {
+  background: #ef4444;
+  color: white;
+}
+
+.comentarios-section {
+  margin-top: 1.5rem;
+}
+
+.comentarios-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--cinza);
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.comentarios-textarea {
+  width: 100%;
+  padding: 1rem;
+  border: 1.5px solid rgba(216, 217, 218, 0.22);
+  border-radius: 8px;
+  background: rgba(216, 217, 218, 0.08);
+  color: var(--cinza);
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color 0.3s ease, background 0.3s ease;
+  box-sizing: border-box;
+}
+
+.comentarios-textarea:focus {
+  outline: none;
+  border-color: var(--carmin);
+  background: rgba(216, 217, 218, 0.15);
+}
+
+.comentarios-textarea::placeholder {
+  color: rgba(216, 217, 218, 0.6);
+}
+
+.btn-salvar-comentario {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.5rem;
+  background: var(--azul);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.btn-salvar-comentario:hover:not(:disabled) {
+  background: var(--carmin);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(84, 26, 44, 0.3);
+}
+
+.btn-salvar-comentario:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.avaliacao-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(216, 217, 218, 0.22);
+  color: rgba(216, 217, 218, 0.7);
+  font-size: 0.85rem;
+}
+
+/* Responsividade para interface de avaliação */
+@media (max-width: 768px) {
+  .trabalhos-filtros-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  
+  .trabalhos-filtro-status {
+    min-width: auto;
+  }
+  
+  .documento-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .botoes-avaliacao {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .btn-avaliacao {
+    min-width: auto;
+    width: 100%;
+  }
+  
+  .trabalhos-card-avaliacao {
+    padding: 1.5rem;
+  }
+  
+  .trabalho-documento-item {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .trabalhos-card-avaliacao {
+    padding: 1rem;
+    border-radius: 16px;
+  }
+  
+  .trabalho-documento-item {
+    padding: 0.75rem;
+    border-radius: 12px;
+  }
+  
+  .comentarios-textarea {
+    min-height: 80px;
+    padding: 0.75rem;
+  }
+  
+  .btn-salvar-comentario {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
