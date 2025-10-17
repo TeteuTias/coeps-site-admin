@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withMiddlewareAuthRequired } from '@auth0/nextjs-auth0/edge';
-
+import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
 //
 //
 //
@@ -8,11 +8,20 @@ import { withMiddlewareAuthRequired } from '@auth0/nextjs-auth0/edge';
 //
 
 export const middleware = withMiddlewareAuthRequired(async (req) => {
-  //const res = new NextResponse();
-  const res = NextResponse.next()
-  return res
-  return NextResponse.next();
- 
+  const url = new URL(req.url)
+  const res = NextResponse
+  const canUserAccess = await checkUserPermission(url, url.toString().includes("/api/") ? "api" : "page")
+  if (!canUserAccess) {
+    // 1. Get the original request's URL as a base
+    const url = req.nextUrl.clone();
+    // 2. Set the new path
+    url.pathname = '/not-allowed';
+    // 3. Rewrite to the new, absolute URL
+    return NextResponse.rewrite(url);
+  }
+  return res.next()
+
+
 });
 //
 //
