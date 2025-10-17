@@ -1,5 +1,5 @@
 import { pathToRegexp } from "path-to-regexp";
-import getUserIdServerSide from "./getUserIdServerSide";
+// import getUserIdServerSide from "./getUserIdServerSide";
 
 // Objeto para permissões de rotas de API (ex: /api/trabalhos/:id)
 const permittedRoutesApi: { [key: string]: string[] } = {
@@ -33,13 +33,7 @@ const permittedRoutes: { [key: string]: string[] } = {
  * @param type - O tipo de rota a ser verificada: 'page' ou 'api'.
  * @returns {Promise<boolean>} - Retorna `true` se o acesso for permitido, `false` caso contrário.
  */
-export default async function checkUserPermission(url: URL, type: 'page' | 'api'): Promise<boolean> {
-    // 1. Obtém o ID do usuário logado. Se não houver, ele não tem permissão.
-    const userIdStr = await getUserIdServerSide();
-    if (!userIdStr) {
-        return false;
-    }
-
+export default async function checkUserPermission(url: URL, type: 'page' | 'api', userIdStr: string): Promise<boolean> {
     const { pathname } = url;
 
     // 2. Seleciona o conjunto de regras correto (página ou API) com base no parâmetro 'type'.
