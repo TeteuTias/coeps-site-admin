@@ -11,7 +11,10 @@ export const middleware = withMiddlewareAuthRequired(async (req) => {
   const url = new URL(req.url)
   const res = NextResponse
   const session = await getSession(req, res)
-  const canUserAccess = await checkUserPermission(url, url.toString().includes("/api/") ? "api" : "page",session)
+  if (url.toString().includes("/api/auth")) {
+    return res.next()
+  }
+  const canUserAccess = await checkUserPermission(url, url.toString().includes("/api/") ? "api" : "page", session)
   if (!canUserAccess) {
     // 1. Get the original request's URL as a base
     const url = req.nextUrl.clone();
