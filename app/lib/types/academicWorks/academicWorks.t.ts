@@ -13,7 +13,7 @@ export interface IAcademicWorksProps {
     }[],
     "link_edital": string,
     "link_guia"?: string,
-    "modalidades": { // Coloquei como opcional pois pode acontecer de apaguarem todas as modalidades
+    "modalidades": { // Coloquei aqui pois pode acontecer de apaguarem todas as modalidades
         _id: ObjectId,
         modalidade: string,
         autores_por_trabalho: number,
