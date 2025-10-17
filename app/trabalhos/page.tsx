@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 const theme = {
   colors: {
     primary: '#003366', // Azul Escuro
-    accent: '#f37021',  // Laranja Vibrante
+    accent: '#ff6200ff',  // Laranja Vibrante
     background: '#f8f9fa', // Fundo Cinza Claro
     surface: '#ffffff', // Superfície Branca (Cards)
     textPrimary: '#212529',
@@ -149,23 +149,28 @@ export default function AvaliarTrabalhoPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {/* StatCard Inlined: Total */}
                 <div className="p-4 rounded-lg shadow-md bg-blue-600">
-                  <p className="text-sm font-medium text-white opacity-90">Total de Trabalhos</p>
+                  <p className="text-sm text-white opacity-90 font-extrabold">Total de Trabalhos</p>
                   <p className="text-3xl font-bold text-white">{trabalhos.length}</p>
                 </div>
                 {/* StatCard Inlined: Aceitos */}
                 <div className="p-4 rounded-lg shadow-md bg-green-600">
-                  <p className="text-sm font-medium text-white opacity-90">Aceitos</p>
+                  <p className="text-sm text-white opacity-90 font-extrabold">Aceitos</p>
                   <p className="text-3xl font-bold text-white">{stats['Aceito'] || 0}</p>
                 </div>
                 {/* StatCard Inlined: Recusados */}
                 <div className="p-4 rounded-lg shadow-md bg-red-600">
-                  <p className="text-sm font-medium text-white opacity-90">Recusados</p>
+                  <p className="text-sm text-white opacity-90 font-extrabold">Recusados</p>
                   <p className="text-3xl font-bold text-white">{stats['Recusado'] || 0}</p>
                 </div>
                 {/* StatCard Inlined: Necessitam Alteração */}
                 <div className={`p-4 rounded-lg shadow-md`} style={{ backgroundColor: theme.colors.accent }}>
-                  <p className="text-sm font-medium text-white opacity-90">Necessitam Alteração</p>
+                  <p className="text-sm text-white opacity-90 font-extrabold">Necessitam Alteração</p>
                   <p className="text-3xl font-bold text-white">{stats['Necessita de Alteração'] || 0}</p>
+                </div>
+                {/* StatCard Inlined: Necessitam Alteração */}
+                <div className={`p-4 rounded-lg shadow-md`} style={{ backgroundColor: theme.colors.accent }}>
+                  <p className="text-sm text-white opacity-90 font-extrabold">Necessita de Avaliação</p>
+                  <p className="text-3xl font-bold text-white">{stats['Em Avaliação'] || 0}</p>
                 </div>
               </div>
             </div>
@@ -380,7 +385,7 @@ const TrabalhoComponent: FC<{
           <label className="block text-md font-semibold text-gray-700 mb-2">Parecer Descritivo</label>
           <div className="bg-white rounded-md border border-gray-300"><ReactQuill theme="snow" value={newComentario} onChange={setNewComentario} modules={{ toolbar: [[{ 'header': [1, 2, false] }], ['bold', 'italic', 'underline'], [{ 'list': 'ordered' }, { 'list': 'bullet' }], ['link'], ['clean']] }} placeholder="Escreva seu parecer detalhado aqui..." /></div>
         </div>
-        <button onClick={handleAddAvaliacao} disabled={loading} onFocus={() => setIsFocused(true)} onBlur={() => setIsFocused(false)} className={!loading ? `hover:opacity-90 w-fit` : ''} style={(() => {
+        <button onClick={handleAddAvaliacao} disabled={loading} onFocus={() => setIsFocused(true)} onBlur={() => setIsFocused(false)} className={!loading ? `hover:opacity-90` : ''} style={(() => {
           const baseStyle: React.CSSProperties = { marginTop: '1rem', width: '100%', padding: '0.75rem 2rem', borderRadius: '0.375rem', fontWeight: 600, color: 'white', transition: 'background-color 300ms, box-shadow 150ms ease-in-out', border: 'none', outline: 'none' };
           const conditionalStyle = loading ? { backgroundColor: '#9ca3af', cursor: 'not-allowed' } : { backgroundColor: theme.colors.accent, cursor: 'pointer' };
           const focusStyle: React.CSSProperties = { boxShadow: `0 0 0 2px ${theme.colors.surface}, 0 0 0 4px ${theme.colors.accent}` };
