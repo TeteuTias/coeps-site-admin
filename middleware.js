@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withMiddlewareAuthRequired } from '@auth0/nextjs-auth0/edge';
-import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
+// import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
 //
 //
 //
