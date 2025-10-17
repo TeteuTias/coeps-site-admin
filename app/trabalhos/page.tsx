@@ -1,10 +1,10 @@
 'use client'
-import DOMPurify from 'dompurify';
-import ReactQuill from 'react-quill';
+import dynamic from 'next/dynamic';
+const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import 'react-quill/dist/quill.snow.css';
+import DOMPurify from 'dompurify';
 import { useEffect, useState, useMemo, FC } from 'react';
 import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Info, Download, UserCircle, MessageSquare, Edit, PieChart, Search, Filter } from 'lucide-react';
-
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 import LoadingModal from '@/app/components/LoadingModal';
 import { ObjectId } from 'bson';
@@ -286,6 +286,7 @@ const TrabalhoComponent: FC<{
         body: JSON.stringify({ documentId: data._id, userId: data.userId, status: selectedStatus, avaliadorComentarios: newComentario, ficha_avalicao: data.configuracaoModalidade.ficha_avalicao })
       });
       if (!response.ok) throw new Error('Falha ao enviar avaliação');
+      alert("Avaliação feita com sucesso!")
       await hydrateData(); setNewComentario(''); setSuccess('Avaliação enviada com sucesso!');
       setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
