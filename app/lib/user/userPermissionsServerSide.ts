@@ -5,6 +5,7 @@ import getUserIdServerSide from "./getUserIdServerSide";
 const permittedRoutesApi: { [key: string]: string[] } = {
     "68f18c51d3440d3001fc4ddc": [ // ID da conta Científica
         '/api/get/*path',
+        '/api/auth/*path',
         '/api/post/avaliar-trabalho',
         '/api/post/avaliar-trabalho-dados',
         '/api/post/avaliar-trabalho-dados/upload-trabalho'
