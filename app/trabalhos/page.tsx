@@ -4,7 +4,7 @@ const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import 'react-quill/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 import { useEffect, useState, useMemo, FC } from 'react';
-import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Info, Download, UserCircle, MessageSquare, Edit, PieChart, Search, Filter } from 'lucide-react';
+import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Info, Download, UserCircle, MessageSquare, Edit, PieChart, Search, Filter, File } from 'lucide-react';
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 import LoadingModal from '@/app/components/LoadingModal';
 import { ObjectId } from 'bson';
@@ -336,7 +336,58 @@ const TrabalhoComponent: FC<{
           <div className="flex items-center space-x-3"><span className={`text-[${theme.colors.primary}]`}><Paperclip className="w-5 h-5" /></span><h2 className={`text-lg font-semibold text-[${theme.colors.textPrimary}]`}>Arquivos ({data.arquivos.length})</h2></div>
           {arquivosOpen ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
         </button>
-        {arquivosOpen && (<div className="p-4 bg-gray-50"><ul className="space-y-2">{data.arquivos.map((arquivo, index) => (<li key={index} className="bg-white p-3 rounded-md flex justify-between items-center border border-gray-200"><div><p className="font-medium text-gray-800">{arquivo.originalName}</p><p className="text-sm text-gray-600">Tamanho: {formatBytes(arquivo.size)}</p></div><a href={arquivo.url} target="_blank" rel="noopener noreferrer" className={`p-2 rounded-full text-[${theme.colors.primary}] hover:bg-blue-100 hover:text-[${theme.colors.accent}] transition-all duration-200`}><Download className="w-5 h-5" /></a></li>))}</ul></div>)}
+        {
+          arquivosOpen && (
+            <div className="p-2 sm:p-4 bg-slate-50 rounded-b-lg">
+              <ul className="space-y-2">
+                {data.arquivos.map((arquivo, index) => (
+                  <li
+                    key={index}
+                    className="flex items-center gap-4 p-3 rounded-lg bg-white hover:bg-slate-100 transition-colors duration-200 border border-slate-200"
+                  >
+                    {/* Ícone do Arquivo */}
+                    <div className="flex-shrink-0 bg-slate-200/70 p-2 rounded-md">
+                      <File size={20} />
+                    </div>
+
+                    {/* Informações do Arquivo */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 truncate" title={arquivo.originalName}>
+                        {arquivo.originalName}
+                      </p>
+                      <div className="text-sm text-slate-500 flex items-center gap-2 mt-0.5">
+                        <span>{formatBytes(arquivo.size)}</span>
+                        <span className="text-slate-300">•</span>
+                        <time dateTime={new Date(arquivo.uploadDate).toISOString()}>
+                          {new Date(arquivo.uploadDate).toLocaleString('pt-BR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </time>
+                      </div>
+                    </div>
+
+                    {/* Botão de Download */}
+                    <a
+                      href={arquivo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Baixar arquivo"
+                      // Nota: Mantive um estilo padrão. Se quiser usar sua cor de tema, 
+                      // pode voltar a usar `text-[${theme.colors.primary}]` aqui.
+                      className="p-2 rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-colors duration-200"
+                    >
+                      <Download className="w-5 h-5" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        }
       </div>
 
       {/* Seção de Tópicos (Inlined) */}
