@@ -1,5 +1,5 @@
 import { pathToRegexp } from "path-to-regexp";
-import getUserIdServerSide from "./getUserIdServerSide";
+// import getUserIdServerSide from "./getUserIdServerSide";
 
 // Objeto para permissões de rotas de API (ex: /api/trabalhos/:id)
 const permittedRoutesApi: { [key: string]: string[] } = {
