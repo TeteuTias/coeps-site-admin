@@ -14,12 +14,9 @@ const permittedRoutesApi: { [key: string]: string[] } = {
 // Objeto para permissões de páginas (rotas visíveis no navegador)
 const permittedRoutes: { [key: string]: string[] } = {
     "68f18c51d3440d3001fc4ddc": [ // ID da conta Científica
-        /*
         '/',
         '/trabalhos', // Acesso a rotas específicas e dinâmicas
         '/usuarios/informacoes/:id'
-        */
-        "*",
     ],
     "67098341f7397b370e9cb8ba": [ // id do admin
         "*"
