@@ -39,6 +39,7 @@ export default async function checkUserPermission(url: URL, type: 'page' | 'api'
     // 3. Verifica se o usuário existe na lista de permissões. Se não, acesso negado.
     //
     if (!permissionRules.hasOwnProperty(`${userIdStr}`)) {
+        console.log(userIdStr)
         return false;
     }
 
