@@ -4,12 +4,7 @@ import getUserIdServerSide from "./getUserIdServerSide";
 // Objeto para permissões de rotas de API (ex: /api/trabalhos/:id)
 const permittedRoutesApi: { [key: string]: string[] } = {
     "68f18c51d3440d3001fc4ddc": [ // ID da conta Científica
-        '/api/get/*path',
-        '/api/auth0/*path',
-        '/api/post/avaliar-trabalho',
-        '/api/post/avaliar-trabalho-dados',
-        '/api/post/avaliar-trabalho-dados/upload-trabalho'
-
+        '*'
     ],
     "67098341f7397b370e9cb8ba": [ // ID do adm
         '*' // Acesso a todas as APIs
