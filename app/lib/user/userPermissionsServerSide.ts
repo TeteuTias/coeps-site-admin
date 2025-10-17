@@ -37,9 +37,9 @@ export default async function checkUserPermission(url: URL, type: 'page' | 'api'
     const permissionRules = type === 'page' ? permittedRoutes : permittedRoutesApi;
 
     // 3. Verifica se o usuário existe na lista de permissões. Se não, acesso negado.
-    // acho que o problema pode ser esse, vou fazer algo polêmico: se não conhece, ele vai permitir. Acho que isso vai permitir o vercel a acessar o que necessita.
+    //
     if (!permissionRules.hasOwnProperty(`${userIdStr}`)) {
-        return true;
+        return false;
     }
 
     // 4. Pega a lista de padrões de rotas permitidas para o usuário.
