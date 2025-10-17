@@ -10,7 +10,8 @@ import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
 export const middleware = withMiddlewareAuthRequired(async (req) => {
   const url = new URL(req.url)
   const res = NextResponse
-  const canUserAccess = await checkUserPermission(url, url.toString().includes("/api/") ? "api" : "page")
+  //const canUserAccess = await checkUserPermission(url, url.toString().includes("/api/") ? "api" : "page")
+  /*
   if (!canUserAccess) {
     // 1. Get the original request's URL as a base
     const url = req.nextUrl.clone();
@@ -19,6 +20,7 @@ export const middleware = withMiddlewareAuthRequired(async (req) => {
     // 3. Rewrite to the new, absolute URL
     return NextResponse.rewrite(url);
   }
+    */
   return res.next()
 
 
