@@ -2,11 +2,10 @@
 import { useEffect, useMemo, useState } from "react"
 import LoadingModal from "../components/LoadingModal"
 import { IUser } from "../lib/types/user/user.t"
-import Link from "next/link"
-import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, Clapperboard, ExternalLink, List, FileText, Search, SearchX, Filter, FilterX, CalendarDays, Users, Loader2 } from "lucide-react"
-import { IPayment } from "../lib/types/payments/payment.t"
+import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import './style.css'
+import QrCodeUserSearch from "../components/QrCodeUserSearch"
 
 export default function Page() {
     const [loading, setLoading] = useState<boolean>(true)
@@ -197,14 +196,16 @@ export default function Page() {
                         </div>
                     </div>
 
-                    <div className="usuarios-filtros-actions">
+                    <div className="w-full flex justify-between items-center content-center">
                         <button onClick={handleResetFilters} className="usuarios-btn usuarios-btn-secondary">
                             <FilterX className="h-5 w-5" />
                             Limpar Filtros
                         </button>
                     </div>
                 </div>
-
+                <div className="pb-5">
+                    <QrCodeUserSearch titleText={"Pesquisa por QrCode"}/>
+                </div>
                 {/* Lista de Usuários */}
                 {filteredUsers.length > 0 && (
                     <>
