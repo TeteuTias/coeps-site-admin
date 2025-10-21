@@ -1,4 +1,5 @@
 'use client'
+import * as XLSX from 'xlsx';
 import dynamic from 'next/dynamic';
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import 'react-quill/dist/quill.snow.css';
@@ -107,6 +108,40 @@ export default function AvaliarTrabalhoPage() {
     }
   }, []);
 
+  const downloadInfos = async () => {
+    setIsLoading(true)
+    // A. Converte os dados JSON em uma 'worksheet' (planilha)
+    const newData: {
+      "ID TRABALHO": string,
+      "TITULO": string,
+      "AUTOR PRINCIPAL": string,
+      "TELEFONE": string,
+      "E-MAIL": string,
+    }[] = trabalhos.map((trabalho) => {
+      const donoTrabalho = users.find((u) => `${u._id}` === `${trabalho.userId}`)?.informacoes_usuario
+      return {
+        "ID TRABALHO": `${trabalho._id}`,
+        "TITULO": `${trabalho.titulo}`,
+        "AUTOR PRINCIPAL": donoTrabalho?.nome || "NÃO ENCONTRADO",
+        "TELEFONE": donoTrabalho?.numero_telefone || "NÃO ENCONTRADO",
+        "E-MAIL": donoTrabalho?.email || "NÃO ENCONTRADO"
+      }
+    }
+    )
+    const worksheet = XLSX.utils.json_to_sheet(newData);
+
+    // B. Cria um novo 'workbook' (livro de trabalho/arquivo Excel)
+    const workbook = XLSX.utils.book_new();
+
+    // C. Adiciona a worksheet ao workbook
+    // O segundo argumento ('Dados') é o nome da aba da planilha
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados');
+
+    // D. Escreve o arquivo no formato binário (necessário para o download)
+    XLSX.writeFile(workbook, "Trabalhos.xlsx");
+    setIsLoading(false)
+  }
+
   useEffect(() => {
     hydrateData();
   }, [hydrateData]);
@@ -199,7 +234,13 @@ export default function AvaliarTrabalhoPage() {
             </div>
           </div>
         )}
-
+        <div className='w-full py-10 flex justify-center'>
+          <button className='px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50'
+            onClick={() => downloadInfos()}
+          >
+            Baixar Informações
+          </button>
+        </div>
         <div className="space-y-8 ">
           <div
             className={`
