@@ -3,6 +3,9 @@ import { pathToRegexp } from "path-to-regexp";
 
 // Objeto para permissões de rotas de API (ex: /api/trabalhos/:id)
 const permittedRoutesApi: { [key: string]: string[] } = {
+    "68f77d798b5a848b5c9e5e04": [ // ID da conta Certificados
+        "*",
+    ],
     "68f18c51d3440d3001fc4ddc": [ // ID da conta Científica
         '*'
     ],
@@ -13,6 +16,9 @@ const permittedRoutesApi: { [key: string]: string[] } = {
 
 // Objeto para permissões de páginas (rotas visíveis no navegador)
 const permittedRoutes: { [key: string]: string[] } = {
+    "68f77d798b5a848b5c9e5e04": [ // ID da conta Certificados
+        "/",
+    ],
     "68f18c51d3440d3001fc4ddc": [ // ID da conta Científica
         '/',
         '/trabalhos', // Acesso a rotas específicas e dinâmicas
