@@ -782,19 +782,21 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
 };
 
 function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: string[], presentes: string[], todosUsuarios: Usuario[] }) {
-    const data = presentes.map(usuarioId => {
-        const usuario = todosUsuarios.find(u => u._id === usuarioId);
-        return {
-            NOME: usuario?.informacoes_usuario.nome,
-            CPF: usuario?.informacoes_usuario.cpf,
-            EMAIL: usuario?.informacoes_usuario.email,
-        };
-    });
+    const data = presentes
+        // 1. FILTRA: Mantém apenas os IDs que correspondem a um usuário existente
+        .map(usuarioId => todosUsuarios.find(u => u._id === usuarioId))
+        .filter(usuario => usuario !== undefined) // Remove todos os 'undefined'
+
+        // 2. MAP: Transforma os objetos de usuário encontrados no formato de planilha
+        .map(usuario => ({ //
+            NOME: usuario!.informacoes_usuario.nome,
+            CPF: usuario!.informacoes_usuario.cpf,
+            EMAIL: usuario!.informacoes_usuario.email,
+        }));
 
     const handleDownload = () => {
         // 1. Crie uma nova planilha a partir dos seus dados JSON
         const worksheet = XLSX.utils.json_to_sheet(data);
-
         // 2. Crie um novo livro (workbook) e adicione a planilha a ele
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados'); // "Dados" é o nome da aba da planilha
@@ -807,6 +809,18 @@ function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: stri
             { wch: 10 }, // Coluna "estoque" com 10
         ];
 
+        // 4. 
+
+        if (worksheet['!ref']) {
+            // Pega o range atual (por exemplo, "A1:C10")
+            const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+            // Define o novo final da linha como o número total de dados + 1 (para o cabeçalho)
+            range.e.r = data.length; // 'e.r' é o índice da última linha (base 0)
+
+            // Codifica o novo range de volta para o formato A1:C10 e aplica à planilha
+            worksheet['!ref'] = XLSX.utils.encode_range(range);
+        }
         // 4. Gere o arquivo e acione o download
         XLSX.writeFile(workbook, 'MinhaPlanilha.xlsx');
     };
