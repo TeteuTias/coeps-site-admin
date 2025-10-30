@@ -461,7 +461,7 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
                                     <FileText className="h-4 w-4 mr-2" />
                                     <span>Nome do Evento:</span>
                                 </p>
-                                <p className="text-gray-800 text-right">{event.name}</p>
+                                <p className="text-gray-800 text-right">{event?.name || "Não encontrado"}</p>
                             </div>
                             <div className="flex justify-between items-center">
                                 <p className="flex items-center text-gray-500 font-medium">
@@ -469,7 +469,7 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
                                     <Tag className="h-4 w-4 mr-2" />
                                     <span>Tipo:</span>
                                 </p>
-                                <p className="text-gray-800">{event.type}</p>
+                                <p className="text-gray-800">{event?.type || "Não encontrado"}</p>
                             </div>
                             <div className="flex justify-between items-center">
                                 <p className="flex items-center text-gray-500 font-medium">
@@ -477,7 +477,7 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
                                     <Hash className="h-4 w-4 mr-2" />
                                     <span>ID do Evento:</span>
                                 </p>
-                                <p className="font-mono text-xs bg-gray-100 p-1 rounded">{event._id}</p>
+                                <p className="font-mono text-xs bg-gray-100 p-1 rounded">{event?._id || "Não encontrado"}</p>
                             </div>
                         </div>
                     </div>
