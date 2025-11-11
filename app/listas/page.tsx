@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import './style.css';
 import { Users, ListChecks, UserPlus, UserMinus, ClipboardList, Loader2 } from 'lucide-react';
-import { ICourse } from '../lib/types/events/event.t';
+import { ICourse, ILecture } from '../lib/types/events/event.t';
 import { useMemo } from 'react';
 
 
@@ -23,6 +23,7 @@ const MyComponent = () => {
   const [search, setSearch] = useState("");
 
   //
+  const [dataLecture, setDataLecture] = useState<ILecture[]>([])
   const [searchTerm, setSearchTerm] = useState('');
   const [filterIsOpen, setFilterIsOpen] = useState('all'); // 'all', 'true', 'false'
   const [filterIsFree, setFilterIsFree] = useState('all'); // 'all', 'true', 'false'
@@ -31,10 +32,17 @@ const MyComponent = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/get/listaMinicursos');
-        if (!response.ok) throw new Error('Erro na resposta da rede');
+
+        const [response, responsePalestras] = await Promise.all([
+          await fetch('/api/get/listaMinicursos'),
+          await fetch('/api/get/listaPalestras')
+        ])
+
+        if (!response.ok || !responsePalestras.ok) throw new Error('Erro na resposta da rede');
         const result: { data: ICourse[] } = await response.json();
+        const result2: { data: ILecture[] } = await responsePalestras.json()
         setData(result);
+        setDataLecture(result2.data);
       } catch (error) {
         setError("OCORREU ALGO ERRADO. RECARREGUE");
       } finally {
@@ -45,7 +53,7 @@ const MyComponent = () => {
   }, []);
 
   // Função para filtrar minicursos por nome ou ID
-  const filterMinicurso = (minicurso: ICourse) => {
+  const filterMinicurso = (minicurso: ICourse | ILecture) => {
     const nome = minicurso.name?.toLowerCase() || "";
     const id = minicurso._id?.toLowerCase() || "";
     const termo = search.toLowerCase();
@@ -61,7 +69,7 @@ const MyComponent = () => {
         backgroundRepeat: 'no-repeat'
       }}>
         <div className="listas-spinner"><Loader2 size={48} className="animate-spin" /></div>
-        <span className="listas-loading-text">Carregando minicursos...</span>
+        <span className="listas-loading-text">Carregando...</span>
       </div>
     );
   }
@@ -75,12 +83,12 @@ const MyComponent = () => {
       backgroundSize: 'cover',
       backgroundRepeat: 'no-repeat'
     }}>
-      <h1 className="listas-title">MINICURSOS E PARTICIPANTES</h1>
+      <h1 className="listas-title">PROGRAMAÇÃO</h1>
       <div className="listas-estatisticas">
         <div className="listas-estatistica-card">
           <ClipboardList size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
           <span className="listas-estatistica-valor">{data.data.length}</span>
-          <span className="listas-estatistica-label">Total de Minicursos</span>
+          <span className="listas-estatistica-label">Total</span>
         </div>
         <div className="listas-estatistica-card">
           <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
@@ -92,7 +100,7 @@ const MyComponent = () => {
         <input
           type="text"
           className="listas-busca"
-          placeholder="Buscar por nome ou ID do minicurso..."
+          placeholder="Buscar por nome ou ID da atividade..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -100,6 +108,11 @@ const MyComponent = () => {
       <div className="listas-lista">
         {data.data.filter(filterMinicurso).map((value, idx) => (
           <div className="listas-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }} key={value._id}>
+            <div className="listas-card-estatisticas">
+              <div className="listas-card-estatistica">
+                <p>{value.type}</p>
+              </div>
+            </div>
             <div className="listas-card-header">
               <h2 className="listas-nome">{value.name}</h2>
               <span className="listas-id">ID: {value._id}</span>
@@ -111,6 +124,25 @@ const MyComponent = () => {
             </div>
             <div className="listas-card-actions">
               <Link target='_blank' href={`/gerarListaMinicurso/${value._id}`} prefetch={false} className='listas-link'>GERAR LISTA</Link>
+            </div>
+          </div>
+        ))}
+        {dataLecture.filter(filterMinicurso).map((value, idx) => (
+          <div className="listas-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }} key={value._id}>
+            <div className="listas-card-estatisticas">
+              <div className="listas-card-estatistica">
+                <p>{value.type}</p>
+              </div>
+            </div>
+            <div className="listas-card-header">
+              <h2 className="listas-nome">{value.name}</h2>
+              <span className="listas-id">ID: {value._id}</span>
+            </div>
+            <div className="listas-card-estatisticas">
+              <div className="listas-card-estatistica"><ListChecks size={18} />TODOS SÃO INSCRITOS</div>
+            </div>
+            <div className="listas-card-actions">
+              <Link target='_blank' href={`/gerarListaPalestras/`} prefetch={false} className='listas-link'>GERAR LISTA</Link>
             </div>
           </div>
         ))}

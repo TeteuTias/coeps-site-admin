@@ -51,6 +51,8 @@ export interface ILecture { // considere como PALESTRAS
     "type": string, //"TODOS", existe um tipo certo ??
     "organization_name": string,
     "emoji": string,
+    attendanceListInit: string[],
+    attendanceListEnd: string[],
     "_nSerie"?: string & { readonly __brand: 'ObjectId' }, // isso daqui é muito mais para controle próprio, quando eu estava lançando com python marcava todos com nSerie para poder apagar/modificar se tivesse lançado errado!!!
     "isCertifiable": boolean
 }

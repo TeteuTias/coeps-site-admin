@@ -111,7 +111,7 @@ export default function Page() {
         setConfirmationModalProps({
             title: "Atenção!",
             isOpen: true,
-            children: <p>Você está prestes a <span className="font-extrabold text-red-600">deletar permanentemente</span> o minicurso <span className="font-extrabold text-red-600">{course.name}</span>. Ao fazer isso, você <span className="font-extrabold text-red-600">perderá permanentemente</span> o acesso a lista de presença bem como qualquer outra informação do minicurso. Deseja mesmo continuar?</p>,
+            children: <p>Você está prestes a <span className="font-extrabold text-red-600">deletar permanentemente</span> a Atividade <span className="font-extrabold text-red-600">{course.name}</span>. Ao fazer isso, você <span className="font-extrabold text-red-600">perderá permanentemente</span> o acesso a lista de presença bem como qualquer outra informação da atividade. Deseja mesmo continuar?</p>,
             onClose: () => { setConfirmationModalProps((prev) => ({ ...prev, isOpen: false })) },
             onConfirm: () => {
                 deleteCourse()
@@ -143,7 +143,7 @@ export default function Page() {
             <div className="w-full space-y-5 px-10">
                 <div className="w-full flex items-center justify-center">
                     <button className="gm-create-btn" onClick={() => { setCreateCourseModal(true) }}>
-                        CRIAR NOVO MINICURSO
+                        CRIAR NOVA ATIVIDADE
                     </button>
                 </div>
                 {/* --- PAINEL DE BUSCA E FILTROS --- */}
@@ -155,7 +155,7 @@ export default function Page() {
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                     <Search className="h-5 w-5 text-gray-400" />
                                 </div>
-                                <input id="search" type="text" placeholder="Buscar por nome ou ID do minicurso..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full rounded-md pl-10 shadow-sm sm:text-sm p-2.5" />
+                                <input id="search" type="text" placeholder="Buscar por nome ou ID da atividade..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full rounded-md pl-10 shadow-sm sm:text-sm p-2.5" />
                             </div>
                         </div>
                         {/* Filtro showToUser */}
@@ -252,7 +252,7 @@ export default function Page() {
                         </div>
                     ) : (
                         <div className="text-center py-16">
-                            <p className="text-lg font-medium text-gray-700">Nenhum minicurso encontrado</p>
+                            <p className="text-lg font-medium text-gray-700">Nenhuma atividade encontrada</p>
                             <p className="text-sm text-gray-500 mt-1">Tente ajustar os filtros ou o termo de busca.</p>
                         </div>
                     )

@@ -3,28 +3,10 @@ import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import './style.css';
 import { Users, ClipboardList, UserPlus, UserMinus, CheckCircle, Loader2 } from 'lucide-react';
-
-interface Document {
-  _id: string;
-  name: string;
-  url: string;
-  userId: string;
-}
-
-interface User {
-  _id: string;
-  informacoes_usuario: {
-    cpf: string;
-    numero_telefone: string;
-    nome: string;
-    email: string;
-    data_criacao: string;
-    titulo_honorario: string;
-  };
-}
+import { ICourse, ILecture } from '../lib/types/events/event.t';
 
 interface DataStructure {
-  data: Usuario[];
+  data: ICourse[];
 }
 
 interface Usuario {
@@ -36,6 +18,7 @@ interface Usuario {
 }
 
 const MyComponent = () => {
+  const [dataLecture, setDataLecture] = useState<ILecture[]>([])
   const [data, setData] = useState<DataStructure>({
     data: [],
   });
@@ -46,11 +29,16 @@ const MyComponent = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/get/listaMinicursos');
-        if (!response.ok) {
+        const [response, response2] = await Promise.all([
+          await fetch('/api/get/listaMinicursos'),
+          await fetch('/api/get/listaPalestras')
+        ])
+        if (!response.ok || !response2.ok) {
           throw new Error('Erro na resposta da rede');
         }
+        const result2: { data: ILecture[] } = await response2.json()
         const result = await response.json();
+        setDataLecture(result2.data)
         setData(result);
       } catch (error) {
         setError("OCORREU ALGO ERRADO. RECARREGUE");
@@ -63,7 +51,7 @@ const MyComponent = () => {
   }, []);
 
   // Função para filtrar minicursos por nome ou ID
-  const filterMinicurso = (minicurso: Usuario) => {
+  const filterMinicurso = (minicurso: ICourse | ILecture) => {
     const nome = minicurso.name?.toLowerCase() || "";
     const id = minicurso._id?.toLowerCase() || "";
     const termo = search.toLowerCase();
@@ -98,12 +86,12 @@ const MyComponent = () => {
       <h1 className="presenca-title">LISTA DE PRESENÇA</h1>
       <div className="presenca-estatisticas">
         <div className="presenca-estatistica-card">
-          <ClipboardList size={32} style={{marginBottom: '0.3rem', color: 'var(--azul)'}} />
+          <ClipboardList size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
           <span className="presenca-estatistica-valor">{data.data.length}</span>
           <span className="presenca-estatistica-label">Total de Minicursos</span>
         </div>
         <div className="presenca-estatistica-card">
-          <Users size={32} style={{marginBottom: '0.3rem', color: 'var(--carmin)'}} />
+          <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
           <span className="presenca-estatistica-valor">{data.data.reduce((acc, cur) => acc + cur.participants.length, 0)}</span>
           <span className="presenca-estatistica-label">Total de Inscritos</span>
         </div>
@@ -120,6 +108,7 @@ const MyComponent = () => {
       <div className="presenca-lista">
         {data.data.filter(filterMinicurso).map((value, idx) => (
           <div className="presenca-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }} key={value._id}>
+            <div className="presenca-card-estatistica w-fit">{value.type}</div>
             <div className="presenca-card-header">
               <h2 className="presenca-nome">{value.name}</h2>
               <span className="presenca-id">ID: {value._id}</span>
@@ -131,6 +120,21 @@ const MyComponent = () => {
             </div>
             <div className="presenca-card-actions">
               <Link target='_blank' href={`/presenca/gerarListaMinicursoPresenca/${value._id}`} prefetch={false} className='presenca-link'>GERAR LISTA DE PRESENÇA</Link>
+            </div>
+          </div>
+        ))}
+        {dataLecture.filter(filterMinicurso).map((value, idx) => (
+          <div className="presenca-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }} key={value._id}>
+            <div className="presenca-card-estatistica w-fit">{value.type}</div>
+            <div className="presenca-card-header">
+              <h2 className="presenca-nome">{value.name}</h2>
+              <span className="presenca-id">ID: {value._id}</span>
+            </div>
+            <div className="presenca-card-estatisticas">
+              <div className="presenca-card-estatistica"><CheckCircle size={18} />TODOS SÃO INSCRITOS</div>
+            </div>
+            <div className="presenca-card-actions">
+              <Link target='_blank' href={`/presenca/gerarListaPalestraPresenca/${value._id}`} prefetch={false} className='presenca-link'>GERAR LISTA DE PRESENÇA</Link>
             </div>
           </div>
         ))}

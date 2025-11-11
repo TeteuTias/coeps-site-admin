@@ -57,7 +57,7 @@ function PaginaAreaDoCliente() {
           <div className="card-icon">
             <Settings size={48} />
           </div>
-          <h2 className="card-title">Gerenciar Minicursos</h2>
+          <h2 className="card-title">Gerenciar Atividades</h2>
         </Link>
       </div>
     </>
