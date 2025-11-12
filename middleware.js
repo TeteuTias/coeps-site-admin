@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withMiddlewareAuthRequired, getSession } from '@auth0/nextjs-auth0/edge';
 import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
+import { redirect } from 'next/navigation';
 //
 //
 //
@@ -14,8 +15,12 @@ export const middleware = withMiddlewareAuthRequired(async (req) => {
   if (url.toString().includes("/api/auth")) {
     return res.next()
   }
-  const canUserAccess = await checkUserPermission(url, url.toString().includes("/api/") ? "api" : "page", session.user.sub.replace("auth0|", ""))
+  const typeConnc = url.toString().includes("/api/") ? "api" : "page"
+  const canUserAccess = await checkUserPermission(url, typeConnc, session.user.sub.replace("auth0|", ""))
   if (!canUserAccess) {
+    if (typeConnc === "api") {
+      return redirect("/not-allowed")
+    }
     // 1. Get the original request's URL as a base
     const url = req.nextUrl.clone();
     // 2. Set the new path
