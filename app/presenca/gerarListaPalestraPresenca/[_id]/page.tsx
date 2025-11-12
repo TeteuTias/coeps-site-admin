@@ -223,13 +223,17 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             </div>
             <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
             <div className="presenca-lista-actions mt-4">
-                <button
-                    onClick={() => setIsOpenAllUsers(true)}
-                    className="presenca-lista-btn presenca-lista-btn-primary"
-                >
-                    <UserPlus size={18} />
-                    Adicionar Usuário
-                </button>
+                {/*
+
+                    <button
+                        onClick={() => setIsOpenAllUsers(true)}
+                        className="presenca-lista-btn presenca-lista-btn-primary"
+                    >
+
+                        <UserPlus size={18} />
+                        Adicionar Usuário
+                    </button>
+                */}
                 <ExportButton inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
             </div>
             <button
