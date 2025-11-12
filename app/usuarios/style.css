@@ -10,6 +10,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .usuarios-title {
@@ -26,7 +30,14 @@
   background-clip: unset;
   filter: none;
   position: relative;
-  padding-bottom: 0.5rem;
+  padding: 0 1rem 0.5rem 1rem;
+  width: 100%;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.2;
+  box-sizing: border-box;
 }
 
 .usuarios-title::after {
@@ -103,6 +114,8 @@
   padding: 2rem;
   margin-bottom: 2rem;
   box-shadow: 0 8px 32px rgba(27, 48, 95, 0.18), 0 1.5px 8px rgba(84, 26, 44, 0.10);
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .usuarios-filtros-grid {
@@ -110,6 +123,9 @@
   grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 1.5rem;
   margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .usuarios-filtro-busca {
@@ -153,6 +169,10 @@
   font-weight: 500;
   outline: none;
   transition: all 0.2s ease;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  word-wrap: break-word;
 }
 
 .usuarios-input:focus {
@@ -172,6 +192,9 @@
   outline: none;
   transition: all 0.2s ease;
   cursor: pointer;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .usuarios-select:focus {
@@ -250,7 +273,9 @@
   max-width: 1400px;
   max-height: 750px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 1rem;
+  box-sizing: border-box;
 }
 
 .usuarios-card {
@@ -264,6 +289,12 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .usuarios-card:hover {
@@ -300,9 +331,10 @@
   font-weight: 700;
   color: var(--cinza);
   margin-bottom: 0.3rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.3;
 }
 
 .usuarios-user-email {
@@ -312,9 +344,10 @@
   font-size: 0.95rem;
   color: var(--cinza);
   opacity: 0.8;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-all;
+  flex-wrap: wrap;
 }
 
 .usuarios-card-content {
@@ -339,7 +372,10 @@
 .usuarios-info-value {
   font-weight: 500;
   opacity: 0.9;
-  word-break: break-all;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  max-width: 100%;
 }
 
 .usuarios-card-payment {
@@ -498,7 +534,7 @@
 
 @media (max-width: 900px) {
   .usuarios-main-container {
-    padding: 4rem 0.2rem 1.2rem 0.2rem;
+    padding: 5rem 0.2rem 1.2rem 0.2rem;
   }
   .usuarios-filtros {
     max-width: 100vw;
@@ -536,7 +572,7 @@
 
 @media (max-width: 700px) {
   .usuarios-main-container {
-    padding: 3.5rem 0.1rem 0.7rem 0.1rem;
+    padding: 4.5rem 0.1rem 0.7rem 0.1rem;
   }
   .usuarios-title {
     font-size: 1.3rem;
@@ -585,7 +621,7 @@
     box-sizing: border-box;
   }
   .usuarios-main-container {
-    padding: 3rem 0 0.2rem 0;
+    padding: 4.5rem 0 0.2rem 0;
     min-width: 100vw;
     width: 100vw;
     box-sizing: border-box;

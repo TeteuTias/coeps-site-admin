@@ -704,71 +704,56 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     });
 
     return (
-        // Container principal que cobre a tela inteira
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop para fechar o modal */}
-            <div className="absolute inset-0 bg-black bg-opacity-60" onClick={onClose}></div>
-
-            {/* Dialog do Modal */}
-            <div className="relative z-10 flex h-full max-h-[85vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl">
-                {/* Cabeçalho do Modal */}
-                <div className="flex items-center justify-between border-b p-4">
-                    <h1 className="text-xl font-bold text-gray-800 w-full text-center">Escolha um Congressista</h1>
-                    <button onClick={onClose} className="rounded-full p-2 text-gray-500 hover:bg-gray-100" aria-label="Fechar modal">
+        <div className="all-users-modal-overlay">
+            <div className="all-users-modal-backdrop" onClick={onClose}></div>
+            <div className="all-users-modal-container">
+                <div className="all-users-modal-header">
+                    <h1 className="all-users-modal-title">Escolha um Congressista</h1>
+                    <button onClick={onClose} className="all-users-modal-close-btn" aria-label="Fechar modal">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
-
-                <div className="border-b p-4 text-center">
-                    <h2>Pesquisar Congressista</h2>
+                <div className="all-users-modal-search-section">
+                    <h2 className="all-users-modal-search-title">Pesquisar Congressista</h2>
                     <input
                         type="text"
                         placeholder="Filtrar por nome ou e-mail..."
-                        className="w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:ring-blue-500"
+                        className="all-users-modal-search-input"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-
-                {/* Corpo rolável com a lista de usuários */}
-                <div className="flex-grow overflow-y-auto p-4">
-                    {
-                        <p className='w-full text-center font-extrabold text-red-800 py-3'>{!(courseData.participants.length + 1 >= courseData.maxParticipants) && `Atenção, o evento já atingiu seu limite máximo`}</p>
-                    }
-                    <div className="flex flex-col items-center justify-center content-center space-y-4 w-full">
+                <div className="all-users-modal-body">
+                    {courseData.participants.length >= courseData.maxParticipants && (
+                        <p className="all-users-modal-warning">Atenção, o evento já atingiu seu limite máximo</p>
+                    )}
+                    <div className="all-users-modal-list">
                         {filteredUsers.map((user) => (
-                            // Envolvemos o card em um botão para torná-lo clicável
                             <button
                                 key={user._id}
                                 onClick={() => onUserSelect(user._id)}
-                                className="w-full text-left transition duration-200 hover:scale-[1.02]"
+                                className="all-users-modal-user-button"
                             >
-                                <div className="w-full max-w-lg rounded-lg border border-gray-200 bg-white p-6 shadow-lg">
-                                    <div className="flex items-center space-x-4">
-                                        <div className="flex-shrink-0">
-                                            <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-blue-600">
+                                <div className="all-users-modal-user-card">
+                                    <div className="all-users-modal-user-content">
+                                        <div className="all-users-modal-user-avatar">
+                                            <span className="all-users-modal-avatar-text">
                                                 {user.informacoes_usuario.nome.charAt(0)}
                                             </span>
                                         </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div>
-                                                <p className='text-[11px] bg-orange-500 w-fit px-1 font-extrabold text-white'>
-                                                    {courseData.participants.includes(`${user._id}`) ? "Já inscrito no minicurso" : ""}
-                                                </p>
-                                            </div>
-                                            <p className="truncate text-xl font-bold text-gray-800">
+                                        <div className="all-users-modal-user-info">
+                                            {courseData.participants.includes(`${user._id}`) && (
+                                                <p className="all-users-modal-badge">Já inscrito no minicurso</p>
+                                            )}
+                                            <p className="all-users-modal-user-name">
                                                 {user.informacoes_usuario.titulo_honorario} {user.informacoes_usuario.nome}
                                             </p>
-                                            <p className="truncate text-sm text-gray-500">{user.informacoes_usuario.email}</p>
-                                            <div>
-                                                <p className='text-[12px] font-semibold' style={{
-                                                    color: user.pagamento.situacao == 1 ? "blue" : "red"
-                                                }}>{
-                                                        user.pagamento.situacao == 1 ?
-                                                            "" : "Não inscrito no congresso"
-
-                                                    }</p>
-                                            </div>
+                                            <p className="all-users-modal-user-email">{user.informacoes_usuario.email}</p>
+                                            {user.pagamento.situacao != 1 && (
+                                                <p className="all-users-modal-payment-status" style={{ color: "red" }}>
+                                                    Não inscrito no congresso
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

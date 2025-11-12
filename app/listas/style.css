@@ -10,6 +10,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .listas-title {
@@ -26,7 +30,14 @@
   background-clip: unset;
   filter: none;
   position: relative;
-  padding-bottom: 0.5rem;
+  padding: 0 1rem 0.5rem 1rem;
+  width: 100%;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.2;
+  box-sizing: border-box;
 }
 
 .listas-title::after {
@@ -135,6 +146,10 @@
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .listas-card:hover {
@@ -161,6 +176,10 @@
   padding-left: 0.7rem;
   background: rgba(27, 48, 95, 0.08);
   border-radius: 6px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.3;
 }
 
 .listas-id {
@@ -306,7 +325,7 @@
 
 @media (max-width: 900px) {
   .listas-main-container {
-    padding: 4rem 0.2rem 1.2rem 0.2rem;
+    padding: 5rem 0.2rem 1.2rem 0.2rem;
   }
   .listas-lista {
     max-width: 100vw;
@@ -320,7 +339,7 @@
 
 @media (max-width: 700px) {
   .listas-main-container {
-    padding: 3.5rem 0.1rem 0.7rem 0.1rem;
+    padding: 4.5rem 0.1rem 0.7rem 0.1rem;
   }
   .listas-title {
     font-size: 1.3rem;
@@ -370,7 +389,7 @@
     box-sizing: border-box;
   }
   .listas-main-container {
-    padding: 3rem 0 0.2rem 0;
+    padding: 4.5rem 0 0.2rem 0;
     min-width: 100vw;
     width: 100vw;
     box-sizing: border-box;
