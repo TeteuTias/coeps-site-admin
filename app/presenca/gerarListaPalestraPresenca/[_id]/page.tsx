@@ -256,7 +256,9 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                             <th>Nome</th>
                             <th>Email</th>
                             <th>Status</th>
+                            {/*
                             <th>Ações</th>
+                            */}
                         </tr>
                     </thead>
                     <tbody>
@@ -308,6 +310,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                         {dataPresentes[listType].includes(`${item._id}`) ? "PRESENTE" : "AUSENTE"}
                                     </span>
                                 </td>
+                                {/*
                                 <td className="presenca-lista-acoes">
                                     <button
                                         className={`presenca-lista-btn ${dataPresentes[listType].includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
@@ -357,6 +360,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                         {dataPresentes[listType].includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
                                     </button>
                                 </td>
+                                */}
                             </tr>
                         ))}
                     </tbody>
