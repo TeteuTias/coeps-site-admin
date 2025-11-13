@@ -673,6 +673,68 @@ const ModalUserFound: React.FC<{ courseData: ILecture, qrCodeResult: string, clo
                             >
                                 Dar Presença - Fim
                             </button>
+                            {/* ====== */}
+                            <button
+                                onClick={
+                                    async () => {
+                                        setIsLoading(true)
+                                        const response = await fetch(`/api/post/retirarPresencaPalestra`, {
+                                            method: "POST",
+                                            headers: {
+                                                "Content-Type": "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                                eventId: courseData._id,
+                                                listType: "init",
+                                                userId: qrCodeResult,
+                                            }),
+                                        });
+                                        if (!response.ok) {
+                                            setIsLoading(false)
+                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                            return;
+                                        }
+                                        await hydrateData()
+                                        setIsLoading(false)
+                                        alert("Presença retirada com sucesso.")
+                                        closeModal()
+
+                                    }
+                                }
+                                className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                            >
+                                Retirar Presença - Início
+                            </button>
+                            <button
+                                onClick={
+                                    async () => {
+                                        setIsLoading(true)
+                                        const response = await fetch(`/api/post/retirarPresencaPalestra`, {
+                                            method: "POST",
+                                            headers: {
+                                                "Content-Type": "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                                eventId: courseData._id,
+                                                listType: "end",
+                                                userId: qrCodeResult,
+                                            }),
+                                        });
+                                        if (!response.ok) {
+                                            setIsLoading(false)
+                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                            return;
+                                        }
+                                        await hydrateData()
+                                        setIsLoading(false)
+                                        alert("Presença retirada com sucesso.")
+                                        closeModal()
+                                    }
+                                }
+                                className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                            >
+                                Retirar Presença - Fim
+                            </button>
                             <button
                                 onClick={closeModal}
                                 className="w-fit px-4 w-lg py-3 bg-green-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
