@@ -9,6 +9,7 @@ import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModa
 import './style.css';
 import { Users, CheckCircle, XCircle, QrCode, UserPlus, Loader2, Calendar, Clock, Table, ListChecksIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { useUser } from '@auth0/nextjs-auth0/client';
 
 interface Usuario {
     _id: string,
@@ -23,6 +24,7 @@ interface Usuario {
 }
 
 const MyComponent = ({ params }: { params: { _id: string } }) => {
+    const user = useUser()
     const [data, setData] = useState<string[]>([]);
     const [listType, setListType] = useState<"init" | "end">("init")
     const [allUsers, setAllUsers] = useState<IUser[]>([])
@@ -182,7 +184,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         return <div className="text-red-500">{error}</div>;
     }
 
-    const presentes = dataPresentes.init.length + dataPresentes.end.length;
+    const presentes = dataPresentes[listType].length;
     const ausentes = data2.length - presentes;
 
     return (
@@ -202,12 +204,12 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                 <div className="presenca-lista-estatistica-card">
                     <CheckCircle size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
                     <span className="presenca-lista-estatistica-valor">{presentes}</span>
-                    <span className="presenca-lista-estatistica-label">Presentes</span>
+                    <span className="presenca-lista-estatistica-label">Presentes {listType === "init" ? "Início" : "Fim"}</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
                     <XCircle size={32} style={{ marginBottom: '0.3rem', color: '#ff6b6b' }} />
                     <span className="presenca-lista-estatistica-valor">{ausentes}</span>
-                    <span className="presenca-lista-estatistica-label">Ausentes</span>
+                    <span className="presenca-lista-estatistica-label">Ausentes {listType === "init" ? "Início" : "Fim"}</span>
                 </div>
             </div>
 
@@ -223,8 +225,8 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             </div>
             <QRCodeScanner courseData={courseData} hydrateData={hydrateData} listType={listType} />
             <div className="presenca-lista-actions mt-4">
-                {/*
-
+                {
+                    user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
                     <button
                         onClick={() => setIsOpenAllUsers(true)}
                         className="presenca-lista-btn presenca-lista-btn-primary"
@@ -233,7 +235,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                         <UserPlus size={18} />
                         Adicionar Usuário
                     </button>
-                */}
+                }
                 <ExportButton inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
             </div>
             <button
@@ -256,53 +258,17 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                             <th>Nome</th>
                             <th>Email</th>
                             <th>Status</th>
-                            {/*
-                            <th>Ações</th>
-                            */}
+                            {
+                                user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
+                                <th>Ações</th>
+                            }
                         </tr>
                     </thead>
                     <tbody>
                         {data2.map((item, index) => (
                             <tr key={index} className="presenca-lista-row">
                                 <td className="presenca-lista-nome">
-                                    <button
-                                        className="presenca-lista-remove-btn"
-                                        onClick={() => {
-                                            setIsModalProps(() => ({
-                                                isOpen: true,
-                                                onClose: () => {
-                                                    setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-                                                },
-                                                onConfirm: async () => {
-                                                    setLoading(true)
-                                                    const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
-                                                        method: "DELETE",
-                                                        body: JSON.stringify({
-                                                            eventId: params._id,
-                                                            userId: item._id,
-                                                        }),
-                                                    })
-                                                    if (!response.ok) {
-                                                        alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                    }
-                                                    await hydrateData()
-                                                    setLoading(false)
-                                                    setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-                                                },
-                                                title: "Atenção!",
-                                                children: (
-                                                    <>
-                                                        <p className='text-black'>Você está prestes a retirar a inscrição do usuário do minicurso. Essa opção <span className='font-extrabold text-red-500'>NÃO</span> estornará o valor ao congressista. Deseja mesmo continuar?</p>
-                                                    </>
-                                                ),
-                                                confirmText: "Continuar",
-                                                cancelText: "Fechar",
-                                            }))
-                                        }}
-                                    >
-                                        ×
-                                    </button>
-                                    <span>{index + 1}. {item.informacoes_usuario.nome}</span>
+                                    <span>{index + 1}. {item.informacoes_usuario.nome.toLocaleUpperCase()}</span>
                                 </td>
                                 <td className="presenca-lista-email">{item.informacoes_usuario.email}</td>
                                 <td className="presenca-lista-status">
@@ -310,15 +276,32 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                         {dataPresentes[listType].includes(`${item._id}`) ? "PRESENTE" : "AUSENTE"}
                                     </span>
                                 </td>
-                                {/*
-                                <td className="presenca-lista-acoes">
-                                    <button
-                                        className={`presenca-lista-btn ${dataPresentes[listType].includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
-                                        onClick={async () => {
-                                            setLoadingContent(true)
-                                            try {
-                                                if (dataPresentes[listType].includes(item._id)) {
-                                                    const response = await fetch(`/api/post/retirarPresencaPalestra`, {
+                                {
+                                    user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
+                                    <td className="presenca-lista-acoes">
+                                        <button
+                                            className={`presenca-lista-btn ${dataPresentes[listType].includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
+                                            onClick={async () => {
+                                                setLoadingContent(true)
+                                                try {
+                                                    if (dataPresentes[listType].includes(item._id)) {
+                                                        const response = await fetch(`/api/post/retirarPresencaPalestra`, {
+                                                            method: "POST",
+                                                            headers: {
+                                                                "Content-Type": "application/json",
+                                                            },
+                                                            body: JSON.stringify({
+                                                                eventId: params._id,
+                                                                userId: item._id,
+                                                                listType: listType,
+                                                            }),
+                                                        });
+                                                        if (response.ok) {
+                                                            await hydrateData()
+                                                        }
+                                                        return;
+                                                    }
+                                                    const response = await fetch(`/api/post/darPresencaPalestra`, {
                                                         method: "POST",
                                                         headers: {
                                                             "Content-Type": "application/json",
@@ -326,41 +309,25 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                         body: JSON.stringify({
                                                             eventId: params._id,
                                                             userId: item._id,
-                                                            listType: listType,
+                                                            listType: listType
                                                         }),
                                                     });
                                                     if (response.ok) {
                                                         await hydrateData()
                                                     }
-                                                    return;
                                                 }
-                                                const response = await fetch(`/api/post/darPresencaPalestra`, {
-                                                    method: "POST",
-                                                    headers: {
-                                                        "Content-Type": "application/json",
-                                                    },
-                                                    body: JSON.stringify({
-                                                        eventId: params._id,
-                                                        userId: item._id,
-                                                        listType: listType
-                                                    }),
-                                                });
-                                                if (response.ok) {
-                                                    await hydrateData()
+                                                catch {
+                                                    setErrorBolean(true)
                                                 }
-                                            }
-                                            catch {
-                                                setErrorBolean(true)
-                                            }
-                                            finally {
-                                                setLoadingContent(false)
-                                            }
-                                        }}
-                                    >
-                                        {dataPresentes[listType].includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
-                                    </button>
-                                </td>
-                                */}
+                                                finally {
+                                                    setLoadingContent(false)
+                                                }
+                                            }}
+                                        >
+                                            {dataPresentes[listType].includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
+                                        </button>
+                                    </td>
+                                }
                             </tr>
                         ))}
                     </tbody>
@@ -609,80 +576,94 @@ const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture,
                                         ""
                                 }
                                 {
-                                    listType === "init" && courseData.attendanceListInit?.includes(user?._id || "") && (
-                                        <p className="text-sm font-medium text-green-600 mt-2">Presença de início já foi registrada</p>
-                                    )
+                                    listType === "init" && courseData.attendanceListInit?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de início já foi registrada</p>
+
                                 }
                                 {
-                                    listType === "end" && courseData.attendanceListInit?.includes(user?._id || "") && (
-                                        <p className="text-sm font-medium text-green-600 mt-2">Presença de fim já foi registrada</p>
-                                    )
+                                    listType === "init" && !courseData.attendanceListInit?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de início NÃO foi registrada</p>
+                                }
+                                {
+                                    listType === "end" && courseData.attendanceListEnd?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de fim já foi registrada</p>
+                                }
+                                {
+                                    listType === "end" && !courseData.attendanceListEnd?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de fim NÃO foi registrada</p>
                                 }
                             </div>
                         </div>
                         <div className='flex flex-col items-center content-center justify-center space-y-1'>
-                            <button
-                                onClick={
-                                    async () => {
-                                        setIsLoading(true)
-                                        const response = await fetch(`/api/post/darPresencaPalestra`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                listType: listType,
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            setIsLoading(false)
-                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                            return;
-                                        }
-                                        await hydrateData()
-                                        setIsLoading(false)
-                                        alert("Presença adicionada com sucesso.")
-                                        closeModal()
+                            {
 
-                                    }
-                                }
-                                className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                            >
-                                Dar Presença - {listType === "init" ? "Início" : "Fim"}
-                            </button>
-                            <button
-                                onClick={
-                                    async () => {
-                                        setIsLoading(true)
-                                        const response = await fetch(`/api/post/retirarPresencaPalestra`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                listType: listType,
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            setIsLoading(false)
-                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                            return;
-                                        }
-                                        await hydrateData()
-                                        setIsLoading(false)
-                                        alert("Presença retirada com sucesso.")
-                                        closeModal()
+                                (listType === "init" && !courseData.attendanceListInit?.includes(user?._id || "")) || (listType === "end" && !courseData.attendanceListEnd?.includes(user?._id || "")) ?
+                                    <button
+                                        onClick={
+                                            async () => {
+                                                setIsLoading(true)
+                                                const response = await fetch(`/api/post/darPresencaPalestra`, {
+                                                    method: "POST",
+                                                    headers: {
+                                                        "Content-Type": "application/json",
+                                                    },
+                                                    body: JSON.stringify({
+                                                        eventId: courseData._id,
+                                                        listType: listType,
+                                                        userId: qrCodeResult,
+                                                    }),
+                                                });
+                                                if (!response.ok) {
+                                                    setIsLoading(false)
+                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                    return;
+                                                }
+                                                await hydrateData()
+                                                setIsLoading(false)
+                                                alert("Presença adicionada com sucesso.")
+                                                closeModal()
 
-                                    }
-                                }
-                                className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                            >
-                                Retirar Presença - {listType === "init" ? "Início" : "Fim"}
-                            </button>
+                                            }
+                                        }
+                                        className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                                    >
+                                        Dar Presença - {listType === "init" ? "Início" : "Fim"}
+                                    </button> : ""
+                            }
+                            {
+                                (listType === "init" && courseData.attendanceListInit?.includes(user?._id || "")) || (listType === "end" && courseData.attendanceListEnd?.includes(user?._id || "")) ?
+                                    <button
+                                        onClick={
+                                            async () => {
+                                                setIsLoading(true)
+                                                const response = await fetch(`/api/post/retirarPresencaPalestra`, {
+                                                    method: "POST",
+                                                    headers: {
+                                                        "Content-Type": "application/json",
+                                                    },
+                                                    body: JSON.stringify({
+                                                        eventId: courseData._id,
+                                                        listType: listType,
+                                                        userId: qrCodeResult,
+                                                    }),
+                                                });
+                                                if (!response.ok) {
+                                                    setIsLoading(false)
+                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                    return;
+                                                }
+                                                await hydrateData()
+                                                setIsLoading(false)
+                                                alert("Presença retirada com sucesso.")
+                                                closeModal()
+
+                                            }
+                                        }
+                                        className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                                    >
+                                        Retirar Presença - {listType === "init" ? "Início" : "Fim"}
+                                    </button> : ""
+                            }
                             {/* */}
                             <button
                                 onClick={closeModal}

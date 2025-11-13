@@ -7,9 +7,9 @@ import { useRef } from 'react';
 import { ICourse } from '@/app/lib/types/events/event.t';
 import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModal';
 import './style.css';
-import { Users, CheckCircle, XCircle, QrCode, UserPlus, Loader2, Calendar, Clock, Table } from 'lucide-react';
+import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table } from 'lucide-react';
 import * as XLSX from 'xlsx';
-
+import { useUser } from '@auth0/nextjs-auth0/client';
 interface Usuario {
     _id: string,
     informacoes_usuario: {
@@ -24,6 +24,7 @@ interface Usuario {
 
 const MyComponent = ({ params }: { params: { _id: string } }) => {
     const [data, setData] = useState<string[]>([]);
+    const user = useUser()
     const [allUsers, setAllUsers] = useState<IUser[]>([])
     const [errorBolean, setErrorBolean] = useState<boolean>(false);
     const [data2, setData2] = useState<Usuario[]>([]);
@@ -199,6 +200,11 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                     <span className="presenca-lista-estatistica-label">Total de Inscritos</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
+                    <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
+                    <span className="presenca-lista-estatistica-valor">{courseData.maxParticipants}</span>
+                    <span className="presenca-lista-estatistica-label">Vagas</span>
+                </div>
+                <div className="presenca-lista-estatistica-card">
                     <CheckCircle size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
                     <span className="presenca-lista-estatistica-valor">{presentes}</span>
                     <span className="presenca-lista-estatistica-label">Presentes</span>
@@ -223,15 +229,16 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
 
             <div className="presenca-lista-actions">
                 <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
-                {/*
-                <button
-                    onClick={() => setIsOpenAllUsers(true)}
-                    className="presenca-lista-btn presenca-lista-btn-primary"
-                >
-                    <UserPlus size={18} />
-                    Adicionar Usuário
-                </button>
-                */}
+                {
+                    user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
+                    <button
+                        onClick={() => setIsOpenAllUsers(true)}
+                        className="presenca-lista-btn presenca-lista-btn-primary"
+                    >
+                        <UserPlus size={18} />
+                        Adicionar Usuário
+                    </button>
+                }
                 <ExportButton inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
             </div>
 
@@ -242,9 +249,10 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                             <th>Nome</th>
                             <th>Email</th>
                             <th>Status</th>
-                            {/*
-                            <th>Ações</th>
-                            */}
+                            {
+                                user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
+                                <th>Ações</th>
+                            }
                         </tr>
                     </thead>
                     <tbody>
@@ -296,15 +304,31 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                         {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
                                     </span>
                                 </td>
-                                {/*
-                                <td className="presenca-lista-acoes">
-                                    <button
-                                        className={`presenca-lista-btn ${dataPresentes.includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
-                                        onClick={async () => {
-                                            setLoadingContent(true)
-                                            try {
-                                                if (dataPresentes.includes(item._id)) {
-                                                    const response = await fetch(`/api/post/retirarPresenca`, {
+                                {
+                                    user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
+                                    <td className="presenca-lista-acoes">
+                                        <button
+                                            className={`presenca-lista-btn ${dataPresentes.includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
+                                            onClick={async () => {
+                                                setLoadingContent(true)
+                                                try {
+                                                    if (dataPresentes.includes(item._id)) {
+                                                        const response = await fetch(`/api/post/retirarPresenca`, {
+                                                            method: "POST",
+                                                            headers: {
+                                                                "Content-Type": "application/json",
+                                                            },
+                                                            body: JSON.stringify({
+                                                                eventId: params._id,
+                                                                userId: item._id,
+                                                            }),
+                                                        });
+                                                        if (response.ok) {
+                                                            setDataPresente(prev => prev.filter(id => id !== item._id));
+                                                        }
+                                                        return;
+                                                    }
+                                                    const response = await fetch(`/api/post/darPresenca`, {
                                                         method: "POST",
                                                         headers: {
                                                             "Content-Type": "application/json",
@@ -315,36 +339,21 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                         }),
                                                     });
                                                     if (response.ok) {
-                                                        setDataPresente(prev => prev.filter(id => id !== item._id));
+                                                        setDataPresente(prev => [...prev, item._id])
                                                     }
-                                                    return;
                                                 }
-                                                const response = await fetch(`/api/post/darPresenca`, {
-                                                    method: "POST",
-                                                    headers: {
-                                                        "Content-Type": "application/json",
-                                                    },
-                                                    body: JSON.stringify({
-                                                        eventId: params._id,
-                                                        userId: item._id,
-                                                    }),
-                                                });
-                                                if (response.ok) {
-                                                    setDataPresente(prev => [...prev, item._id])
+                                                catch {
+                                                    setErrorBolean(true)
                                                 }
-                                            }
-                                            catch {
-                                                setErrorBolean(true)
-                                            }
-                                            finally {
-                                                setLoadingContent(false)
-                                            }
-                                        }}
-                                    >
-                                        {dataPresentes.includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
-                                    </button>
-                                </td>
-                                */}
+                                                finally {
+                                                    setLoadingContent(false)
+                                                }
+                                            }}
+                                        >
+                                            {dataPresentes.includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
+                                        </button>
+                                    </td>
+                                }
                             </tr>
                         ))}
                     </tbody>
@@ -581,7 +590,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
     return (
         <>
             <LoadingModal isLoading={isLoading} />
-            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[900000] px-5">
                 <div className="relative mx-auto p-6 border w-full max-w-2xl shadow-xl rounded-2xl bg-white">
                     <div className="mt-3 text-center space-y-5">
                         <h3 className="text-xl leading-6 font-bold text-gray-900">Usuário Identificado</h3>
@@ -617,7 +626,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                 </p>
                                 {
                                     user && (
-                                        getFeedBack(user, courseData).length === 0 ? "Não há nenhuma observação a ser feita" :
+                                        getFeedBack(user, courseData).length === 0 ? "" :
                                             getFeedBack(user, courseData).map((value) => <p key={`${user._id}`} className='text-red-700 font-semibold'>{value}</p>)
                                     )
                                 }
@@ -636,39 +645,43 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                             </div>
                         </div>
                         <div className='flex flex-col items-center content-center justify-center space-y-1'>
-                            <button
-                                onClick={
-                                    async () => {
-                                        setIsLoading(true)
-                                        const response = await fetch(`/api/post/darPresenca`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            setIsLoading(false)
-                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                            return;
+
+                            {
+                                user && !courseData.attendanceList.includes(`${user._id}`) && (
+                                    <button
+                                        onClick={
+                                            async () => {
+                                                setIsLoading(true)
+                                                const response = await fetch(`/api/post/darPresenca`, {
+                                                    method: "POST",
+                                                    headers: {
+                                                        "Content-Type": "application/json",
+                                                    },
+                                                    body: JSON.stringify({
+                                                        eventId: courseData._id,
+                                                        userId: qrCodeResult,
+                                                    }),
+                                                });
+                                                if (!response.ok) {
+                                                    setIsLoading(false)
+                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                    return;
+                                                }
+                                                await hydrateData()
+                                                setIsLoading(false)
+                                                alert("Presença adicionada com sucesso.")
+                                                closeModal()
+
+                                            }
                                         }
-                                        await hydrateData()
-                                        setIsLoading(false)
-                                        alert("Presença adicionada com sucesso.")
-                                        closeModal()
+                                        className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                                    >
 
-                                    }
-                                }
-                                className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                            >
-                                {
-                                    user && courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"
-                                }
-
-                            </button>
+                                        {
+                                            user && courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"
+                                        }
+                                    </button>
+                                )}
                             {
                                 user && courseData.attendanceList.includes(`${user._id}`) && (
                                     <>
@@ -676,6 +689,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                             onClick={
                                                 async () => {
                                                     // 
+                                                    setIsLoading(true)
                                                     const response = await fetch(`/api/post/retirarPresenca`, {
                                                         method: "POST",
                                                         headers: {
@@ -687,12 +701,13 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                                         }),
                                                     });
                                                     if (!response.ok) {
+                                                        setIsLoading(false)
                                                         alert("Algo deu errado, por favor tente novamente.")
                                                         return;
                                                     }
                                                     await hydrateData()
                                                     setIsLoading(false)
-                                                    alert("Presença adicionada com sucesso.")
+                                                    alert("Presença removida com sucesso.")
                                                     closeModal()
 
                                                 }
@@ -760,7 +775,7 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     });
 
     return (
-        <div className="all-users-modal-overlay">
+        <div className="all-users-modal-overlay mt-10">
             <div className="all-users-modal-backdrop" onClick={onClose}></div>
             <div className="all-users-modal-container">
                 <div className="all-users-modal-header">
