@@ -663,10 +663,10 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                 {
                                     user && courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"
                                 }
-                                
+
                             </button>
                             {
-                                user && !courseData.participants.includes(`${user._id}`) && (
+                                user && !courseData.attendanceList.includes(`${user._id}`) && (
                                     <>
                                         <button
                                             onClick={
