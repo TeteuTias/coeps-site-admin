@@ -666,7 +666,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
 
                             </button>
                             {
-                                user && !courseData.attendanceList.includes(`${user._id}`) && (
+                                user && courseData.attendanceList.includes(`${user._id}`) && (
                                     <>
                                         <button
                                             onClick={
