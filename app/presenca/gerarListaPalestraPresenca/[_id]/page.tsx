@@ -221,7 +221,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                     <span>{new Date().toLocaleTimeString('pt-BR')}</span>
                 </div>
             </div>
-            <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
+            <QRCodeScanner courseData={courseData} hydrateData={hydrateData} listType={listType} />
             <div className="presenca-lista-actions mt-4">
                 {/*
 
@@ -408,7 +408,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
 };
 //
 //
-const QRCodeScanner: React.FC<{ courseData: ILecture, hydrateData: () => Promise<void> }> = ({ courseData, hydrateData }) => {
+const QRCodeScanner: React.FC<{ listType: "end" | "init", courseData: ILecture, hydrateData: () => Promise<void> }> = ({ courseData, hydrateData, listType }) => {
     // Estado para controlar a visibilidade do scanner
     const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
     // Estado para armazenar a lista de câmeras disponíveis
@@ -547,13 +547,13 @@ const QRCodeScanner: React.FC<{ courseData: ILecture, hydrateData: () => Promise
 
             {/* Modal com o Resultado */}
             {qrCodeResult && (
-                <ModalUserFound courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} />
+                <ModalUserFound listType={listType} courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} />
             )}
         </div>
     );
 };
 
-const ModalUserFound: React.FC<{ courseData: ILecture, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void> }> = ({ hydrateData, courseData, qrCodeResult, closeModal }) => {
+const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void> }> = ({ hydrateData, courseData, qrCodeResult, closeModal, listType }) => {
     const [isLoading, setIsLoading] = useState<boolean>(true)
     const [user, setUser] = useState<IUser | null>(null)
     useEffect(() => {
@@ -606,7 +606,17 @@ const ModalUserFound: React.FC<{ courseData: ILecture, qrCodeResult: string, clo
                                 {
                                     user?.pagamento.situacao !== 1 ?
                                         <h1><span className='bg-red-500 p-2 font-extrabold text-white'>ATENÇÃO!</span> Esse congressista não realizou o pagamento do congresso</h1> :
-                                        "Não há nenhuma observação a ser feita"
+                                        ""
+                                }
+                                {
+                                    listType === "init" && courseData.attendanceListInit?.includes(user?._id || "") && (
+                                        <p className="text-sm font-medium text-green-600 mt-2">Presença de início já foi registrada</p>
+                                    )
+                                }
+                                {
+                                    listType === "end" && courseData.attendanceListInit?.includes(user?._id || "") && (
+                                        <p className="text-sm font-medium text-green-600 mt-2">Presença de fim já foi registrada</p>
+                                    )
                                 }
                             </div>
                         </div>
@@ -622,7 +632,7 @@ const ModalUserFound: React.FC<{ courseData: ILecture, qrCodeResult: string, clo
                                             },
                                             body: JSON.stringify({
                                                 eventId: courseData._id,
-                                                listType: "init",
+                                                listType: listType,
                                                 userId: qrCodeResult,
                                             }),
                                         });
@@ -640,40 +650,8 @@ const ModalUserFound: React.FC<{ courseData: ILecture, qrCodeResult: string, clo
                                 }
                                 className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                             >
-                                Dar Presença - Início
+                                Dar Presença - ${listType === "init" ? "Início" : "Fim"}
                             </button>
-                            <button
-                                onClick={
-                                    async () => {
-                                        setIsLoading(true)
-                                        const response = await fetch(`/api/post/darPresencaPalestra`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                listType: "end",
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            setIsLoading(false)
-                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                            return;
-                                        }
-                                        await hydrateData()
-                                        setIsLoading(false)
-                                        alert("Presença adicionada com sucesso.")
-                                        closeModal()
-
-                                    }
-                                }
-                                className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                            >
-                                Dar Presença - Fim
-                            </button>
-                            {/* ====== */}
                             <button
                                 onClick={
                                     async () => {
@@ -685,7 +663,7 @@ const ModalUserFound: React.FC<{ courseData: ILecture, qrCodeResult: string, clo
                                             },
                                             body: JSON.stringify({
                                                 eventId: courseData._id,
-                                                listType: "init",
+                                                listType: listType,
                                                 userId: qrCodeResult,
                                             }),
                                         });
@@ -703,38 +681,9 @@ const ModalUserFound: React.FC<{ courseData: ILecture, qrCodeResult: string, clo
                                 }
                                 className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                             >
-                                Retirar Presença - Início
+                                Dar Presença - ${listType === "init" ? "Início" : "Fim"}
                             </button>
-                            <button
-                                onClick={
-                                    async () => {
-                                        setIsLoading(true)
-                                        const response = await fetch(`/api/post/retirarPresencaPalestra`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                listType: "end",
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            setIsLoading(false)
-                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                            return;
-                                        }
-                                        await hydrateData()
-                                        setIsLoading(false)
-                                        alert("Presença retirada com sucesso.")
-                                        closeModal()
-                                    }
-                                }
-                                className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                            >
-                                Retirar Presença - Fim
-                            </button>
+                            {/* */}
                             <button
                                 onClick={closeModal}
                                 className="w-fit px-4 w-lg py-3 bg-green-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
