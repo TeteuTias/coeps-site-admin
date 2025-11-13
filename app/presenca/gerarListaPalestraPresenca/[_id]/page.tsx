@@ -650,7 +650,7 @@ const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture,
                                 }
                                 className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                             >
-                                Dar Presença - ${listType === "init" ? "Início" : "Fim"}
+                                Dar Presença - {listType === "init" ? "Início" : "Fim"}
                             </button>
                             <button
                                 onClick={
@@ -681,7 +681,7 @@ const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture,
                                 }
                                 className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                             >
-                                Dar Presença - ${listType === "init" ? "Início" : "Fim"}
+                                Retirar Presença - {listType === "init" ? "Início" : "Fim"}
                             </button>
                             {/* */}
                             <button
