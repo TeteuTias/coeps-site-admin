@@ -660,37 +660,46 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                 }
                                 className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                             >
-                                Dar Presença
-                            </button>
-                            <button
-                                onClick={
-                                    async () => {
-                                        // 
-                                        const response = await fetch(`/api/post/retirarPresenca`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            alert("Algo deu errado, por favor tente novamente.")
-                                            return;
-                                        }
-                                        await hydrateData()
-                                        setIsLoading(false)
-                                        alert("Presença adicionada com sucesso.")
-                                        closeModal()
-
-                                    }
+                                {
+                                    user && courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"
                                 }
-                                className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                            >
-                                Retirar Presença
+                                
                             </button>
+                            {
+                                user && !courseData.participants.includes(`${user._id}`) && (
+                                    <>
+                                        <button
+                                            onClick={
+                                                async () => {
+                                                    // 
+                                                    const response = await fetch(`/api/post/retirarPresenca`, {
+                                                        method: "POST",
+                                                        headers: {
+                                                            "Content-Type": "application/json",
+                                                        },
+                                                        body: JSON.stringify({
+                                                            eventId: courseData._id,
+                                                            userId: qrCodeResult,
+                                                        }),
+                                                    });
+                                                    if (!response.ok) {
+                                                        alert("Algo deu errado, por favor tente novamente.")
+                                                        return;
+                                                    }
+                                                    await hydrateData()
+                                                    setIsLoading(false)
+                                                    alert("Presença adicionada com sucesso.")
+                                                    closeModal()
+
+                                                }
+                                            }
+                                            className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                                        >
+                                            Retirar Presença
+                                        </button>
+                                    </>
+                                )
+                            }
                             <button
                                 onClick={closeModal}
                                 className="w-fit px-4 w-lg py-3 bg-green-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
