@@ -621,12 +621,12 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                             getFeedBack(user, courseData).map((value) => <p key={`${user._id}`} className='text-red-700 font-semibold'>{value}</p>)
                                     )
                                 }
-                                <p className="text-sm text-gray-500 mb-2">
+                                <p className='text-red-700 font-semibold'>
                                     {
                                         user && courseData.participants.includes(`${user._id}`) ? "O Congressista está inscrito no minicurso" : ""
                                     }
                                 </p>
-                                <p className="text-sm text-gray-500 mb-2">
+                                <p className='text-red-700 font-semibold'>
                                     {
                                         user && courseData.participants.includes(`${user._id}`) &&
                                             courseData.attendanceList.includes(`${user._id}`)
