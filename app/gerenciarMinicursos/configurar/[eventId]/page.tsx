@@ -43,9 +43,14 @@ export default function Page({ params }: { params: { eventId: string } }) {
     //
     //
     return (
-        <div>
+        <div className="main-container" style={{
+            background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
+            backgroundAttachment: 'fixed',
+            backgroundSize: 'cover',
+            backgroundRepeat: 'no-repeat'
+        }}>
             <LoadingModal isLoading={loading} />
-            <div className="w-full flex flex-col">
+            <div className="w-full flex flex-col min-h-screen">
                 <CreateCourseModal title={dataCourse.name} buttonText="Atualizar Minicurso" apiMethod="PUT" apiUrl="/api/put/minicursos/alterarInformacoes/" onClose={() => {
                     router.push("/gerenciarMinicursos/")
                 }} onSuccess={() => { window.location.reload() }} isOpen initialForms={{
