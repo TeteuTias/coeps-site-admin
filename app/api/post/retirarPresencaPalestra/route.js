@@ -19,7 +19,7 @@ export const POST = withApiAuthRequired(async function POST(request) {
                 { _id: new ObjectId(data.eventId) },  // Encontra o documento com o _id especificado
                 { $pull: { attendanceListInit: data.userId } }  // Remove o userId de attendanceList, se ele estiver presente
             );
-            return NextResponse.json({ data: response }).   
+            return NextResponse.json({ data: response })
         }
         const response = await db.collection(colecao).updateOne(
             { _id: new ObjectId(data.eventId) },  // Encontra o documento com o _id especificado
