@@ -281,14 +281,13 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ title = "Criar No
     return (
         <>
             <LoadingModal isLoading={loading} />
-            <div className="fixed inset-0 bg-black bg-opacity-60 z-[5000000000] flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                    <header className="flex items-center justify-between p-6 border-b border-gray-200">
-                        <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
-                        <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-100"><X size={24} /></button>
+            <div className="fixed inset-0 bg-black bg-opacity-60 z-[5000000000] flex items-center justify-center p-4 overflow-y-auto">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] min-h-0 flex flex-col my-4 overflow-hidden">
+                    <header className="flex items-center justify-end gap-4 p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
+                        <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-100 flex-shrink-0"><X size={24} /></button>
                     </header>
 
-                    <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+                    <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5 min-h-0">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                             {/* CAMPOS PRINCIPAIS */}
                             <div>
@@ -414,7 +413,7 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ title = "Criar No
                         </div>
                     </form>
 
-                    <footer className="flex justify-end p-6 border-t border-gray-200 gap-2">
+                    <footer className="flex justify-end p-6 border-t border-gray-200 gap-2 flex-shrink-0">
                         <button
                             onClick={onClose}
                             type="button"
