@@ -34,7 +34,7 @@ const permittedRoutes: { [key: string]: string[] } = {
         "/",
         "/presenca",
         "/presenca/gerarListaMinicursoPresenca/:minicurso",
-        "presenca/gerarListaPalestraPresenca/:paletra"
+        "/presenca/gerarListaPalestraPresenca/:paletra"
     ],
     "68f18c51d3440d3001fc4ddc": [ // ID da conta Científica
         '/',
