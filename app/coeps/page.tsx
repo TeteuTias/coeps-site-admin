@@ -23,37 +23,37 @@ function PaginaAreaDoCliente() {
     <>
       <h1 className="main-title">Área do Administrador</h1>
       <div className="cards-grid">
-        <Link href="/trabalhos" className="glass-card">
+        <Link href="/coeps/trabalhos" className="glass-card">
           <div className="card-icon">
             <BriefcaseBusiness size={48} />
           </div>
           <h2 className="card-title">Trabalhos</h2>
         </Link>
-        <Link href="/listas" className="glass-card">
+        <Link href="/coeps/listas" className="glass-card">
           <div className="card-icon">
             <Users size={48} />
           </div>
           <h2 className="card-title">Gerar Lista de Participantes</h2>
         </Link>
-        <Link href="/presenca" className="glass-card">
+        <Link href="/coeps/presenca" className="glass-card">
           <div className="card-icon">
             <Hand size={48} />
           </div>
           <h2 className="card-title">Lista de Presença</h2>
         </Link>
-        <Link href="/financeiro" className="glass-card">
+        <Link href="/coeps/financeiro" className="glass-card">
           <div className="card-icon">
             <CircleDollarSign size={48} />
           </div>
           <h2 className="card-title">Financeiro</h2>
         </Link>
-        <Link href="/usuarios" className="glass-card">
+        <Link href="/coeps/usuarios" className="glass-card">
           <div className="card-icon">
             <UserRound size={48} />
           </div>
           <h2 className="card-title">Usuários</h2>
         </Link>
-        <Link href="/gerenciarMinicursos/" className="glass-card">
+        <Link href="/coeps/gerenciarMinicursos/" className="glass-card">
           <div className="card-icon">
             <Settings size={48} />
           </div>

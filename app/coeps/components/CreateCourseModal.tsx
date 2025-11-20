@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react";
-import { ICourse } from "../lib/types/events/event.t";
+import { ICourse } from "../../lib/types/events/event.t";
 import LoadingModal from "./LoadingModal";
 import { ObjectId } from "bson";
 import { X, Plus, Trash } from "lucide-react";

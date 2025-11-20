@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react"
 import LoadingModal from "../components/LoadingModal"
-import { IPaymentConfig } from "../lib/types/payments/payment.t"
-import { IUser } from "../lib/types/user/user.t"
+import { IPaymentConfig } from "../../lib/types/payments/payment.t"
+import { IUser } from "../../lib/types/user/user.t"
 import { useRouter } from "next/navigation"
 import './style.css'
 import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX } from 'lucide-react'

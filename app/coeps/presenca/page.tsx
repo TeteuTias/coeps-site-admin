@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import './style.css';
 import { Users, ClipboardList, UserPlus, UserMinus, CheckCircle, Loader2 } from 'lucide-react';
-import { ICourse, ILecture } from '../lib/types/events/event.t';
+import { ICourse, ILecture } from '../../lib/types/events/event.t';
 
 interface DataStructure {
   data: ICourse[];
@@ -119,7 +119,7 @@ const MyComponent = () => {
               <div className="presenca-card-estatistica"><UserMinus size={18} /> {value.maxParticipants - value.participants.length}</div>
             </div>
             <div className="presenca-card-actions">
-              <Link target='_blank' href={`/presenca/gerarListaMinicursoPresenca/${value._id}`} prefetch={false} className='presenca-link'>GERAR LISTA DE PRESENÇA</Link>
+              <Link target='_blank' href={`presenca/gerarListaMinicursoPresenca/${value._id}`} prefetch={false} className='presenca-link'>GERAR LISTA DE PRESENÇA</Link>
             </div>
           </div>
         ))}
@@ -134,7 +134,7 @@ const MyComponent = () => {
               <div className="presenca-card-estatistica"><CheckCircle size={18} />TODOS SÃO INSCRITOS</div>
             </div>
             <div className="presenca-card-actions">
-              <Link target='_blank' href={`/presenca/gerarListaPalestraPresenca/${value._id}`} prefetch={false} className='presenca-link'>GERAR LISTA DE PRESENÇA</Link>
+              <Link target='_blank' href={`presenca/gerarListaPalestraPresenca/${value._id}`} prefetch={false} className='presenca-link'>GERAR LISTA DE PRESENÇA</Link>
             </div>
           </div>
         ))}

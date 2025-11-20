@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { ICourse } from "@/app/lib/types/events/event.t"
-import LoadingModal from "@/app/components/LoadingModal"
-import CreateCourseModal from "@/app/components/CreateCourseModal"
+import LoadingModal from "@/app/coeps/components/LoadingModal"
+import CreateCourseModal from "@/app/coeps/components/CreateCourseModal"
 import { useRouter } from "next/navigation"
 //
 //

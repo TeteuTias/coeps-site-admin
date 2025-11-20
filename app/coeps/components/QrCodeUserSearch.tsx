@@ -98,7 +98,7 @@ export default function QrCodeUserSearch({ titleText }: { titleText: string }) {
                 });
             }
         };
-    }, [isScannerOpen, selectedCameraId]);
+    }, [isScannerOpen, selectedCameraId, router]);
     //
     return (
         <div className="w-fit">

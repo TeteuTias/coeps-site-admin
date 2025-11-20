@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
 import './style.css';
 import { Users, ListChecks, UserPlus, UserMinus, ClipboardList, Loader2 } from 'lucide-react';
-import { ICourse, ILecture } from '../lib/types/events/event.t';
+import { ICourse, ILecture } from '../../lib/types/events/event.t';
 import { useMemo } from 'react';
 
 
@@ -123,7 +123,7 @@ const MyComponent = () => {
               <div className="listas-card-estatistica"><UserMinus size={18} /> {value.maxParticipants - value.participants.length}</div>
             </div>
             <div className="listas-card-actions">
-              <Link target='_blank' href={`/gerarListaMinicurso/${value._id}`} prefetch={false} className='listas-link'>GERAR LISTA</Link>
+              <Link target='_blank' href={`gerarListaMinicurso/${value._id}`} prefetch={false} className='listas-link'>GERAR LISTA</Link>
             </div>
           </div>
         ))}
@@ -142,7 +142,7 @@ const MyComponent = () => {
               <div className="listas-card-estatistica"><ListChecks size={18} />TODOS SÃO INSCRITOS</div>
             </div>
             <div className="listas-card-actions">
-              <Link target='_blank' href={`/gerarListaPalestras/`} prefetch={false} className='listas-link'>GERAR LISTA</Link>
+              <Link target='_blank' href={`gerarListaPalestras/`} prefetch={false} className='listas-link'>GERAR LISTA</Link>
             </div>
           </div>
         ))}

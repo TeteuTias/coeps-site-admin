@@ -109,7 +109,7 @@ export default function Page({ params }: { params: { userId: string } }) {
 
     useEffect(() => {
         fetchData()
-    }, [userId])
+    }, [fetchData])
 
     const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;

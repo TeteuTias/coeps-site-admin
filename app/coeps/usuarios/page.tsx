@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
 import LoadingModal from "../components/LoadingModal"
-import { IUser } from "../lib/types/user/user.t"
+import { IUser } from "../../lib/types/user/user.t"
 import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import './style.css'

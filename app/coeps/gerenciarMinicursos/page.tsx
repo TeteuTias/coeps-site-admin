@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useMemo } from "react";
-import { ICourse } from "../lib/types/events/event.t";
+import { ICourse } from "../../lib/types/events/event.t";
 import { CogIcon, FilterX, Search } from "lucide-react";
 import Link from "next/link";
 import LoadingModal from "../components/LoadingModal";

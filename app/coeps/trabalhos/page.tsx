@@ -8,7 +8,7 @@ import { useEffect, useState, useMemo, FC } from 'react';
 import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Info, Download, UserCircle, MessageSquare, Edit, PieChart, Search, Filter, File } from 'lucide-react';
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 import { ObjectId } from 'bson';
-import { IUser } from '../lib/types/user/user.t';
+import { IUser } from '../../lib/types/user/user.t';
 import { useRouter } from 'next/navigation';
 import './style.css';
 

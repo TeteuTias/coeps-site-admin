@@ -1,15 +1,16 @@
 'use client'
 import { IUser } from '@/app/lib/types/user/user.t';
-import { useEffect, useState } from 'react';
+import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { Html5Qrcode, CameraDevice, Html5QrcodeCameraScanConfig } from 'html5-qrcode';
-import LoadingModal from '@/app/components/LoadingModal';
+import LoadingModal from '@/app/coeps/components/LoadingModal';
 import { useRef } from 'react';
-import { ICourse } from '@/app/lib/types/events/event.t';
-import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModal';
+import { ILecture } from '@/app/lib/types/events/event.t';
+import ConfirmationModal, { ModalProps } from '@/app/coeps/components/ConfirmationModal';
 import './style.css';
-import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table } from 'lucide-react';
+import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table, ListChecksIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useUser } from '@auth0/nextjs-auth0/client';
+
 interface Usuario {
     _id: string,
     informacoes_usuario: {
@@ -23,13 +24,20 @@ interface Usuario {
 }
 
 const MyComponent = ({ params }: { params: { _id: string } }) => {
-    const [data, setData] = useState<string[]>([]);
     const user = useUser()
+    const [data, setData] = useState<string[]>([]);
+    const [listType, setListType] = useState<"init" | "end">("init")
     const [allUsers, setAllUsers] = useState<IUser[]>([])
     const [errorBolean, setErrorBolean] = useState<boolean>(false);
     const [data2, setData2] = useState<Usuario[]>([]);
-    const [dataPresentes, setDataPresente] = useState<string[]>([])
-    const [courseData, setCourseData] = useState<ICourse | null>(null)
+    const [dataPresentes, setDataPresente] = useState<{
+        "init": string[],
+        "end": string[],
+    }>({
+        init: [],
+        end: []
+    })
+    const [courseData, setCourseData] = useState<ILecture | null>(null)
     const [isModalProps, setIsModalProps] = useState<ModalProps>({
         isOpen: false,
         onClose: () => {
@@ -54,28 +62,26 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
     const hydrateData = async () => {
         try {
             const fetchParticipantAndAttendanceData = async () => {
-                const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
-                    fetch(`/api/get/participantesMinicursos/${params._id}`),
-                    fetch(`/api/get/listaDePresenca/${params._id}`),
-                    fetch(`/api/get/minicursoProps/${params._id}`),
-                    fetch(`/api/get/todosCongressistas/`),
+                const [courseResponse, allUsersResponse] = await Promise.all([
+                    fetch(`/api/get/palestraProps/${params._id}`),
+                    fetch(`/api/get/todosCongressistasInscritos/`),
                 ]);
 
-                if (!participantsResponse.ok || !attendanceResponse.ok || !courseResponse.ok || !allUsersResponse.ok) {
+                if (!courseResponse.ok || !allUsersResponse.ok) {
                     throw new Error("Erro ao buscar dados de participantes ou lista de presença");
                 }
 
-                const participantsResult: { data: string[] } = await participantsResponse.json();
-                const attendanceResult: { data: string[] } = await attendanceResponse.json();
-                const courseResult: { data: ICourse } = await courseResponse.json()
+                const courseResult: { data: ILecture } = await courseResponse.json()
                 const allUsersResult: { data: IUser[] } = await allUsersResponse.json()
 
-                setData(participantsResult.data);
-                setDataPresente(attendanceResult.data);
                 setCourseData(courseResult.data)
                 setAllUsers(allUsersResult.data)
+                setDataPresente({
+                    init: courseResult.data.attendanceListInit,
+                    end: courseResult.data.attendanceListEnd
+                })
 
-                return participantsResult.data;
+                return allUsersResult.data.map((u) => `${u._id}`)
             };
 
             const fetchUserInfo = async (userIds: string[]) => {
@@ -110,28 +116,24 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         const fetchData = async () => {
             try {
                 const fetchParticipantAndAttendanceData = async () => {
-                    const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
-                        fetch(`/api/get/participantesMinicursos/${params._id}`),
-                        fetch(`/api/get/listaDePresenca/${params._id}`),
-                        fetch(`/api/get/minicursoProps/${params._id}`),
-                        fetch(`/api/get/todosCongressistas/`),
+                    const [courseResponse, allUsersResponse] = await Promise.all([
+                        fetch(`/api/get/palestraProps/${params._id}`),
+                        fetch(`/api/get/todosCongressistasInscritos/`),
                     ]);
 
-                    if (!participantsResponse.ok || !attendanceResponse.ok || !courseResponse.ok || !allUsersResponse.ok) {
+                    if (!courseResponse.ok || !allUsersResponse.ok) {
                         throw new Error("Erro ao buscar dados de participantes ou lista de presença");
                     }
 
-                    const participantsResult: { data: string[] } = await participantsResponse.json();
-                    const attendanceResult: { data: string[] } = await attendanceResponse.json();
-                    const courseResult: { data: ICourse } = await courseResponse.json()
+                    const courseResult: { data: ILecture } = await courseResponse.json()
                     const allUsersResult: { data: IUser[] } = await allUsersResponse.json()
-
-                    setData(participantsResult.data);
-                    setDataPresente(attendanceResult.data);
                     setCourseData(courseResult.data)
                     setAllUsers(allUsersResult.data)
-
-                    return participantsResult.data;
+                    setDataPresente({
+                        init: courseResult.data.attendanceListInit,
+                        end: courseResult.data.attendanceListEnd
+                    })
+                    return allUsersResult.data.map((u) => `${u._id}`)
                 };
 
                 const fetchUserInfo = async (userIds: string[]) => {
@@ -182,7 +184,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         return <div className="text-red-500">{error}</div>;
     }
 
-    const presentes = dataPresentes.length;
+    const presentes = dataPresentes[listType].length;
     const ausentes = data2.length - presentes;
 
     return (
@@ -200,19 +202,14 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                     <span className="presenca-lista-estatistica-label">Total de Inscritos</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
-                    <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
-                    <span className="presenca-lista-estatistica-valor">{courseData.maxParticipants}</span>
-                    <span className="presenca-lista-estatistica-label">Vagas</span>
-                </div>
-                <div className="presenca-lista-estatistica-card">
                     <CheckCircle size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
                     <span className="presenca-lista-estatistica-valor">{presentes}</span>
-                    <span className="presenca-lista-estatistica-label">Presentes</span>
+                    <span className="presenca-lista-estatistica-label">Presentes {listType === "init" ? "Início" : "Fim"}</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
                     <XCircle size={32} style={{ marginBottom: '0.3rem', color: '#ff6b6b' }} />
                     <span className="presenca-lista-estatistica-valor">{ausentes}</span>
-                    <span className="presenca-lista-estatistica-label">Ausentes</span>
+                    <span className="presenca-lista-estatistica-label">Ausentes {listType === "init" ? "Início" : "Fim"}</span>
                 </div>
             </div>
 
@@ -226,21 +223,33 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                     <span>{new Date().toLocaleTimeString('pt-BR')}</span>
                 </div>
             </div>
-
-            <div className="presenca-lista-actions">
-                <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
+            <QRCodeScanner courseData={courseData} hydrateData={hydrateData} listType={listType} />
+            <div className="presenca-lista-actions mt-4">
                 {
                     user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
                     <button
                         onClick={() => setIsOpenAllUsers(true)}
                         className="presenca-lista-btn presenca-lista-btn-primary"
                     >
+
                         <UserPlus size={18} />
                         Adicionar Usuário
                     </button>
                 }
                 <ExportButton inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
             </div>
+            <button
+                onClick={() => {
+                    setListType((prev) => prev === "end" ? "init" : "end"
+                    )
+                }}
+                className="presenca-lista-btn presenca-lista-btn-primary mb-5"
+            >
+                <ListChecksIcon size={18} />
+                {
+                    listType === "init" ? "Início do Evento" : "Fim do Evento"
+                }
+            </button>
 
             <div className="presenca-lista-table-container">
                 <table className="presenca-lista-table">
@@ -259,61 +268,24 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                         {data2.map((item, index) => (
                             <tr key={index} className="presenca-lista-row">
                                 <td className="presenca-lista-nome">
-                                    <button
-                                        className="presenca-lista-remove-btn"
-                                        onClick={() => {
-                                            setIsModalProps(() => ({
-                                                isOpen: true,
-                                                onClose: () => {
-                                                    setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-                                                },
-                                                onConfirm: async () => {
-                                                    setLoading(true)
-                                                    const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
-                                                        method: "DELETE",
-                                                        body: JSON.stringify({
-                                                            eventId: params._id,
-                                                            userId: item._id,
-                                                        }),
-                                                    })
-                                                    if (!response.ok) {
-                                                        alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                    }
-                                                    await hydrateData()
-                                                    setLoading(false)
-                                                    setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-                                                },
-                                                title: "Atenção!",
-                                                children: (
-                                                    <>
-                                                        <p className='text-black'>Você está prestes a retirar a inscrição do usuário do minicurso. Essa opção <span className='font-extrabold text-red-500'>NÃO</span> estornará o valor ao congressista. Deseja mesmo continuar?</p>
-                                                    </>
-                                                ),
-                                                confirmText: "Continuar",
-                                                cancelText: "Fechar",
-                                            }))
-                                        }}
-                                    >
-                                        ×
-                                    </button>
-                                    <span>{index + 1}. {item.informacoes_usuario.nome}</span>
+                                    <span>{index + 1}. {item.informacoes_usuario.nome.toLocaleUpperCase()}</span>
                                 </td>
                                 <td className="presenca-lista-email">{item.informacoes_usuario.email}</td>
                                 <td className="presenca-lista-status">
-                                    <span className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}>
-                                        {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
+                                    <span className={`presenca-lista-status-badge ${dataPresentes[listType].includes(item._id) ? 'presente' : 'ausente'}`}>
+                                        {dataPresentes[listType].includes(`${item._id}`) ? "PRESENTE" : "AUSENTE"}
                                     </span>
                                 </td>
                                 {
                                     user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
                                     <td className="presenca-lista-acoes">
                                         <button
-                                            className={`presenca-lista-btn ${dataPresentes.includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
+                                            className={`presenca-lista-btn ${dataPresentes[listType].includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
                                             onClick={async () => {
                                                 setLoadingContent(true)
                                                 try {
-                                                    if (dataPresentes.includes(item._id)) {
-                                                        const response = await fetch(`/api/post/retirarPresenca`, {
+                                                    if (dataPresentes[listType].includes(item._id)) {
+                                                        const response = await fetch(`/api/post/retirarPresencaPalestra`, {
                                                             method: "POST",
                                                             headers: {
                                                                 "Content-Type": "application/json",
@@ -321,14 +293,15 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                             body: JSON.stringify({
                                                                 eventId: params._id,
                                                                 userId: item._id,
+                                                                listType: listType,
                                                             }),
                                                         });
                                                         if (response.ok) {
-                                                            setDataPresente(prev => prev.filter(id => id !== item._id));
+                                                            await hydrateData()
                                                         }
                                                         return;
                                                     }
-                                                    const response = await fetch(`/api/post/darPresenca`, {
+                                                    const response = await fetch(`/api/post/darPresencaPalestra`, {
                                                         method: "POST",
                                                         headers: {
                                                             "Content-Type": "application/json",
@@ -336,10 +309,11 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                         body: JSON.stringify({
                                                             eventId: params._id,
                                                             userId: item._id,
+                                                            listType: listType
                                                         }),
                                                     });
                                                     if (response.ok) {
-                                                        setDataPresente(prev => [...prev, item._id])
+                                                        await hydrateData()
                                                     }
                                                 }
                                                 catch {
@@ -350,7 +324,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                 }
                                             }}
                                         >
-                                            {dataPresentes.includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
+                                            {dataPresentes[listType].includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
                                         </button>
                                     </td>
                                 }
@@ -364,12 +338,14 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             <ConfirmationModal {...isModalProps} />
             {isOpenAllUsers && (
                 <AllUsersModal
+                    listType={listType}
+                    setListType={setListType}
                     courseData={courseData}
                     isOpen={true}
                     onClose={() => { setIsOpenAllUsers(false) }}
                     onUserSelect={async (userId: string) => {
                         setLoadingContent(true)
-                        const response = await fetch(`/api/post/darPresenca`, {
+                        const response = await fetch(`/api/post/darPresencaPalestra`, {
                             method: "POST",
                             headers: {
                                 "Content-Type": "application/json",
@@ -377,10 +353,11 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                             body: JSON.stringify({
                                 eventId: params._id,
                                 userId: userId,
+                                listType: listType
                             }),
                         });
                         if (response.ok) {
-                            setDataPresente(prev => [...prev, userId])
+                            await hydrateData
                         } else {
                             alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
                             setLoadingContent(false)
@@ -398,7 +375,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
 };
 //
 //
-const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<void> }> = ({ courseData, hydrateData }) => {
+const QRCodeScanner: React.FC<{ listType: "end" | "init", courseData: ILecture, hydrateData: () => Promise<void> }> = ({ courseData, hydrateData, listType }) => {
     // Estado para controlar a visibilidade do scanner
     const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
     // Estado para armazenar a lista de câmeras disponíveis
@@ -510,7 +487,7 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
             </div>
             {/* Seção do Scanner */}
             {isScannerOpen && (
-                <div className="w-full max-w-lg mx-auto mt-4 p-6 border border-gray-200 rounded-xl shadow-lg bg-white">
+                <div className="mt-4 p-6 border border-gray-200 rounded-xl shadow-lg bg-white">
                     <div className="flex justify-between items-center mb-4 gap-4">
                         <select
                             onChange={(e) => setSelectedCameraId(e.target.value)}
@@ -537,13 +514,13 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
 
             {/* Modal com o Resultado */}
             {qrCodeResult && (
-                <ModalUserFound courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} />
+                <ModalUserFound listType={listType} courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} />
             )}
         </div>
     );
 };
 
-const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void> }> = ({ hydrateData, courseData, qrCodeResult, closeModal }) => {
+const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void> }> = ({ hydrateData, courseData, qrCodeResult, closeModal, listType }) => {
     const [isLoading, setIsLoading] = useState<boolean>(true)
     const [user, setUser] = useState<IUser | null>(null)
     useEffect(() => {
@@ -556,41 +533,10 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
         fetchUser()
     }, [qrCodeResult])
 
-    /**
-     * Tava sem ideia para nome de função, então coloquei esse kk
-     * Mas a ideia é dar um panorama geral para o adm de que se há pendências antes de realizar a presença:
-     * Exemplos:
-     *  - Notificar o adm se o evento já estourou o limite máximo;
-     *  - Notificar o adm se o usuário ainda não pagou sua inscrição;
-     *  - Etc.;
-     * Após perguntar, vamos verificar se o adm quer continuar com a inscrição.
-     */
-    const getFeedBack = (user: IUser, courseData: ICourse): string[] => {
-        let listFeedBack: string[] = []
-        console.log(user)
-        if (user.pagamento.situacao == 2) {
-            listFeedBack.push("O usuário está com o pagamento do ingresso do congresso pendente;")
-        }
-        if (user.pagamento.situacao == 0) {
-            listFeedBack.push("O usuário não realizou o pagamento do ingresso do congresso;")
-        }
-        if (!courseData.participants.includes(`${user._id}`)) {
-            listFeedBack.push("O usuário não realizou a inscrição para este minicurso;")
-        }
-        if (courseData.attendanceList.includes(`${user._id}`)) {
-            listFeedBack.push("O usuário já está com a presença registrada;")
-        }
-
-        //
-        //
-        console.log(listFeedBack)
-        return listFeedBack
-    }
-
     return (
         <>
             <LoadingModal isLoading={isLoading} />
-            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[900000] px-5">
+            <div className="fixed inset-0 min-h-sreen bg-black bg-opacity-60 flex items-center justify-center z-[5000] p-5">
                 <div className="relative mx-auto p-6 border w-full max-w-2xl shadow-xl rounded-2xl bg-white">
                     <div className="mt-3 text-center space-y-5">
                         <h3 className="text-xl leading-6 font-bold text-gray-900">Usuário Identificado</h3>
@@ -625,40 +571,45 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                     Observação
                                 </p>
                                 {
-                                    user && (
-                                        getFeedBack(user, courseData).length === 0 ? "" :
-                                            getFeedBack(user, courseData).map((value) => <p key={`${user._id}`} className='text-red-700 font-semibold'>{value}</p>)
-                                    )
+                                    user?.pagamento.situacao !== 1 ?
+                                        <h1><span className='bg-red-500 p-2 font-extrabold text-white'>ATENÇÃO!</span> Esse congressista não realizou o pagamento do congresso</h1> :
+                                        ""
                                 }
-                                <p className='text-red-700 font-semibold'>
-                                    {
-                                        user && courseData.participants.includes(`${user._id}`) ? "O Congressista está inscrito no minicurso" : ""
-                                    }
-                                </p>
-                                <p className='text-red-700 font-semibold'>
-                                    {
-                                        user && courseData.participants.includes(`${user._id}`) &&
-                                            courseData.attendanceList.includes(`${user._id}`)
-                                            ? "O Congressista já possui presença no minicurso" : ""
-                                    }
-                                </p>
+                                {
+                                    listType === "init" && courseData.attendanceListInit?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de início já foi registrada</p>
+
+                                }
+                                {
+                                    listType === "init" && !courseData.attendanceListInit?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de início NÃO foi registrada</p>
+                                }
+                                {
+                                    listType === "end" && courseData.attendanceListEnd?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de fim já foi registrada</p>
+                                }
+                                {
+                                    listType === "end" && !courseData.attendanceListEnd?.includes(user?._id || "") &&
+                                    <p className="text-sm font-medium text-green-600 mt-2">Presença de fim NÃO foi registrada</p>
+                                }
                             </div>
                         </div>
                         <div className='flex flex-col items-center content-center justify-center space-y-1'>
-
                             {
-                                user && !courseData.attendanceList.includes(`${user._id}`) && (
+
+                                (listType === "init" && !courseData.attendanceListInit?.includes(user?._id || "")) || (listType === "end" && !courseData.attendanceListEnd?.includes(user?._id || "")) ?
                                     <button
                                         onClick={
                                             async () => {
                                                 setIsLoading(true)
-                                                const response = await fetch(`/api/post/darPresenca`, {
+                                                const response = await fetch(`/api/post/darPresencaPalestra`, {
                                                     method: "POST",
                                                     headers: {
                                                         "Content-Type": "application/json",
                                                     },
                                                     body: JSON.stringify({
                                                         eventId: courseData._id,
+                                                        listType: listType,
                                                         userId: qrCodeResult,
                                                     }),
                                                 });
@@ -676,49 +627,44 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                         }
                                         className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                                     >
-
-                                        {
-                                            user && courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"
-                                        }
-                                    </button>
-                                )}
-                            {
-                                user && courseData.attendanceList.includes(`${user._id}`) && (
-                                    <>
-                                        <button
-                                            onClick={
-                                                async () => {
-                                                    // 
-                                                    setIsLoading(true)
-                                                    const response = await fetch(`/api/post/retirarPresenca`, {
-                                                        method: "POST",
-                                                        headers: {
-                                                            "Content-Type": "application/json",
-                                                        },
-                                                        body: JSON.stringify({
-                                                            eventId: courseData._id,
-                                                            userId: qrCodeResult,
-                                                        }),
-                                                    });
-                                                    if (!response.ok) {
-                                                        setIsLoading(false)
-                                                        alert("Algo deu errado, por favor tente novamente.")
-                                                        return;
-                                                    }
-                                                    await hydrateData()
-                                                    setIsLoading(false)
-                                                    alert("Presença removida com sucesso.")
-                                                    closeModal()
-
-                                                }
-                                            }
-                                            className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                                        >
-                                            Retirar Presença
-                                        </button>
-                                    </>
-                                )
+                                        Dar Presença - {listType === "init" ? "Início" : "Fim"}
+                                    </button> : ""
                             }
+                            {
+                                (listType === "init" && courseData.attendanceListInit?.includes(user?._id || "")) || (listType === "end" && courseData.attendanceListEnd?.includes(user?._id || "")) ?
+                                    <button
+                                        onClick={
+                                            async () => {
+                                                setIsLoading(true)
+                                                const response = await fetch(`/api/post/retirarPresencaPalestra`, {
+                                                    method: "POST",
+                                                    headers: {
+                                                        "Content-Type": "application/json",
+                                                    },
+                                                    body: JSON.stringify({
+                                                        eventId: courseData._id,
+                                                        listType: listType,
+                                                        userId: qrCodeResult,
+                                                    }),
+                                                });
+                                                if (!response.ok) {
+                                                    setIsLoading(false)
+                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                    return;
+                                                }
+                                                await hydrateData()
+                                                setIsLoading(false)
+                                                alert("Presença retirada com sucesso.")
+                                                closeModal()
+
+                                            }
+                                        }
+                                        className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                                    >
+                                        Retirar Presença - {listType === "init" ? "Início" : "Fim"}
+                                    </button> : ""
+                            }
+                            {/* */}
                             <button
                                 onClick={closeModal}
                                 className="w-fit px-4 w-lg py-3 bg-green-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
@@ -734,14 +680,16 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
 }
 //
 interface AllUsersModalProps {
-    courseData: ICourse;
+    courseData: ILecture;
     isOpen: boolean;
     onClose: () => void;
     onUserSelect: (user: string) => Promise<void>; // Função para lidar com a seleção
     usersData: IUser[];
+    setListType: Dispatch<SetStateAction<"init" | "end">>,
+    listType: "init" | "end"
 }
 
-const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClose, onUserSelect, usersData }) => {
+const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClose, onUserSelect, usersData, setListType, listType }) => {
 
     const [searchTerm, setSearchTerm] = useState('');
     // Efeito para fechar com a tecla 'Esc'
@@ -775,56 +723,77 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     });
 
     return (
-        <div className="all-users-modal-overlay mt-10">
-            <div className="all-users-modal-backdrop" onClick={onClose}></div>
-            <div className="all-users-modal-container">
-                <div className="all-users-modal-header">
-                    <h1 className="all-users-modal-title">Escolha um Congressista</h1>
-                    <button onClick={onClose} className="all-users-modal-close-btn" aria-label="Fechar modal">
+        // Container principal que cobre a tela inteira
+        <div className="fixed inset-0 min-h-screen z-[5000] flex items-center justify-center p-4">
+            {/* Backdrop para fechar o modal */}
+            <div className="absolute inset-0 bg-black bg-opacity-60" onClick={onClose}></div>
+
+            {/* Dialog do Modal */}
+            <div className="relative z-10 flex h-full max-h-[85vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl">
+                {/* Cabeçalho do Modal */}
+                <div className="flex items-center justify-between border-b p-4">
+                    <h1 className="text-xl font-bold text-gray-800 w-full text-center">Escolha um Congressista</h1>
+                    <button onClick={onClose} className="rounded-full p-2 text-gray-500 hover:bg-gray-100" aria-label="Fechar modal">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
-                <div className="all-users-modal-search-section">
-                    <h2 className="all-users-modal-search-title">Pesquisar Congressista</h2>
+                <div className='mt-5 w-full flex items-center justify-center content-center flex-col'>
+                    <h2 className="text-lg font-bold text-gray-800 w-full text-center py-3">Realizar a presença para:</h2>
+                    <button
+                        onClick={() => {
+                            setListType((prev) => prev === "end" ? "init" : "end"
+                            )
+                        }}
+                        className="presenca-lista-btn presenca-lista-btn-primary mb-5"
+                    >
+                        <ListChecksIcon size={18} />
+                        {
+                            listType === "init" ? "Início do Evento" : "Fim do Evento"
+                        }
+                    </button>
+                </div>
+                <div className="border-b p-4 text-center">
+                    <h2 className="text-lg font-bold text-gray-800 w-full text-center py-3">Pesquisar Congressista</h2>
                     <input
                         type="text"
                         placeholder="Filtrar por nome ou e-mail..."
-                        className="all-users-modal-search-input"
+                        className="w-full rounded-md border border-gray-300 p-2 focus:border-blue-500 focus:ring-blue-500"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="all-users-modal-body">
-                    {courseData.participants.length >= courseData.maxParticipants && (
-                        <p className="all-users-modal-warning">Atenção, o evento já atingiu seu limite máximo</p>
-                    )}
-                    <div className="all-users-modal-list">
+
+                {/* Corpo rolável com a lista de usuários */}
+                <div className="flex-grow overflow-y-auto p-4">
+                    <div className="flex flex-col items-center justify-center content-center space-y-4 w-full">
                         {filteredUsers.map((user) => (
+                            // Envolvemos o card em um botão para torná-lo clicável
                             <button
                                 key={user._id}
                                 onClick={() => onUserSelect(user._id)}
-                                className="all-users-modal-user-button"
+                                className="min-w-[80%] max-w-[80%] text-left transition duration-200 hover:scale-[1.02]"
                             >
-                                <div className="all-users-modal-user-card">
-                                    <div className="all-users-modal-user-content">
-                                        <div className="all-users-modal-user-avatar">
-                                            <span className="all-users-modal-avatar-text">
+                                <div className="w-full max-w-lg rounded-lg border border-gray-200 bg-white p-6 shadow-lg">
+                                    <div className="flex items-center space-x-4">
+                                        <div className="flex-shrink-0">
+                                            <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-blue-600">
                                                 {user.informacoes_usuario.nome.charAt(0)}
                                             </span>
                                         </div>
-                                        <div className="all-users-modal-user-info">
-                                            {courseData.participants.includes(`${user._id}`) && (
-                                                <p className="all-users-modal-badge">Já inscrito no minicurso</p>
-                                            )}
-                                            <p className="all-users-modal-user-name">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-xl font-bold text-gray-800">
                                                 {user.informacoes_usuario.titulo_honorario} {user.informacoes_usuario.nome}
                                             </p>
-                                            <p className="all-users-modal-user-email">{user.informacoes_usuario.email}</p>
-                                            {user.pagamento.situacao != 1 && (
-                                                <p className="all-users-modal-payment-status" style={{ color: "red" }}>
-                                                    Não inscrito no congresso
-                                                </p>
-                                            )}
+                                            <p className="truncate text-sm text-gray-500">{user.informacoes_usuario.email}</p>
+                                            <div>
+                                                <p className='text-[12px] font-semibold' style={{
+                                                    color: user.pagamento.situacao == 1 ? "blue" : "red"
+                                                }}>{
+                                                        user.pagamento.situacao == 1 ?
+                                                            "" : "Não inscrito no congresso"
+
+                                                    }</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -837,48 +806,53 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     );
 };
 
-function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: string[], presentes: string[], todosUsuarios: Usuario[] }) {
-    const data = presentes
-        // 1. FILTRA: Mantém apenas os IDs que correspondem a um usuário existente
-        .map(usuarioId => todosUsuarios.find(u => u._id === usuarioId))
-        .filter(usuario => usuario !== undefined) // Remove todos os 'undefined'
-
-        // 2. MAP: Transforma os objetos de usuário encontrados no formato de planilha
-        .map(usuario => ({ //
-            NOME: usuario!.informacoes_usuario.nome,
-            CPF: usuario!.informacoes_usuario.cpf,
-            EMAIL: usuario!.informacoes_usuario.email,
-        }));
+function ExportButton({
+    inscritos,
+    presentes,
+    todosUsuarios,
+}: {
+    inscritos: string[];
+    presentes: { init: string[]; end: string[] };
+    todosUsuarios: Usuario[];
+}) {
+    const getDataFromIds = (ids: string[]) =>
+        ids
+            .map((usuarioId: string) => todosUsuarios.find(u => u._id === usuarioId))
+            .filter((usuario): usuario is Usuario => usuario !== undefined)
+            .map(usuario => ({
+                NOME: usuario.informacoes_usuario.nome,
+                CPF: usuario.informacoes_usuario.cpf,
+                EMAIL: usuario.informacoes_usuario.email,
+            }));
 
     const handleDownload = () => {
-        // 1. Crie uma nova planilha a partir dos seus dados JSON
-        const worksheet = XLSX.utils.json_to_sheet(data);
-        // 2. Crie um novo livro (workbook) e adicione a planilha a ele
+        // Cria as duas listas (init e end)
+        const initData = getDataFromIds(presentes.init);
+        const endData = getDataFromIds(presentes.end);
+
+        // Cria o workbook
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados'); // "Dados" é o nome da aba da planilha
 
-        // 3. Personalize a largura das colunas (opcional)
-        worksheet['!cols'] = [
-            { wch: 20 }, // Coluna "nome" com 20 caracteres de largura
-            { wch: 15 }, // Coluna "categoria" com 15
-            { wch: 10 }, // Coluna "preco" com 10
-            { wch: 10 }, // Coluna "estoque" com 10
+        // Cria a aba "init"
+        const initSheet = XLSX.utils.json_to_sheet(initData);
+        initSheet["!cols"] = [
+            { wch: 20 },
+            { wch: 15 },
+            { wch: 25 },
         ];
+        XLSX.utils.book_append_sheet(workbook, initSheet, "init");
 
-        // 4. 
+        // Cria a aba "end"
+        const endSheet = XLSX.utils.json_to_sheet(endData);
+        endSheet["!cols"] = [
+            { wch: 20 },
+            { wch: 15 },
+            { wch: 25 },
+        ];
+        XLSX.utils.book_append_sheet(workbook, endSheet, "end");
 
-        if (worksheet['!ref']) {
-            // Pega o range atual (por exemplo, "A1:C10")
-            const range = XLSX.utils.decode_range(worksheet['!ref']);
-
-            // Define o novo final da linha como o número total de dados + 1 (para o cabeçalho)
-            range.e.r = data.length; // 'e.r' é o índice da última linha (base 0)
-
-            // Codifica o novo range de volta para o formato A1:C10 e aplica à planilha
-            worksheet['!ref'] = XLSX.utils.encode_range(range);
-        }
-        // 4. Gere o arquivo e acione o download
-        XLSX.writeFile(workbook, 'MinhaPlanilha.xlsx');
+        // Salva o arquivo
+        XLSX.writeFile(workbook, "Presenca.xlsx");
     };
 
     return (
@@ -891,5 +865,8 @@ function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: stri
         </button>
     );
 }
+
+
+
 
 export default MyComponent;
