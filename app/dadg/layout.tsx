@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import "./CoepsGlobals.css";
-import "./style.css";
-import Header from "./components/Header";
+import "./globals.css";
 import { UserProvider } from "@auth0/nextjs-auth0/client";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "COEPS Admin - Painel Administrativo",
-  description: "Painel administrativo do COEPS",
+  title: "DADG Admin - Painel Administrativo",
+  description: "Painel administrativo do DA",
 };
 
 export default function RootLayout({
@@ -20,7 +18,6 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={inter.className}>
         <UserProvider>
-          <Header />
           {children}
         </UserProvider>
       </body>

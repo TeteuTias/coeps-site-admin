@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withMiddlewareAuthRequired, getSession } from '@auth0/nextjs-auth0/edge';
-import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
-import { redirect } from 'next/navigation';
+//import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
+//import { redirect } from 'next/navigation';
 //
 //
 //
@@ -16,6 +16,7 @@ export const middleware = withMiddlewareAuthRequired(async (req) => {
     return res.next()
   }
   const typeConnc = url.toString().includes("/api/") ? "api" : "page"
+  /*
   const canUserAccess = await checkUserPermission(url, typeConnc, session.user.sub.replace("auth0|", ""))
   if (!canUserAccess) {
     if (typeConnc === "api") {
@@ -28,6 +29,7 @@ export const middleware = withMiddlewareAuthRequired(async (req) => {
     // 3. Rewrite to the new, absolute URL
     return NextResponse.rewrite(url);
   }
+  */
   return res.next()
 
 
