@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import "./style.css"
-import { Settings, Users, Hand, CircleDollarSign, UserRound, BriefcaseBusiness } from "lucide-react";
+import { Settings, Users, Hand, CircleDollarSign, UserRound, BriefcaseBusiness, CalendarCheck } from "lucide-react";
 
 export default function Page() {
   return (
@@ -24,17 +24,11 @@ function PaginaAreaDoCliente() {
     <>
       <h1 className="main-title">Área do Administrador - DADG</h1>
       <div className="cards-grid">
-        <Link href="/coeps/" className="glass-card">
+        <Link href="/dadg/scheduleRoom/" className="glass-card">
           <div className="card-icon">
-            <BriefcaseBusiness size={48} />
+            <CalendarCheck size={48} />
           </div>
-          <h2 className="card-title">Sala DA</h2>
-        </Link>
-        <Link href="/dadg/" className="glass-card">
-          <div className="card-icon">
-            <Users size={48} />
-          </div>
-          <h2 className="card-title">Câmera DA</h2>
+          <h2 className="card-title">Agenda Sala DA</h2>
         </Link>
       </div>
     </>
