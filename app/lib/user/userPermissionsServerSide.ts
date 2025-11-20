@@ -19,6 +19,7 @@ const permittedRoutesApi: { [key: string]: string[] } = {
 
 // Objeto para permissões de páginas (rotas visíveis no navegador)
 const permittedRoutes: { [key: string]: string[] } = {
+    /*
     "6913b3853ed0130b1f422acc": [ // ID da conta de apoio
         "/",
         "/presenca",
@@ -30,6 +31,7 @@ const permittedRoutes: { [key: string]: string[] } = {
         "/usuarios/informacoes/:path",
         "/gerarListaMinicurso/:path"
     ],
+    */
     "68f77d798b5a848b5c9e5e04": [ // ID da conta Certificados
         "/",
         "/presenca",
