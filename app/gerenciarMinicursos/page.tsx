@@ -54,7 +54,6 @@ export default function Page() {
     }, [data.data]);
 
     const filteredCourses = useMemo(() => {
-        console.log("asdfasdf")
         if (!data.data) return [];
         return data.data.filter(course => {
             // Filtro de busca por nome ou ID
@@ -141,6 +140,13 @@ export default function Page() {
             }} />
             <LoadingModal isLoading={loading} />
             <div className="w-full space-y-5 px-10">
+                <div>
+                    <span className="main-eyebrow">CIEPS / Atividades</span>
+                    <h1 className="main-title">Gerenciar Atividades</h1>
+                    <p className="main-subtitle">
+                        Configure minicursos, visibilidade, vagas e cronogramas mantendo a operação do congresso organizada.
+                    </p>
+                </div>
                 <div className="w-full flex items-center justify-center">
                     <button className="gm-create-btn" onClick={() => { setCreateCourseModal(true) }}>
                         CRIAR NOVA ATIVIDADE

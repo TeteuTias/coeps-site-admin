@@ -7,8 +7,8 @@ import { Auth0Provider } from "@auth0/nextjs-auth0/client";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "COEPS Admin - Painel Administrativo",
-  description: "Painel administrativo do COEPS",
+  title: "CIEPS Admin - Painel Administrativo",
+  description: "Painel administrativo do CIEPS",
 };
 
 export default function RootLayout({

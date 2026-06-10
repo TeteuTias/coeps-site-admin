@@ -157,7 +157,7 @@ export default function Page({ params }: { params: { userId: string } }) {
     //
     //
     return (
-        <div className="w-full min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 space-y-10"
+        <div className="admin-detail-page space-y-10"
             style={{
                 background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
                 backgroundAttachment: 'fixed',
