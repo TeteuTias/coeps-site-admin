@@ -1,4 +1,10 @@
-// app/api/auth/[auth0]/route.js
-import { handleAuth } from '@auth0/nextjs-auth0';
+import { NextResponse } from "next/server";
 
-export const GET = handleAuth();
+export async function GET(request, context) {
+  const params = await context.params;
+  const url = new URL(request.url);
+
+  url.pathname = `/auth/${params.auth0}`;
+
+  return NextResponse.redirect(url);
+}

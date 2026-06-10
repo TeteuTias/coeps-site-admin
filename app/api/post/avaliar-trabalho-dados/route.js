@@ -1,13 +1,13 @@
+import { auth0, withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { withApiAuthRequired, getSession } from '@auth0/nextjs-auth0';
 import { ObjectId } from 'mongodb';
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withApiAuthRequired(async function POST(request) {
     try {
-        const session = await getSession(request);
+        const session = await auth0.getSession(request);
         const avaliadorId = session?.user?.sub;
         
         if (!avaliadorId) {

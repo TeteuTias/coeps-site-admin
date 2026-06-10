@@ -1,25 +1,37 @@
 import { NextResponse } from 'next/server';
-import { withMiddlewareAuthRequired, getSession } from '@auth0/nextjs-auth0/edge';
 import checkUserPermission from "./app/lib/user/userPermissionsServerSide"
-import { redirect } from 'next/navigation';
+import { auth0 } from "./app/lib/auth0";
 //
 //
 //
 //
 //
 
-export const middleware = withMiddlewareAuthRequired(async (req) => {
+export async function middleware(req) {
   const url = new URL(req.url)
-  const res = NextResponse
-  const session = await getSession(req, res)
-  if (url.toString().includes("/api/auth")) {
-    return res.next()
+  const authResponse = await auth0.middleware(req)
+
+  if (url.pathname.startsWith("/auth")) {
+    return authResponse
   }
-  const typeConnc = url.toString().includes("/api/") ? "api" : "page"
+
+  const session = await auth0.getSession(req)
+  const typeConnc = url.pathname.startsWith("/api/") ? "api" : "page"
+
+  if (!session) {
+    if (typeConnc === "api") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const loginUrl = new URL("/auth/login", req.url)
+    loginUrl.searchParams.set("returnTo", url.pathname + url.search)
+    return NextResponse.redirect(loginUrl)
+  }
+
   const canUserAccess = await checkUserPermission(url, typeConnc, session.user.sub.replace("auth0|", ""))
   if (!canUserAccess) {
     if (typeConnc === "api") {
-      return redirect("/not-allowed")
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
     // 1. Get the original request's URL as a base
     const url = req.nextUrl.clone();
@@ -28,10 +40,10 @@ export const middleware = withMiddlewareAuthRequired(async (req) => {
     // 3. Rewrite to the new, absolute URL
     return NextResponse.rewrite(url);
   }
-  return res.next()
+  return authResponse
 
 
-});
+}
 //
 //
 
@@ -40,7 +52,7 @@ export const middleware = withMiddlewareAuthRequired(async (req) => {
 //
 export const config = {
   matcher: [
-    '/:path*',
+    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)',
   ]
 }
 /*

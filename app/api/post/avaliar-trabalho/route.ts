@@ -1,15 +1,14 @@
+import { auth0, withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { ObjectId } from 'bson';
-import { getSession } from '@auth0/nextjs-auth0';
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withApiAuthRequired(async function POST(request) {
     try {
-        const session = await getSession();
+        const session = await auth0.getSession();
         const avaliadorId = session?.user.sub.replace("auth0|", ""); // ID do avaliador logado
 
         const { db } = await connectToDatabase();

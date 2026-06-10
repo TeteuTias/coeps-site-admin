@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import "./style.css";
 import Header from "./components/Header";
-import { UserProvider } from "@auth0/nextjs-auth0/client";
+import { Auth0Provider } from "@auth0/nextjs-auth0/client";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -19,10 +19,10 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={inter.className}>
-        <UserProvider>
+        <Auth0Provider>
           <Header />
           {children}
-        </UserProvider>
+        </Auth0Provider>
       </body>
     </html>
   );
