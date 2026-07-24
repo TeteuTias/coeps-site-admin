@@ -1,8 +1,7 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { getAccessToken, withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { ObjectId } from 'mongodb';
-import { getSession } from '@auth0/nextjs-auth0';
 //
 //
 // Exemplo de return:
@@ -14,8 +13,8 @@ export const dynamic = 'force-dynamic'
 
 export const GET = withApiAuthRequired(async function GET(request, { params }) {
     try {
-        const miniCursoId = params["_id"];
-        //const { user } = await getSession();
+        const { _id: miniCursoId } = await params;
+        //const { user } = await auth0.getSession();
         //vconst userId = user.sub.replace("auth0|", ""); // Retirando o auth0|  
         //
         // Já vem apenas com o replace.
@@ -36,9 +35,11 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
         }, { status: 200 });
 
     }
-    catch (error) {
-        console.log(error)
-        return NextResponse.json({ "message": error.message }, { status: 500 })
+    catch {
+        return NextResponse.json(
+            { error: "internal_server_error", message: "Não foi possível consultar a lista de presença." },
+            { status: 500 }
+        )
     }
 })
 /*

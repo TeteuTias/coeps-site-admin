@@ -9,7 +9,8 @@ import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModa
 import './style.css';
 import { Users, CheckCircle, XCircle, QrCode, UserPlus, Loader2, Calendar, Clock, Table, ListChecksIcon } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { useUser } from '@auth0/nextjs-auth0/client';
+import { useUser } from '@/app/lib/auth0-client';
+import { useParams } from 'next/navigation';
 
 interface Usuario {
     _id: string,
@@ -23,7 +24,8 @@ interface Usuario {
     };
 }
 
-const MyComponent = ({ params }: { params: { _id: string } }) => {
+const MyComponent = () => {
+    const { _id } = useParams<{ _id: string }>();
     const user = useUser()
     const [data, setData] = useState<string[]>([]);
     const [listType, setListType] = useState<"init" | "end">("init")
@@ -63,7 +65,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         try {
             const fetchParticipantAndAttendanceData = async () => {
                 const [courseResponse, allUsersResponse] = await Promise.all([
-                    fetch(`/api/get/palestraProps/${params._id}`),
+                    fetch(`/api/get/palestraProps/${_id}`),
                     fetch(`/api/get/todosCongressistasInscritos/`),
                 ]);
 
@@ -117,7 +119,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             try {
                 const fetchParticipantAndAttendanceData = async () => {
                     const [courseResponse, allUsersResponse] = await Promise.all([
-                        fetch(`/api/get/palestraProps/${params._id}`),
+                        fetch(`/api/get/palestraProps/${_id}`),
                         fetch(`/api/get/todosCongressistasInscritos/`),
                     ]);
 
@@ -164,7 +166,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             }
         };
         fetchData();
-    }, [params._id]);
+    }, [_id]);
 
     if (loading) {
         return (
@@ -291,7 +293,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                                 "Content-Type": "application/json",
                                                             },
                                                             body: JSON.stringify({
-                                                                eventId: params._id,
+                                                                eventId: _id,
                                                                 userId: item._id,
                                                                 listType: listType,
                                                             }),
@@ -307,7 +309,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                             "Content-Type": "application/json",
                                                         },
                                                         body: JSON.stringify({
-                                                            eventId: params._id,
+                                                            eventId: _id,
                                                             userId: item._id,
                                                             listType: listType
                                                         }),
@@ -351,7 +353,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                 "Content-Type": "application/json",
                             },
                             body: JSON.stringify({
-                                eventId: params._id,
+                                eventId: _id,
                                 userId: userId,
                                 listType: listType
                             }),

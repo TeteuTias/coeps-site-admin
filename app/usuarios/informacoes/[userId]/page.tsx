@@ -4,7 +4,7 @@ import { IUser } from "@/app/lib/types/user/user.t"
 import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight } from "lucide-react";
 import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
 import { useEffect, useState, FormEvent, ChangeEvent } from "react"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ICourse } from "@/app/lib/types/events/event.t";
 import { ObjectId } from "bson";
@@ -59,8 +59,8 @@ const getPaymentStatusIconAndColor = (status: string) => {
 //
 
 
-export default function Page({ params }: { params: { userId: string } }) {
-    const { userId } = params
+export default function Page() {
+    const { userId } = useParams<{ userId: string }>()
     const [user, setUser] = useState<IUser | null>(null)
     const [formData, setFormData] = useState({
         id_api: '',
@@ -130,7 +130,7 @@ export default function Page({ params }: { params: { userId: string } }) {
             const response = await fetch(`/api/put/usuario/atualizarUsuario/`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...formData, userId: params.userId })
+                body: JSON.stringify({ ...formData, userId })
             });
 
             if (!response.ok) throw new Error("Falha ao salvar os dados.");

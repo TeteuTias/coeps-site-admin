@@ -1,6 +1,6 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../lib/mongodb';
 import { NextResponse } from 'next/server';
-import { withApiAuthRequired } from '@auth0/nextjs-auth0';
 
 //
 //
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 export const GET = withApiAuthRequired(async function GET(request, response) {
     try {
-        //const { user } = await getSession();
+        //const { user } = await auth0.getSession();
         //vconst userId = user.sub.replace("auth0|", ""); // Retirando o auth0|  
         //
         // Já vem apenas com o replace.

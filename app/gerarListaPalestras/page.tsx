@@ -17,7 +17,7 @@ interface Usuario {
     }
 }
 
-const MyComponent = ({ params }: { params: { _id: string } }) => {
+const MyComponent = () => {
     const [data, setData] = useState<string[]>(
         [],
     );

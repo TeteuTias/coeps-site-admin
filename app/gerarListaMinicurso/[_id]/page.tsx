@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link';
 import { useEffect, useState, useRef } from 'react';
+import { useParams } from 'next/navigation';
 
 interface DataStructure {
     data: string[];
@@ -18,7 +19,8 @@ interface Usuario {
     }
 }
 
-const MyComponent = ({ params }: { params: { _id: string } }) => {
+const MyComponent = () => {
+    const { _id } = useParams<{ _id: string }>();
     const [data, setData] = useState<string[]>(
         [],
     );
@@ -29,7 +31,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await fetch(`/api/get/participantesMinicursos/${params._id}`);
+                const response = await fetch(`/api/get/participantesMinicursos/${_id}`);
                 if (!response.ok) {
                     throw new Error('Erro na resposta da rede');
                 }
@@ -68,7 +70,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         };
 
         fetchData();
-    }, [params._id]); // O array vazio faz com que o efeito execute apenas uma vez ao montar
+    }, [_id]); // O array vazio faz com que o efeito execute apenas uma vez ao montar
 
     if (loading) {
         return <div className="text-center">Carregando...</div>;

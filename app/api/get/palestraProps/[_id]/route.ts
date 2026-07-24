@@ -1,6 +1,6 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { getAccessToken, withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { ObjectId } from 'bson';
 
 export const dynamic = 'force-dynamic'
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export const GET = withApiAuthRequired(async function GET(request, { params }) {
     try {
 
-        const PalestraId = params?.["_id"];
+        const { _id: PalestraId } = await params;
 
         if (!PalestraId || !(typeof PalestraId === "string")) {
             throw new Error("PalestraId is not valid")
@@ -29,8 +29,11 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
         ).toArray() // 'buffer': 0, 'user_id': 0, 'size': 0
 
         return Response.json({ data: response[0] })
-    } catch (err) {
-        return Response.json({ message: err instanceof Error ? err.message : "Ocorreu algum erro desconhecido. Recarregue a página e tente novamente." }, { status: 500 })
+    } catch {
+        return Response.json(
+            { error: "internal_server_error", message: "Não foi possível consultar a palestra." },
+            { status: 500 }
+        )
 
     }
 })
