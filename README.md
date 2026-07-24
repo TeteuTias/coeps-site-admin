@@ -10,7 +10,7 @@ Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000). Em `.env.local`,
+Abra [http://localhost:3001](http://localhost:3001). Em `.env.local`,
 `AUTH0_DOMAIN` deve conter somente o hostname do tenant, sem protocolo ou barra
 final. Não versione credenciais.
 
