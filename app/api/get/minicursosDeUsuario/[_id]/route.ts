@@ -1,13 +1,13 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { getAccessToken, withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { ObjectId } from 'bson';
 
 export const dynamic = 'force-dynamic'
 
 
 export const GET = withApiAuthRequired(async function GET(request, { params }) {
-    const userId = params?.["_id"];
+    const { _id: userId } = await params;
 
     if (!userId || !(typeof userId === "string")) {
         throw new Error("userId is not valid")

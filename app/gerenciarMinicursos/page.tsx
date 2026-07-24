@@ -54,7 +54,6 @@ export default function Page() {
     }, [data.data]);
 
     const filteredCourses = useMemo(() => {
-        console.log("asdfasdf")
         if (!data.data) return [];
         return data.data.filter(course => {
             // Filtro de busca por nome ou ID

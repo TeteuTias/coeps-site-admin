@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'bson';
 import { connectToDatabase } from '@/app/lib/mongodb';
+import { withApiAuthRequired } from "@/app/lib/auth0";
 
 
 //
 //
-export async function PUT(req: NextRequest) {
+export const PUT = withApiAuthRequired(async function PUT(req: Request) {
     // 1. Validar o método da requisição (opcional, mas boa prática)
     if (req.method !== 'PUT') {
         return Response.json({ error: 'Método não permitido' }, { status: 405 });
@@ -89,8 +90,11 @@ export async function PUT(req: NextRequest) {
             { status: 200 }
         );
 
-    } catch (error) {
+    } catch {
         // Captura erros de parsing do JSON ou outros erros inesperados
-        return Response.json({ error: error instanceof Error ? error.message : "Ocorreu algum erro. Recarregue a página e tente novamente." }, { status: 400 });
+        return Response.json(
+            { error: "invalid_request", message: "Não foi possível validar os dados enviados." },
+            { status: 400 }
+        );
     }
-}
+})

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'bson';
 import { connectToDatabase } from '@/app/lib/mongodb';
 import { IPaymentConfig } from '@/app/lib/types/payments/payment.t';
+import { withApiAuthRequired } from "@/app/lib/auth0";
 // --- Helper Types e Funções de Validação ---
 
 // Tipo para um único item de parcelamento, para clareza
@@ -19,7 +20,7 @@ type ParcelamentoItem = IPaymentConfig["parcelamentos"]
 
 
 // --- Rota Principal ---
-export async function PUT(req: NextRequest) {
+export const PUT = withApiAuthRequired(async function PUT(req: Request) {
     try {
         const allPaymentTypes: IPaymentConfig["pagamentosAceitos"] = ["PIX", "BOLETO", "CREDIT_CARD", "DEBIT_CARD"]
 
@@ -64,8 +65,10 @@ export async function PUT(req: NextRequest) {
             { status: 200 }
         );
 
-    } catch (error) {
-        console.error("Erro na API de atualização de parcelamentos:", error);
-        return NextResponse.json({ error: error instanceof Error ? error.message : 'Erro interno do servidor ao tentar atualizar os dados.' }, { status: 500 });
+    } catch {
+        return NextResponse.json(
+            { error: "internal_server_error", message: "Não foi possível atualizar os tipos de pagamento." },
+            { status: 500 }
+        );
     }
-}
+})

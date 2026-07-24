@@ -1,6 +1,6 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 import { IUser } from '@/app/lib/types/user/user.t';
 import { ObjectId } from 'bson';

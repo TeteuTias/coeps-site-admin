@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react"
 import { ICourse } from "@/app/lib/types/events/event.t"
 import LoadingModal from "@/app/components/LoadingModal"
 import CreateCourseModal from "@/app/components/CreateCourseModal"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 //
 //
-export default function Page({ params }: { params: { eventId: string } }) {
+export default function Page() {
+    const { eventId } = useParams<{ eventId: string }>()
     const [dataCourse, setDataCourse] = useState<ICourse | null>(null)
     const [loading, setLoading] = useState<boolean>(true)
     const router = useRouter()
@@ -15,7 +16,7 @@ export default function Page({ params }: { params: { eventId: string } }) {
     //
     //
     const hydrateData = useCallback(async () => {
-        const fetchData = await fetch(`/api/get/minicursoProps/${params.eventId}`);
+        const fetchData = await fetch(`/api/get/minicursoProps/${eventId}`);
         if (!fetchData.ok) {
             const response = await fetchData.json();
             alert(response.message);
@@ -23,7 +24,7 @@ export default function Page({ params }: { params: { eventId: string } }) {
         const { data } = await fetchData.json();
         setDataCourse(data);
         setLoading(false);
-    }, [params.eventId]);
+    }, [eventId]);
 
     useEffect(() => {
         hydrateData()

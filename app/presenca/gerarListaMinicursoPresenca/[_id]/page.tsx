@@ -9,7 +9,8 @@ import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModa
 import './style.css';
 import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { useUser } from '@auth0/nextjs-auth0/client';
+import { useUser } from '@/app/lib/auth0-client';
+import { useParams } from 'next/navigation';
 interface Usuario {
     _id: string,
     informacoes_usuario: {
@@ -22,7 +23,8 @@ interface Usuario {
     };
 }
 
-const MyComponent = ({ params }: { params: { _id: string } }) => {
+const MyComponent = () => {
+    const { _id } = useParams<{ _id: string }>();
     const [data, setData] = useState<string[]>([]);
     const user = useUser()
     const [allUsers, setAllUsers] = useState<IUser[]>([])
@@ -55,9 +57,9 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
         try {
             const fetchParticipantAndAttendanceData = async () => {
                 const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
-                    fetch(`/api/get/participantesMinicursos/${params._id}`),
-                    fetch(`/api/get/listaDePresenca/${params._id}`),
-                    fetch(`/api/get/minicursoProps/${params._id}`),
+                    fetch(`/api/get/participantesMinicursos/${_id}`),
+                    fetch(`/api/get/listaDePresenca/${_id}`),
+                    fetch(`/api/get/minicursoProps/${_id}`),
                     fetch(`/api/get/todosCongressistas/`),
                 ]);
 
@@ -111,9 +113,9 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             try {
                 const fetchParticipantAndAttendanceData = async () => {
                     const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
-                        fetch(`/api/get/participantesMinicursos/${params._id}`),
-                        fetch(`/api/get/listaDePresenca/${params._id}`),
-                        fetch(`/api/get/minicursoProps/${params._id}`),
+                        fetch(`/api/get/participantesMinicursos/${_id}`),
+                        fetch(`/api/get/listaDePresenca/${_id}`),
+                        fetch(`/api/get/minicursoProps/${_id}`),
                         fetch(`/api/get/todosCongressistas/`),
                     ]);
 
@@ -162,7 +164,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
             }
         };
         fetchData();
-    }, [params._id]);
+    }, [_id]);
 
     if (loading) {
         return (
@@ -272,7 +274,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                     const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
                                                         method: "DELETE",
                                                         body: JSON.stringify({
-                                                            eventId: params._id,
+                                                            eventId: _id,
                                                             userId: item._id,
                                                         }),
                                                     })
@@ -319,7 +321,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                                 "Content-Type": "application/json",
                                                             },
                                                             body: JSON.stringify({
-                                                                eventId: params._id,
+                                                                eventId: _id,
                                                                 userId: item._id,
                                                             }),
                                                         });
@@ -334,7 +336,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                                             "Content-Type": "application/json",
                                                         },
                                                         body: JSON.stringify({
-                                                            eventId: params._id,
+                                                            eventId: _id,
                                                             userId: item._id,
                                                         }),
                                                     });
@@ -375,7 +377,7 @@ const MyComponent = ({ params }: { params: { _id: string } }) => {
                                 "Content-Type": "application/json",
                             },
                             body: JSON.stringify({
-                                eventId: params._id,
+                                eventId: _id,
                                 userId: userId,
                             }),
                         });

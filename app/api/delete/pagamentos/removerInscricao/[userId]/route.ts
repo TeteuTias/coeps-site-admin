@@ -1,5 +1,6 @@
 import { ObjectId } from "bson"
 import { connectToDatabase } from '@/app/lib/mongodb';
+import { withApiAuthRequired } from "@/app/lib/auth0";
 // volta o estado do pagamento do usuário para: 0 -> não inscrito e sem pagamento criado!
 
 /**
@@ -7,7 +8,10 @@ import { connectToDatabase } from '@/app/lib/mongodb';
 
  * @abstract Apaga a inscrição de um usuário ou de TODOS. Se enviar ALL vai remover a inscrição de TUDO. Se enviar o _id vai remover a inscrição do usuário específico
  */
-export async function DELETE(req: Request, { params }: { params: Promise<{ userId: string }> }) {
+export const DELETE = withApiAuthRequired(async function DELETE(
+    req: Request,
+    { params }: { params: Promise<{ userId: string }> }
+) {
 
     try {
 
@@ -56,7 +60,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ userI
 
 
         return Response.json({ params: userId })
-    } catch (err) {
-        return Response.json({ message: err instanceof Error ? err.message : "Ocorreu algum erro desconhecido. Recarregue a página e tente novamente." }, { status: 500 })
+    } catch {
+        return Response.json(
+            { error: "internal_server_error", message: "Não foi possível remover a inscrição." },
+            { status: 500 }
+        )
     }
-}
+})

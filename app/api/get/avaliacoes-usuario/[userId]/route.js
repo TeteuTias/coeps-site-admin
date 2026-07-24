@@ -1,6 +1,6 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../../lib/mongodb'
 import { NextResponse } from 'next/server';
-import { withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { ObjectId } from 'mongodb';
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +11,7 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
         const colecaoAvaliacoes = 'trabalhos_avaliacoes';
         const colecaoTrabalhos = 'trabalhos_blob';
         
-        const { userId } = params;
+        const { userId } = await params;
 
         if (!userId) {
             return NextResponse.json({ 
@@ -49,10 +49,10 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
             "totalAvaliados": avaliacoes.length
         }, { status: 200 });
 
-    } catch (error) {
-        console.log(error);
+    } catch {
         return NextResponse.json({ 
-            "message": "Erro interno do servidor: " + error.message 
+            "error": "internal_server_error",
+            "message": "Não foi possível consultar as avaliações."
         }, { status: 500 });
     }
 });

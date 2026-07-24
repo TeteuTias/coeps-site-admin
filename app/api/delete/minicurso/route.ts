@@ -1,5 +1,5 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { NextResponse } from "next/server"
-import { withApiAuthRequired } from "@auth0/nextjs-auth0"
 import { ObjectId } from 'mongodb';
 import { connectToDatabase } from "@/app/lib/mongodb";
 
