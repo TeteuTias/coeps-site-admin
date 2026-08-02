@@ -77,12 +77,7 @@ export default function Page() {
 
     if (loading) {
         return (
-            <div className="usuarios-loading-container" style={{
-                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-                backgroundAttachment: 'fixed',
-                backgroundSize: 'cover',
-                backgroundRepeat: 'no-repeat'
-            }}>
+            <div className="usuarios-loading-container" role="status" aria-live="polite">
                 <div className="usuarios-spinner"><Loader2 size={48} className="animate-spin" /></div>
                 <span className="usuarios-loading-text">Carregando congressistas...</span>
             </div>
@@ -93,14 +88,10 @@ export default function Page() {
         <>
             <LoadingModal isLoading={loading} />
 
-            <div className="usuarios-main-container" style={{
-                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-                backgroundAttachment: 'fixed',
-                backgroundSize: 'cover',
-                backgroundRepeat: 'no-repeat'
-            }}>
-                <h1 className="usuarios-title">CONGRESSISTAS</h1>
-                <p className="usuarios-subtitle">Visualize e gerencie as informações dos usuários cadastrados</p>
+            <div className="usuarios-main-container">
+                <span className="main-eyebrow">CIEPS / Pessoas</span>
+                <h1 className="usuarios-title">Congressistas</h1>
+                <p className="usuarios-subtitle">Visualize e gerencie as informações dos usuários cadastrados.</p>
 
                 {/* Estatísticas */}
                 <div className="usuarios-estatisticas">

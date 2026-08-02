@@ -62,28 +62,29 @@ const MyComponent = () => {
 
   if (loading) {
     return (
-      <div className="listas-loading-container" style={{
-        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-        backgroundAttachment: 'fixed',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat'
-      }}>
+      <div className="listas-loading-container" role="status" aria-live="polite">
         <div className="listas-spinner"><Loader2 size={48} className="animate-spin" /></div>
         <span className="listas-loading-text">Carregando...</span>
       </div>
     );
   }
-  if (loading) return <div className="text-center p-10">Carregando...</div>;
-  if (error) return <div className="text-red-500 text-center p-10">{error}</div>;
+  if (error) {
+    return (
+      <div className="admin-state admin-state--error" role="alert">
+        <span className="admin-state__mark">!</span>
+        <h1>Não foi possível carregar a programação</h1>
+        <p>{error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="listas-main-container bg-yellow-600" style={{
-      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-      backgroundAttachment: 'fixed',
-      backgroundSize: 'cover',
-      backgroundRepeat: 'no-repeat'
-    }}>
-      <h1 className="listas-title">PROGRAMAÇÃO</h1>
+    <div className="listas-main-container">
+      <span className="main-eyebrow">CIEPS / Relatórios</span>
+      <h1 className="listas-title">Listas de participantes</h1>
+      <p className="main-subtitle">
+        Consulte as atividades e gere listas prontas para conferência ou impressão.
+      </p>
       <div className="listas-estatisticas">
         <div className="listas-estatistica-card">
           <ClipboardList size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />

@@ -1,9 +1,3 @@
-:root {
-  --carmin: #541A2C;
-  --cinza: #D8D9DA;
-  --azul: #1B305F;
-}
-
 .usuarios-filtros-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1fr;

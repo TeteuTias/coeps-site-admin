@@ -1,9 +1,3 @@
-:root {
-  --carmin: #541A2C;
-  --cinza: #D8D9DA;
-  --azul: #1B305F;
-}
-
 .presenca-main-container {
   min-height: 100vh;
   padding: 5rem 0 2rem 0;
@@ -404,4 +398,4 @@
     min-width: 0;
     max-width: 96vw;
   }
-} 
+}

@@ -261,12 +261,7 @@ export default function Page() {
 
     if (loading) {
         return (
-            <div className="financeiro-loading-container" style={{
-                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-                backgroundAttachment: 'fixed',
-                backgroundSize: 'cover',
-                backgroundRepeat: 'no-repeat'
-            }}>
+            <div className="financeiro-loading-container" role="status" aria-live="polite">
                 <div className="financeiro-spinner"></div>
                 <span className="financeiro-loading-text">Carregando configurações financeiras...</span>
             </div>
@@ -274,20 +269,25 @@ export default function Page() {
     }
 
     if (!paymentData) {
-        return <div className="text-red-500">Erro ao carregar dados de pagamento</div>;
+        return (
+            <div className="admin-state admin-state--error" role="alert">
+                <span className="admin-state__mark">!</span>
+                <h1>Não foi possível carregar o financeiro</h1>
+                <p>Atualize a página ou tente novamente em alguns instantes.</p>
+            </div>
+        );
     }
 
     return (
         <>
             <LoadingModal isLoading={loading} />
 
-            <div className="financeiro-main-container" style={{
-                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-                backgroundAttachment: 'fixed',
-                backgroundSize: 'cover',
-                backgroundRepeat: 'no-repeat'
-            }}>
-                <h1 className="financeiro-title">CONFIGURAÇÕES FINANCEIRAS</h1>
+            <div className="financeiro-main-container">
+                <span className="main-eyebrow">CIEPS / Financeiro</span>
+                <h1 className="financeiro-title">Configurações financeiras</h1>
+                <p className="main-subtitle">
+                    Gerencie valores, formas de pagamento, parcelamentos e inscrições.
+                </p>
 
                 {/* Estatísticas */}
                 <div className="financeiro-estatisticas">

@@ -1,128 +1,273 @@
 'use client'
-import Link from 'next/link';
-import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
 
-interface DataStructure {
-    data: string[];
-}
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
+import '../../print-list.css'
 
 interface Usuario {
-    informacoes_usuario: {
-
-        cpf: string,
-        data_criacao: string,
-        email: string,
-        nome: string,
-        numero_telefone: string,
-        titulo_honorario: string
-    }
+  informacoes_usuario: {
+    email: string
+    nome: string
+  }
 }
 
-const MyComponent = () => {
-    const { _id } = useParams<{ _id: string }>();
-    const [data, setData] = useState<string[]>(
-        [],
-    );
-    const [data2, setData2] = useState<Usuario[]>([])
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string>("");
+interface ParticipantesResponse {
+  data: string[]
+}
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const response = await fetch(`/api/get/participantesMinicursos/${_id}`);
-                if (!response.ok) {
-                    throw new Error('Erro na resposta da rede');
-                }
-                const result: { data: string[] } = await response.json();
-                setData(result.data);
+interface UsuariosResponse {
+  data: Usuario[]
+}
 
-                try {
-                    const response = await fetch("/api/post/informacoesVariosUsuarios", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(result.data), // Enviando a lista como um corpo JSON
-                    });
+interface MinicursoResponse {
+  data: {
+    name: string
+  }
+}
 
-                    if (!response.ok) {
-                        throw new Error("Erro na resposta da API");
-                    }
+function formatarDataEmissao() {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date())
+}
 
-                    const result2: { data: Usuario[] } = await response.json();
-                    setData2(result2.data)
-                    //setResult(data);
-                    //setError(null);
-                } catch (err) {
-                    setError("Erro ao enviar a lista para a API");
-                }
+export default function ListaMinicursoPage() {
+  const { _id } = useParams<{ _id: string }>()
+  const [participantes, setParticipantes] = useState<Usuario[]>([])
+  const [nomeMinicurso, setNomeMinicurso] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
+  useEffect(() => {
+    const controller = new AbortController()
 
+    const carregarParticipantes = async () => {
+      setLoading(true)
+      setError('')
 
-            } catch (error) {
-                console.log(error)
-                setError("OCORREU ALGO ERRADO. RECARREGUE");
-            } finally {
-                setLoading(false);
-            }
-        };
+      try {
+        const [participantesResponse, minicursoResponse] = await Promise.all([
+          fetch(`/api/get/participantesMinicursos/${_id}`, {
+            signal: controller.signal,
+          }),
+          fetch(`/api/get/minicursoProps/${_id}`, {
+            signal: controller.signal,
+          }),
+        ])
 
-        fetchData();
-    }, [_id]); // O array vazio faz com que o efeito execute apenas uma vez ao montar
+        if (!participantesResponse.ok || !minicursoResponse.ok) {
+          throw new Error('Não foi possível consultar os dados do minicurso.')
+        }
 
-    if (loading) {
-        return <div className="text-center">Carregando...</div>;
+        const [participantesResult, minicursoResult] = await Promise.all([
+          participantesResponse.json() as Promise<ParticipantesResponse>,
+          minicursoResponse.json() as Promise<MinicursoResponse>,
+        ])
+        const ids = Array.isArray(participantesResult.data)
+          ? participantesResult.data
+          : []
+
+        setNomeMinicurso(minicursoResult.data?.name || 'Minicurso')
+
+        const usuariosResponse = await fetch(
+          '/api/post/informacoesVariosUsuarios',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(ids),
+            signal: controller.signal,
+          },
+        )
+
+        if (!usuariosResponse.ok) {
+          throw new Error('Não foi possível carregar os dados dos participantes.')
+        }
+
+        const usuariosResult =
+          (await usuariosResponse.json()) as UsuariosResponse
+        setParticipantes(
+          Array.isArray(usuariosResult.data) ? usuariosResult.data : [],
+        )
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === 'AbortError') {
+          return
+        }
+
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : 'Ocorreu um erro ao preparar a lista. Recarregue a página.',
+        )
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false)
+        }
+      }
     }
 
-    if (error) {
-        return <div className="text-red-500">{error}</div>;
-    }
+    void carregarParticipantes()
 
+    return () => controller.abort()
+  }, [_id])
+
+  if (loading) {
     return (
-        <div className="min-h-screen flex flex-col">
-            <div className="overflow-auto flex-grow">
-                <table className="min-w-full table-auto border-collapse border border-gray-200">
-                    <thead>
-                        <tr className="bg-gray-200">
-                            <th className="p-4 border border-gray-300 w-1/4">
-                                <div className='p-[0.5px] bg-black mt-10' />
-                                <h1 className='text-[10px]'>ESCREVA O NOME DO MINICURSO AQUI.</h1>
+      <main className="print-list-page">
+        <section className="print-list-state" role="status" aria-live="polite">
+          <span className="print-list-state-mark" aria-hidden="true">
+            C
+          </span>
+          <p className="print-list-eyebrow">CIEPS · Lista de presença</p>
+          <h1>Preparando o documento</h1>
+          <p>Estamos reunindo os participantes deste minicurso.</p>
+          <span className="print-list-loader" aria-hidden="true" />
+        </section>
+      </main>
+    )
+  }
 
-                            </th>
-                            <th className="p-4 border border-gray-300 w-1/6">{new Date().toDateString()}</th>
-                            <th className="p-4 border border-gray-300 w-1/2">{new Date().toTimeString()}</th>
-                        </tr>
-                    </thead>
-                    <thead>
-                        <tr className="bg-gray-200">
-                            <th className="p-4 border border-gray-300 w-1/4">Nome</th>
-                            <th className="p-4 border border-gray-300 w-1/6">Email</th>
-                            <th className="p-4 border border-gray-300 w-1/2">Assinatura</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data2.map((item, index) => (
-                            <tr key={index} className="hover:bg-gray-100 " onClick={() => console.log(item)}>
-                                <td className="flex flex-row p-4 border border-gray-300 text-black">
-                                    <p className='text-[10px]  p-1'>
-                                        {index + 1}
-                                    </p>
-                                    <p>
-                                        {item.informacoes_usuario.nome}
-                                    </p>
+  if (error) {
+    return (
+      <main className="print-list-page">
+        <section className="print-list-state print-list-state--error" role="alert">
+          <span className="print-list-state-mark" aria-hidden="true">
+            !
+          </span>
+          <p className="print-list-eyebrow">CIEPS · Lista de presença</p>
+          <h1>Não foi possível gerar a lista</h1>
+          <p>{error}</p>
+          <button
+            type="button"
+            className="print-list-button"
+            onClick={() => window.location.reload()}
+          >
+            Tentar novamente
+          </button>
+        </section>
+      </main>
+    )
+  }
 
-                                </td>
-                                <td className="p-4 border border-gray-300 text-black">{item.informacoes_usuario.email}</td>
-                                <td className="p-4 border border-gray-300 text-black"></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+  return (
+    <main className="print-list-page">
+      <div className="print-list-actions" aria-label="Ações do documento">
+        <p>Revise a lista antes de imprimir ou salvar em PDF.</p>
+        <button
+          type="button"
+          className="print-list-button"
+          onClick={() => window.print()}
+        >
+          Imprimir lista
+        </button>
+      </div>
+
+      <article
+        className="print-list-sheet"
+        aria-labelledby="lista-minicurso-title"
+      >
+        <header className="print-list-header">
+          <div className="print-list-brand" aria-label="CIEPS">
+            <span className="print-list-monogram" aria-hidden="true">
+              C
+            </span>
+            <div>
+              <strong>CIEPS</strong>
+              <span>Painel administrativo</span>
             </div>
-        </div>
-    );
-};
+          </div>
 
-export default MyComponent;
+          <div className="print-list-heading">
+            <p className="print-list-eyebrow">Controle de participantes</p>
+            <h1 id="lista-minicurso-title">Lista de presença</h1>
+            <p>{nomeMinicurso}</p>
+          </div>
+        </header>
+
+        <div className="print-list-accent" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+
+        <dl className="print-list-meta">
+          <div>
+            <dt>Atividade</dt>
+            <dd>{nomeMinicurso}</dd>
+          </div>
+          <div>
+            <dt>Referência</dt>
+            <dd className="print-list-reference">{_id}</dd>
+          </div>
+          <div>
+            <dt>Data de emissão</dt>
+            <dd>{formatarDataEmissao()}</dd>
+          </div>
+          <div>
+            <dt>Participantes</dt>
+            <dd>{participantes.length}</dd>
+          </div>
+        </dl>
+
+        {participantes.length === 0 ? (
+          <section className="print-list-empty" role="status">
+            <span aria-hidden="true">0</span>
+            <div>
+              <h2>Nenhum participante inscrito</h2>
+              <p>
+                Este minicurso ainda não possui participantes para incluir na
+                lista.
+              </p>
+            </div>
+          </section>
+        ) : (
+          <div
+            className="print-list-table-wrap"
+            role="region"
+            aria-label="Participantes do minicurso"
+            tabIndex={0}
+          >
+            <table className="print-list-table">
+              <colgroup>
+                <col className="print-list-col-number" />
+                <col className="print-list-col-name" />
+                <col className="print-list-col-email" />
+                <col className="print-list-col-signature" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Nº</th>
+                  <th scope="col">Nome</th>
+                  <th scope="col">E-mail</th>
+                  <th scope="col">Assinatura</th>
+                </tr>
+              </thead>
+              <tbody>
+                {participantes.map((participante, index) => (
+                  <tr
+                    key={`${participante.informacoes_usuario.email}-${index}`}
+                  >
+                    <td className="print-list-number">{index + 1}</td>
+                    <td>{participante.informacoes_usuario.nome}</td>
+                    <td>{participante.informacoes_usuario.email}</td>
+                    <td className="print-list-signature">
+                      <span aria-hidden="true" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <footer className="print-list-footer">
+          <span>Documento administrativo CIEPS</span>
+          <span>Lista de presença · Minicurso</span>
+        </footer>
+      </article>
+    </main>
+  )
+}

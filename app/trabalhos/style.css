@@ -1,11 +1,5 @@
 /* Estilos Glassmorphism para Página de Trabalhos */
 
-:root {
-  --carmin: #541A2C;
-  --cinza: #D8D9DA;
-  --azul: #1B305F;
-}
-
 /* Container Principal */
 .trabalhos-main-container {
   min-height: 100vh;

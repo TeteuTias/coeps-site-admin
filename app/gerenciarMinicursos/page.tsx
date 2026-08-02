@@ -126,12 +126,7 @@ export default function Page() {
 
     //
     return (
-        <div className="main-container" style={{
-            background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-            backgroundAttachment: 'fixed',
-            backgroundSize: 'cover',
-            backgroundRepeat: 'no-repeat'
-        }}>
+        <div className="main-container">
             <ConfirmationModal {...confirmationModalProps} />
             <CreateCourseModal isOpen={createCourseModal} onClose={() => {
                 setCreateCourseModal(false)
@@ -140,13 +135,20 @@ export default function Page() {
             }} />
             <LoadingModal isLoading={loading} />
             <div className="w-full space-y-5 px-10">
+                <div>
+                    <span className="main-eyebrow">CIEPS / Atividades</span>
+                    <h1 className="main-title">Gerenciar Atividades</h1>
+                    <p className="main-subtitle">
+                        Configure minicursos, visibilidade, vagas e cronogramas mantendo a operação do congresso organizada.
+                    </p>
+                </div>
                 <div className="w-full flex items-center justify-center">
                     <button className="gm-create-btn" onClick={() => { setCreateCourseModal(true) }}>
                         CRIAR NOVA ATIVIDADE
                     </button>
                 </div>
                 {/* --- PAINEL DE BUSCA E FILTROS --- */}
-                <div className="space-y-5">
+                <div className="gm-toolbar space-y-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="lg:col-span-4">
                             <label htmlFor="search" className="sr-only">Busca</label>

@@ -1,143 +1,217 @@
-"use client"
-import { useRef, useState, useEffect } from "react";
-import { CameraDevice, Html5Qrcode, Html5QrcodeCameraScanConfig } from "html5-qrcode";
-import { useRouter } from "next/navigation";
-//
-export default function QrCodeUserSearch({ titleText }: { titleText: string }) {
-    const router = useRouter()
-    // Estado para controlar a visibilidade do scanner
-    const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
-    // Estado para armazenar a lista de câmeras disponíveis
-    const [cameras, setCameras] = useState<CameraDevice[]>([]);
-    // Estado para armazenar o ID da câmera selecionada
-    const [selectedCameraId, setSelectedCameraId] = useState<string>('');
-    // Estado para armazenar o resultado do QR Code lido
-    const [qrCodeResult, setQrCodeResult] = useState<string | null>(null);
+"use client";
 
-    // Referência para a instância do leitor de QR Code para podermos controlá-la
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+    Camera,
+    CircleHelp,
+    ScanLine,
+    X,
+} from "lucide-react";
+import {
+    CameraDevice,
+    Html5Qrcode,
+    Html5QrcodeCameraScanConfig,
+} from "html5-qrcode";
+import { useRouter } from "next/navigation";
+import styles from "./CiepsAdmin.module.css";
+
+const READER_ID = "qr-code-reader";
+
+export default function QrCodeUserSearch({ titleText }: { titleText: string }) {
+    const router = useRouter();
+    const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+    const [cameras, setCameras] = useState<CameraDevice[]>([]);
+    const [selectedCameraId, setSelectedCameraId] = useState<string>("");
+    const [qrCodeResult, setQrCodeResult] = useState<string | null>(null);
+    const [cameraError, setCameraError] = useState<string | null>(null);
     const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
-    const readerId = "qr-code-reader"; // ID do elemento div onde o vídeo da câmera será renderizado
-    //
+
     const openScanner = () => {
+        setCameraError(null);
         setIsScannerOpen(true);
     };
-    //
-    const closeScanner = () => {
-        if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-            html5QrCodeRef.current.stop().catch(err => {
-                console.error("Falha ao parar o scanner.", err);
+
+    const stopScanner = useCallback(() => {
+        const scanner = html5QrCodeRef.current;
+
+        if (scanner?.isScanning) {
+            scanner.stop().catch((error) => {
+                console.error("Falha ao parar o scanner.", error);
             });
         }
+    }, []);
+
+    const closeScanner = useCallback(() => {
+        stopScanner();
         setIsScannerOpen(false);
-    };
-    // Hook para buscar as câmeras disponíveis quando o scanner for aberto
+    }, [stopScanner]);
+
     useEffect(() => {
+        if (!isScannerOpen) {
+            return;
+        }
+
+        let isMounted = true;
+
         const fetchCameras = async () => {
             try {
+                setCameraError(null);
                 const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length) {
-                    setCameras(devices);
-                    // Seleciona a primeira câmera da lista como padrão
-                    if (!selectedCameraId) {
-                        setSelectedCameraId(devices[0].id);
-                    }
+
+                if (!isMounted) {
+                    return;
+                }
+
+                setCameras(devices ?? []);
+                if (devices?.length) {
+                    setSelectedCameraId((currentCameraId) => currentCameraId || devices[0].id);
+                } else {
+                    setCameraError("Nenhuma câmera foi encontrada neste dispositivo.");
                 }
             } catch (error) {
-                console.error('Erro ao buscar câmeras:', error);
+                console.error("Erro ao buscar câmeras:", error);
+                if (isMounted) {
+                    setCameraError("Não foi possível acessar a câmera. Verifique a permissão do navegador.");
+                }
             }
         };
 
-        if (isScannerOpen) {
-            fetchCameras();
-        }
-    }, [isScannerOpen, selectedCameraId]);
+        void fetchCameras();
 
-
-
-    // Hook para iniciar e parar o scanner
-    useEffect(() => {
-        // Inicia o scanner apenas se estiver aberto e uma câmera for selecionada
-        if (isScannerOpen && selectedCameraId) {
-            // Cria uma nova instância do leitor de QR code
-            const html5QrCode = new Html5Qrcode(readerId);
-            html5QrCodeRef.current = html5QrCode;
-
-            // Função de callback para quando um QR Code for lido com sucesso
-            const qrCodeSuccessCallback = async (decodedText: string) => {
-                setQrCodeResult(decodedText);
-                router.push(`/usuarios/informacoes/${decodedText}`)
-
-                // closeScanner(); // Fecha o scanner automaticamente após a leitura
-            };
-
-            // Configurações do scanner
-            const config: Html5QrcodeCameraScanConfig = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                // aspectRatio: 1.0,
-            };
-
-            // Inicia o scanner
-            html5QrCode.start(
-                selectedCameraId,
-                config,
-                qrCodeSuccessCallback,
-                (errorMessage) => {
-                    // issaqui dá erro toda hora, e os erros não alteram a funcionalidade. então deixa isso pra lá, não compensa mostrar o erro na tela;
-                }
-            ).catch((err) => {
-                console.error(`Não foi possível iniciar o scanner: ${err}`);
-            });
-        }
-
-        // Função de limpeza: para o scanner quando o componente é desmontado
         return () => {
-            if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                html5QrCodeRef.current.stop().catch(err => {
-                    console.error("Falha ao parar o scanner.", err);
+            isMounted = false;
+        };
+    }, [isScannerOpen]);
+
+    useEffect(() => {
+        if (!isScannerOpen || !selectedCameraId) {
+            return;
+        }
+
+        const html5QrCode = new Html5Qrcode(READER_ID);
+        html5QrCodeRef.current = html5QrCode;
+
+        const qrCodeSuccessCallback = async (decodedText: string) => {
+            setQrCodeResult(decodedText);
+            router.push(`/usuarios/informacoes/${decodedText}`);
+        };
+
+        const config: Html5QrcodeCameraScanConfig = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+        };
+
+        html5QrCode.start(
+            selectedCameraId,
+            config,
+            qrCodeSuccessCallback,
+            () => {
+                // Falhas de leitura entre quadros são esperadas enquanto o QR não está enquadrado.
+            },
+        ).catch((error) => {
+            console.error(`Não foi possível iniciar o scanner: ${error}`);
+            setCameraError("Não foi possível iniciar a leitura. Tente selecionar outra câmera.");
+        });
+
+        return () => {
+            if (html5QrCode.isScanning) {
+                html5QrCode.stop().catch((error) => {
+                    console.error("Falha ao parar o scanner.", error);
                 });
             }
+
+            if (html5QrCodeRef.current === html5QrCode) {
+                html5QrCodeRef.current = null;
+            }
         };
-    }, [isScannerOpen, selectedCameraId]);
-    //
+    }, [isScannerOpen, router, selectedCameraId]);
+
+    useEffect(() => {
+        if (!isScannerOpen) {
+            return;
+        }
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                closeScanner();
+            }
+        };
+
+        window.addEventListener("keydown", handleEscape);
+        return () => window.removeEventListener("keydown", handleEscape);
+    }, [closeScanner, isScannerOpen]);
+
     return (
-        <div className="w-fit">
-            <div className='space-y-2 flex flex-col'>
-                {!isScannerOpen && !qrCodeResult && (
-                    <button
-                        onClick={openScanner}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105"
-                    >
-                        {titleText}
-                    </button>
-                )}
-            </div>
-            {
-                isScannerOpen &&
-                <div className="w-full max-w-full mx-auto mt-4 p-6 border border-gray-200 rounded-xl shadow-lg bg-white p-2">
-                    <div className="flex flex-col justify-between items-center mb-4 gap-4">
-                        <select
-                            onChange={(e) => setSelectedCameraId(e.target.value)}
-                            value={selectedCameraId}
-                            className="flex-grow border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                            {cameras.map((camera) => (
-                                <option key={camera.id} value={camera.id}>
-                                    {camera.label || `Câmera ${camera.id}`}
-                                </option>
-                            ))}
-                        </select>
+        <div className={styles.scannerRoot}>
+            {!isScannerOpen && !qrCodeResult && (
+                <button
+                    aria-controls={READER_ID}
+                    aria-expanded={isScannerOpen}
+                    className={styles.scannerLaunch}
+                    onClick={openScanner}
+                    type="button"
+                >
+                    <ScanLine aria-hidden="true" size={19} />
+                    {titleText}
+                </button>
+            )}
+
+            {isScannerOpen && (
+                <section
+                    aria-label="Leitor de QR Code"
+                    className={styles.scannerPanel}
+                >
+                    <div className={styles.scannerHeader}>
+                        <div className={styles.cameraField}>
+                            <label htmlFor="camera-device">
+                                <Camera aria-hidden="true" size={15} />
+                                Câmera
+                            </label>
+                            <select
+                                disabled={cameras.length === 0}
+                                id="camera-device"
+                                onChange={(event) => setSelectedCameraId(event.target.value)}
+                                value={selectedCameraId}
+                            >
+                                {cameras.length === 0 && (
+                                    <option value="">Buscando câmeras...</option>
+                                )}
+                                {cameras.map((camera) => (
+                                    <option key={camera.id} value={camera.id}>
+                                        {camera.label || `Câmera ${camera.id}`}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
                         <button
+                            className={styles.dangerButton}
                             onClick={closeScanner}
-                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition-colors"
+                            type="button"
                         >
-                            Fechar Câmera
+                            <X aria-hidden="true" size={18} />
+                            Fechar câmera
                         </button>
                     </div>
-                    {/* O quadrado da câmera será renderizado aqui */}
-                    <div id={readerId} className="w-full rounded-lg overflow-hidden border-2 border-dashed border-gray-300"></div>
-                </div>
-            }
+
+                    {cameraError && (
+                        <p aria-live="polite" className={styles.scannerError} role="status">
+                            {cameraError}
+                        </p>
+                    )}
+
+                    <div className={styles.reader} id={READER_ID} />
+
+                    <p className={styles.scannerHint}>
+                        <CircleHelp aria-hidden="true" size={17} />
+                        Posicione o QR Code dentro da área de leitura. A página do usuário será aberta automaticamente.
+                    </p>
+                </section>
+            )}
+
+            <span aria-live="polite" className={styles.visuallyHidden}>
+                {qrCodeResult ? "QR Code identificado. Abrindo cadastro do usuário." : ""}
+            </span>
         </div>
-    )
+    );
 }

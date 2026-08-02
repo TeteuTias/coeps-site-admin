@@ -185,8 +185,9 @@ export default function AvaliarTrabalhoPage() {
     <div className="trabalhos-main-container">
       <TrabalhosLoadingModal isLoading={isLoading} />
       <div className="trabalhos-content-wrapper">
-        <header className="trabalhos-header">
-          <h1 className="trabalhos-title">Painel de Avaliação</h1>
+          <header className="trabalhos-header">
+            <span className="main-eyebrow">CIEPS / Trabalhos</span>
+            <h1 className="trabalhos-title">Painel de Avaliação</h1>
           <p className="trabalhos-subtitle">Revise, filtre e avalie os trabalhos acadêmicos submetidos.</p>
         </header>
 
