@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import ConfirmationModal from "@/app/components/ConfirmationModal";
 import {
   ArrowLeft,
   BadgePercent,
@@ -153,9 +154,11 @@ export default function PaymentCodesPage() {
     totalPages: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [hasLoadedCodes, setHasLoadedCodes] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [codePendingDeletion, setCodePendingDeletion] = useState<CodeItem | null>(null);
 
   const [discountPercentage, setDiscountPercentage] = useState("10");
   const [trackingName, setTrackingName] = useState("");
@@ -184,6 +187,7 @@ export default function PaymentCodesPage() {
       setMetrics(data.metrics);
       setPagination(data.pagination);
       setActiveEditionId(data.activeEditionId);
+      setHasLoadedCodes(true);
 
       if (!editionId && data.edicaoId) {
         setEditionId(data.edicaoId);
@@ -223,6 +227,7 @@ export default function PaymentCodesPage() {
     if (!normalized) return;
     setEditionId(normalized);
     setPage(1);
+    setCreatedCode(null);
     setCleanupPreview(null);
   }
 
@@ -327,7 +332,8 @@ export default function PaymentCodesPage() {
   }
 
   async function deleteUnusedCode(item: CodeItem) {
-    if (!item.id || !window.confirm(`Excluir o código ${item.codigo}?`)) return;
+    if (!item.id) return;
+    setCodePendingDeletion(null);
     setMutating(true);
     setMessage(null);
 
@@ -418,15 +424,15 @@ export default function PaymentCodesPage() {
     <main className="codigos-page">
       <div className="codigos-shell">
         <header className="codigos-hero">
-          <div>
+          <div className="codigos-hero-copy">
             <Link href="/financeiro" className="codigos-back-link">
               <ArrowLeft size={18} /> Voltar ao financeiro
             </Link>
-            <p className="codigos-eyebrow">COEPS / Financeiro</p>
+            <p className="codigos-eyebrow">CIEPS / Financeiro</p>
             <h1>Códigos de pagamento</h1>
-            <p>
-              Gere descontos de uso único, acompanhe rastreios e consulte somente vendas
-              confirmadas.
+            <p className="codigos-hero-description">
+              Gere descontos de uso único, acompanhe rastreios e consulte o andamento das
+              vendas vinculadas a cada código.
             </p>
           </div>
           <button
@@ -487,7 +493,7 @@ export default function PaymentCodesPage() {
           </div>
         </section>
 
-        {!activeEditionId && (
+        {hasLoadedCodes && !activeEditionId && (
           <div className="codigos-warning" role="alert">
             <ShieldAlert size={21} />
             <span>
@@ -648,6 +654,7 @@ export default function PaymentCodesPage() {
                     <th>Confirmadas</th>
                     <th>Pendentes</th>
                     <th>Estornadas</th>
+                    <th>Canceladas/expiradas</th>
                     <th>Valor confirmado</th>
                     <th>Ações</th>
                   </tr>
@@ -701,11 +708,17 @@ export default function PaymentCodesPage() {
                         <td>{item.metrics.confirmadas}</td>
                         <td>{item.metrics.pendentes}</td>
                         <td>{item.metrics.estornadas}</td>
+                        <td>{item.metrics.canceladasOuExpiradas}</td>
                         <td>{moneyFromCents(item.metrics.valorConfirmadoCentavos)}</td>
                         <td>
                           <div className="codigos-actions">
                             <button
                               type="button"
+                              aria-label={
+                                item.status === "ATIVO"
+                                  ? `Desativar código ${item.codigo}`
+                                  : `Ativar código ${item.codigo}`
+                              }
                               title={
                                 canToggle
                                   ? item.status === "ATIVO"
@@ -720,6 +733,7 @@ export default function PaymentCodesPage() {
                             </button>
                             <button
                               type="button"
+                              aria-label={`Excluir código ${item.codigo}`}
                               className="is-danger"
                               title={
                                 canDelete
@@ -727,7 +741,7 @@ export default function PaymentCodesPage() {
                                   : "Rastreios precisam estar inativos e nenhum código pode ter uso"
                               }
                               disabled={!canDelete || mutating}
-                              onClick={() => void deleteUnusedCode(item)}
+                              onClick={() => setCodePendingDeletion(item)}
                             >
                               <Trash2 size={16} />
                             </button>
@@ -844,6 +858,21 @@ export default function PaymentCodesPage() {
           )}
         </section>
       </div>
+
+      <ConfirmationModal
+        isOpen={Boolean(codePendingDeletion)}
+        onClose={() => setCodePendingDeletion(null)}
+        onConfirm={() => {
+          if (codePendingDeletion) void deleteUnusedCode(codePendingDeletion);
+        }}
+        title="Excluir código não utilizado?"
+        confirmText="Excluir código"
+      >
+        <p className="codigos-confirmation-copy">
+          O código <code>{codePendingDeletion?.codigo}</code> será removido permanentemente.
+          Essa ação não pode ser desfeita.
+        </p>
+      </ConfirmationModal>
     </main>
   );
 }

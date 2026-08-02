@@ -3,7 +3,7 @@ import { IPayment } from "@/app/lib/types/payments/payment.t"
 import { IUser } from "@/app/lib/types/user/user.t"
 import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight } from "lucide-react";
 import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
-import { useEffect, useState, FormEvent, ChangeEvent } from "react"
+import { useCallback, useEffect, useState, FormEvent, ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ICourse } from "@/app/lib/types/events/event.t";
@@ -77,7 +77,7 @@ export default function Page() {
     const [isSaving, setIsSaving] = useState(false);
     const router = useRouter()
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             const responseCourses = await fetch(`/api/get/minicursosDeUsuario/${userId}`)
             if (!responseCourses.ok) throw new Error("Erro ao carregar informações de minicursos")
@@ -105,11 +105,11 @@ export default function Page() {
         } finally {
             setIsLoading(false)
         }
-    }
+    }, [userId])
 
     useEffect(() => {
         fetchData()
-    }, [userId])
+    }, [fetchData])
 
     const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
@@ -147,24 +147,30 @@ export default function Page() {
     }
 
     if (isLoading) {
-        return <div className="flex w-full h-screen items-center justify-center"><p>Carregando...</p></div>
+        return (
+            <div className="admin-state" role="status" aria-live="polite">
+                <span className="admin-state__spinner" aria-hidden="true" />
+                <h1>Carregando congressista</h1>
+                <p>Buscando cadastro, inscrições e pagamentos.</p>
+            </div>
+        )
     }
 
     if (!user) {
-        return <div className="flex w-full h-screen items-center justify-center"><p>Usuário não encontrado.</p></div>
+        return (
+            <div className="admin-state admin-state--error" role="alert">
+                <span className="admin-state__mark">!</span>
+                <h1>Usuário não encontrado</h1>
+                <p>Volte para a lista de congressistas e selecione outro cadastro.</p>
+                <Link href="/usuarios/" className="admin-state__action">Voltar para congressistas</Link>
+            </div>
+        )
     }
 
     //
     //
     return (
-        <div className="w-full min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 space-y-10"
-            style={{
-                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-                backgroundAttachment: 'fixed',
-                backgroundSize: 'cover',
-                backgroundRepeat: 'no-repeat'
-            }}
-        >
+        <div className="admin-detail-page space-y-10">
             <div className="max-w-2xl mx-auto">
                 <div className="mb-6">
                     <Link href="/usuarios/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900">
@@ -172,11 +178,16 @@ export default function Page() {
                         Voltar para a lista
                     </Link>
                 </div>
+                <span className="main-eyebrow">CIEPS / Congressistas</span>
+                <h1 className="main-title">Perfil do congressista</h1>
+                <p className="main-subtitle">
+                    Revise dados cadastrais, pagamento, inscrições e documentos associados.
+                </p>
                 <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-gray-200">
                         <div className="flex items-start gap-4">
                             <div className="flex-1 min-w-0">
-                                <h1 className="text-2xl font-bold text-gray-900">Editar Usuário</h1>
+                                <h2 className="text-2xl font-bold text-gray-900">Dados cadastrais</h2>
                                 <p className="text-sm text-gray-500 mt-1">
                                     ID: <span className="font-mono text-xs">{user._id}</span>
                                 </p>

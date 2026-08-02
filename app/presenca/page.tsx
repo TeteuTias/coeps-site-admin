@@ -60,12 +60,7 @@ const MyComponent = () => {
 
   if (loading) {
     return (
-      <div className="presenca-loading-container" style={{
-        background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-        backgroundAttachment: 'fixed',
-        backgroundSize: 'cover',
-        backgroundRepeat: 'no-repeat'
-      }}>
+      <div className="presenca-loading-container" role="status" aria-live="polite">
         <div className="presenca-spinner"><Loader2 size={48} className="animate-spin" /></div>
         <span className="presenca-loading-text">Carregando minicursos...</span>
       </div>
@@ -73,17 +68,22 @@ const MyComponent = () => {
   }
 
   if (error) {
-    return <div className="text-red-500">{error}</div>;
+    return (
+      <div className="admin-state admin-state--error" role="alert">
+        <span className="admin-state__mark">!</span>
+        <h1>Não foi possível carregar as atividades</h1>
+        <p>{error}</p>
+      </div>
+    );
   }
 
   return (
-    <div className="presenca-main-container" style={{
-      background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-      backgroundAttachment: 'fixed',
-      backgroundSize: 'cover',
-      backgroundRepeat: 'no-repeat'
-    }}>
-      <h1 className="presenca-title">LISTA DE PRESENÇA</h1>
+    <div className="presenca-main-container">
+      <span className="main-eyebrow">CIEPS / Operação</span>
+      <h1 className="presenca-title">Controle de presença</h1>
+      <p className="main-subtitle">
+        Abra uma atividade para registrar entradas, saídas e acompanhar participantes.
+      </p>
       <div className="presenca-estatisticas">
         <div className="presenca-estatistica-card">
           <ClipboardList size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />

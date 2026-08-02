@@ -1,6 +1,6 @@
-# COEPS Site Admin
+# CIEPS Site Admin
 
-Painel administrativo do COEPS, construído com Next.js 16 e Auth0 v4.
+Painel administrativo do CIEPS, construído com Next.js 16 e Auth0 v4.
 
 ## Ambiente local
 

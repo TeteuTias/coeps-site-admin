@@ -6,8 +6,8 @@ import LoadingModal from '@/app/components/LoadingModal';
 import { useRef } from 'react';
 import { ICourse } from '@/app/lib/types/events/event.t';
 import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModal';
-import './style.css';
-import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table } from 'lucide-react';
+import '../../attendance-detail.css';
+import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table, QrCode } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useUser } from '@/app/lib/auth0-client';
 import { useParams } from 'next/navigation';
@@ -41,7 +41,7 @@ const MyComponent = () => {
         title: "Atenção!",
         children: (
             <>
-                <p className='text-black'></p>
+                <p className="presenca-lista-confirmation-copy"></p>
             </>
         ),
         confirmText: "Continuar",
@@ -168,101 +168,121 @@ const MyComponent = () => {
 
     if (loading) {
         return (
-            <div className="presenca-lista-loading-container" style={{
-                background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-                backgroundAttachment: 'fixed',
-                backgroundSize: 'cover',
-                backgroundRepeat: 'no-repeat'
-            }}>
-                <div className="presenca-lista-spinner"><Loader2 size={48} className="animate-spin" /></div>
+            <main className="presenca-lista-loading-container" role="status" aria-live="polite">
+                <div className="presenca-lista-spinner"><Loader2 size={44} aria-hidden="true" /></div>
                 <span className="presenca-lista-loading-text">Carregando lista de presença...</span>
-            </div>
+            </main>
         );
     }
 
     if (error || !courseData) {
-        return <div className="text-red-500">{error}</div>;
+        return (
+            <main className="presenca-lista-state" role="alert">
+                <span className="presenca-lista-state-kicker">Não foi possível abrir esta lista</span>
+                <h1>Erro ao carregar os dados</h1>
+                <p>{error || "O minicurso solicitado não foi encontrado."}</p>
+            </main>
+        );
     }
 
     const presentes = dataPresentes.length;
     const ausentes = data2.length - presentes;
+    const canManageAttendance = Boolean(user?.user?.sub?.includes("67098341f7397b370e9cb8ba"));
 
     return (
-        <div className="presenca-lista-main-container" style={{
-            background: 'linear-gradient(135deg, var(--azul) 0%, var(--carmin) 100%) fixed',
-            backgroundAttachment: 'fixed',
-            backgroundSize: 'cover',
-            backgroundRepeat: 'no-repeat'
-        }}>
-            <h1 className="presenca-lista-title">{courseData.name}</h1>
-            <div className="presenca-lista-estatisticas">
+        <main className="presenca-lista-main-container">
+            <header className="presenca-lista-header">
+                <span className="presenca-lista-eyebrow">CIEPS · Controle de presença</span>
+                <h1 className="presenca-lista-title">{courseData.name}</h1>
+                <p className="presenca-lista-subtitle">
+                    Acompanhe os inscritos, registre presenças e exporte a relação deste minicurso.
+                </p>
+            </header>
+
+            <section className="presenca-lista-estatisticas" aria-label="Resumo da lista de presença">
                 <div className="presenca-lista-estatistica-card">
-                    <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
+                    <Users size={28} className="presenca-lista-stat-icon stat-blue" aria-hidden="true" />
                     <span className="presenca-lista-estatistica-valor">{data2.length}</span>
                     <span className="presenca-lista-estatistica-label">Total de Inscritos</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
-                    <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
+                    <Users size={28} className="presenca-lista-stat-icon stat-yellow" aria-hidden="true" />
                     <span className="presenca-lista-estatistica-valor">{courseData.maxParticipants}</span>
                     <span className="presenca-lista-estatistica-label">Vagas</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
-                    <CheckCircle size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
+                    <CheckCircle size={28} className="presenca-lista-stat-icon stat-green" aria-hidden="true" />
                     <span className="presenca-lista-estatistica-valor">{presentes}</span>
                     <span className="presenca-lista-estatistica-label">Presentes</span>
                 </div>
                 <div className="presenca-lista-estatistica-card">
-                    <XCircle size={32} style={{ marginBottom: '0.3rem', color: '#ff6b6b' }} />
+                    <XCircle size={28} className="presenca-lista-stat-icon stat-red" aria-hidden="true" />
                     <span className="presenca-lista-estatistica-valor">{ausentes}</span>
                     <span className="presenca-lista-estatistica-label">Ausentes</span>
                 </div>
-            </div>
+            </section>
 
-            <div className="presenca-lista-info">
+            <div className="presenca-lista-info" aria-label="Data e horário da consulta">
                 <div className="presenca-lista-info-item">
-                    <Calendar size={18} />
+                    <Calendar size={18} aria-hidden="true" />
                     <span>{new Date().toLocaleDateString('pt-BR')}</span>
                 </div>
                 <div className="presenca-lista-info-item">
-                    <Clock size={18} />
+                    <Clock size={18} aria-hidden="true" />
                     <span>{new Date().toLocaleTimeString('pt-BR')}</span>
                 </div>
             </div>
 
-            <div className="presenca-lista-actions">
+            <section className="presenca-lista-actions" aria-label="Ações da lista">
                 <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
                 {
-                    user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
+                    canManageAttendance &&
                     <button
+                        type="button"
                         onClick={() => setIsOpenAllUsers(true)}
                         className="presenca-lista-btn presenca-lista-btn-primary"
                     >
-                        <UserPlus size={18} />
+                        <UserPlus size={18} aria-hidden="true" />
                         Adicionar Usuário
                     </button>
                 }
                 <ExportButton inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
-            </div>
+            </section>
 
-            <div className="presenca-lista-table-container">
+            {errorBolean && (
+                <p className="presenca-lista-inline-error" role="alert">
+                    Não foi possível concluir a última atualização. Tente novamente.
+                </p>
+            )}
+
+            <div
+                className="presenca-lista-table-container"
+                role="region"
+                aria-label="Congressistas e status de presença"
+                tabIndex={0}
+            >
                 <table className="presenca-lista-table">
+                    <caption className="presenca-lista-sr-only">Congressistas e status de presença no minicurso</caption>
                     <thead>
                         <tr>
-                            <th>Nome</th>
-                            <th>Email</th>
-                            <th>Status</th>
+                            <th scope="col">Nome</th>
+                            <th scope="col">Email</th>
+                            <th scope="col">Status</th>
                             {
-                                user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
-                                <th>Ações</th>
+                                canManageAttendance &&
+                                <th scope="col" className="presenca-lista-acoes">Ações</th>
                             }
                         </tr>
                     </thead>
                     <tbody>
                         {data2.map((item, index) => (
-                            <tr key={index} className="presenca-lista-row">
+                            <tr key={item._id} className="presenca-lista-row">
                                 <td className="presenca-lista-nome">
                                     <button
+                                        type="button"
                                         className="presenca-lista-remove-btn"
+                                        aria-label={`Remover inscrição de ${item.informacoes_usuario.nome}`}
+                                        title="Remover inscrição"
                                         onClick={() => {
                                             setIsModalProps(() => ({
                                                 isOpen: true,
@@ -288,7 +308,7 @@ const MyComponent = () => {
                                                 title: "Atenção!",
                                                 children: (
                                                     <>
-                                                        <p className='text-black'>Você está prestes a retirar a inscrição do usuário do minicurso. Essa opção <span className='font-extrabold text-red-500'>NÃO</span> estornará o valor ao congressista. Deseja mesmo continuar?</p>
+                                                        <p className="presenca-lista-confirmation-copy">Você está prestes a retirar a inscrição do usuário do minicurso. Essa opção <strong className="presenca-lista-confirmation-emphasis">NÃO</strong> estornará o valor ao congressista. Deseja mesmo continuar?</p>
                                                     </>
                                                 ),
                                                 confirmText: "Continuar",
@@ -307,9 +327,10 @@ const MyComponent = () => {
                                     </span>
                                 </td>
                                 {
-                                    user && user.user?.sub?.includes("67098341f7397b370e9cb8ba") &&
+                                    canManageAttendance &&
                                     <td className="presenca-lista-acoes">
                                         <button
+                                            type="button"
                                             className={`presenca-lista-btn ${dataPresentes.includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
                                             onClick={async () => {
                                                 setLoadingContent(true)
@@ -358,6 +379,13 @@ const MyComponent = () => {
                                 }
                             </tr>
                         ))}
+                        {data2.length === 0 && (
+                            <tr>
+                                <td className="presenca-lista-empty-cell" colSpan={canManageAttendance ? 4 : 3}>
+                                    Nenhum congressista inscrito neste minicurso.
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
@@ -395,7 +423,7 @@ const MyComponent = () => {
                     usersData={allUsers}
                 />
             )}
-        </div>
+        </main>
     );
 };
 //
@@ -409,6 +437,7 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
     const [selectedCameraId, setSelectedCameraId] = useState<string>('');
     // Estado para armazenar o resultado do QR Code lido
     const [qrCodeResult, setQrCodeResult] = useState<string | null>(null);
+    const [scannerError, setScannerError] = useState<string>('');
 
     // Referência para a instância do leitor de QR Code para podermos controlá-la
     const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
@@ -425,9 +454,12 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
                     if (!selectedCameraId) {
                         setSelectedCameraId(devices[0].id);
                     }
+                } else {
+                    setScannerError("Nenhuma câmera foi encontrada neste dispositivo.");
                 }
             } catch (error) {
                 console.error('Erro ao buscar câmeras:', error);
+                setScannerError("Não foi possível acessar a câmera. Confira a permissão do navegador.");
             }
         };
 
@@ -467,6 +499,7 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
                 }
             ).catch((err) => {
                 console.error(`Não foi possível iniciar o scanner: ${err}`);
+                setScannerError("Não foi possível iniciar a leitura. Selecione outra câmera ou confira a permissão do navegador.");
             });
         }
 
@@ -481,6 +514,7 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
     }, [isScannerOpen, selectedCameraId]);
 
     const openScanner = () => {
+        setScannerError('');
         setIsScannerOpen(true);
     };
 
@@ -498,43 +532,60 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
     };
 
     return (
-        <div className="flex flex-col items-center justify-center font-sans">
+        <div className="attendance-scanner">
             {/* Botão para iniciar o processo */}
-            <div className='space-y-2 flex flex-col'>
+            <div className="attendance-scanner-trigger">
                 {!isScannerOpen && !qrCodeResult && (
                     <button
+                        type="button"
                         onClick={openScanner}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105"
+                        className="presenca-lista-btn presenca-lista-btn-secondary"
                     >
+                        <QrCode size={18} aria-hidden="true" />
                         Presença por QrCode
                     </button>
                 )}
             </div>
             {/* Seção do Scanner */}
             {isScannerOpen && (
-                <div className="w-full max-w-lg mx-auto mt-4 p-6 border border-gray-200 rounded-xl shadow-lg bg-white">
-                    <div className="flex justify-between items-center mb-4 gap-4">
-                        <select
-                            onChange={(e) => setSelectedCameraId(e.target.value)}
-                            value={selectedCameraId}
-                            className="flex-grow border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                            {cameras.map((camera) => (
-                                <option key={camera.id} value={camera.id}>
-                                    {camera.label || `Câmera ${camera.id}`}
-                                </option>
-                            ))}
-                        </select>
+                <section className="attendance-scanner-panel" aria-labelledby="scanner-title-minicurso">
+                    <div className="attendance-scanner-heading">
+                        <div>
+                            <span className="attendance-scanner-kicker">Leitura de credencial</span>
+                            <h2 id="scanner-title-minicurso">Escanear QR Code</h2>
+                        </div>
                         <button
+                            type="button"
                             onClick={closeScanner}
-                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md shadow-sm transition-colors"
+                            className="presenca-lista-btn presenca-lista-btn-ghost"
                         >
                             Fechar Câmera
                         </button>
                     </div>
+                    <label className="attendance-scanner-label" htmlFor="camera-select-minicurso">
+                        Câmera
+                    </label>
+                    <select
+                        id="camera-select-minicurso"
+                        onChange={(e) => {
+                            setScannerError('');
+                            setSelectedCameraId(e.target.value);
+                        }}
+                        value={selectedCameraId}
+                        className="attendance-scanner-select"
+                    >
+                        {cameras.length === 0 && <option value="">Buscando câmeras...</option>}
+                        {cameras.map((camera) => (
+                            <option key={camera.id} value={camera.id}>
+                                {camera.label || `Câmera ${camera.id}`}
+                            </option>
+                        ))}
+                    </select>
+                    {scannerError && <p className="attendance-scanner-error" role="alert">{scannerError}</p>}
                     {/* O quadrado da câmera será renderizado aqui */}
-                    <div id={readerId} className="w-full rounded-lg overflow-hidden border-2 border-dashed border-gray-300"></div>
-                </div>
+                    <div id={readerId} className="attendance-scanner-reader" aria-label="Visualização da câmera"></div>
+                    <p className="attendance-scanner-help">Posicione o QR Code dentro da área destacada.</p>
+                </section>
             )}
 
             {/* Modal com o Resultado */}
@@ -557,6 +608,16 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
         }
         fetchUser()
     }, [qrCodeResult])
+
+    useEffect(() => {
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                closeModal();
+            }
+        };
+        window.addEventListener("keydown", handleEscape);
+        return () => window.removeEventListener("keydown", handleEscape);
+    }, [closeModal]);
 
     /**
      * Tava sem ideia para nome de função, então coloquei esse kk
@@ -588,147 +649,137 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
         console.log(listFeedBack)
         return listFeedBack
     }
+    const feedback = user ? getFeedBack(user, courseData) : [];
 
     return (
         <>
             <LoadingModal isLoading={isLoading} />
-            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[900000] px-5">
-                <div className="relative mx-auto p-6 border w-full max-w-2xl shadow-xl rounded-2xl bg-white">
-                    <div className="mt-3 text-center space-y-5">
-                        <h3 className="text-xl leading-6 font-bold text-gray-900">Usuário Identificado</h3>
-                        <div className="mt-4 px-4 py-3 bg-gray-50 rounded-lg">
-                            <p className="text-sm font-medium text-gray-600">
-                                ID de Usuário
-                            </p>
-                            <p className="text-md font-mono text-gray-800 break-all mt-1">
-                                {qrCodeResult}
-                            </p>
+            <div className="attendance-modal-overlay" onClick={closeModal}>
+                <div
+                    className="attendance-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="qr-result-title-minicurso"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <header className="attendance-modal-header">
+                        <div>
+                            <span className="attendance-modal-kicker">Leitura concluída</span>
+                            <h3 id="qr-result-title-minicurso">Usuário identificado</h3>
                         </div>
-                        <div className="mt-4 px-4 py-3 bg-gray-50 rounded-lg">
-                            <p className="text-sm font-medium text-gray-600">
-                                Informações Gerais
-                            </p>
-                            <p className="text-md font-mono text-gray-800 break-all mt-1">
-                                NOME. {user?.informacoes_usuario?.nome}
-                            </p>
-                            <p className="text-md font-mono text-gray-800 break-all mt-1">
-                                CPF. {user?.informacoes_usuario?.cpf}
-                            </p>
-                            <p className="text-md font-mono text-gray-800 break-all mt-1">
-                                EMAIL. {user?.informacoes_usuario?.email}
-                            </p>
-                            <p className="text-md font-mono text-gray-800 break-all mt-1">
-                                TELEFONE. {user?.informacoes_usuario?.numero_telefone}
-                            </p>
-                        </div>
-                        <div className="bg-gray-50 py-3">
-                            <div>
-                                <p className="text-sm text-gray-500 mb-2">
-                                    Observação
-                                </p>
-                                {
-                                    user && (
-                                        getFeedBack(user, courseData).length === 0 ? "" :
-                                            getFeedBack(user, courseData).map((value) => <p key={`${user._id}`} className='text-red-700 font-semibold'>{value}</p>)
-                                    )
-                                }
-                                <p className='text-red-700 font-semibold'>
-                                    {
-                                        user && courseData.participants.includes(`${user._id}`) ? "O Congressista está inscrito no minicurso" : ""
-                                    }
-                                </p>
-                                <p className='text-red-700 font-semibold'>
-                                    {
-                                        user && courseData.participants.includes(`${user._id}`) &&
-                                            courseData.attendanceList.includes(`${user._id}`)
-                                            ? "O Congressista já possui presença no minicurso" : ""
-                                    }
-                                </p>
-                            </div>
-                        </div>
-                        <div className='flex flex-col items-center content-center justify-center space-y-1'>
-
-                            {
-                                user && !courseData.attendanceList.includes(`${user._id}`) && (
-                                    <button
-                                        onClick={
-                                            async () => {
-                                                setIsLoading(true)
-                                                const response = await fetch(`/api/post/darPresenca`, {
-                                                    method: "POST",
-                                                    headers: {
-                                                        "Content-Type": "application/json",
-                                                    },
-                                                    body: JSON.stringify({
-                                                        eventId: courseData._id,
-                                                        userId: qrCodeResult,
-                                                    }),
-                                                });
-                                                if (!response.ok) {
-                                                    setIsLoading(false)
-                                                    alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                    return;
-                                                }
-                                                await hydrateData()
-                                                setIsLoading(false)
-                                                alert("Presença adicionada com sucesso.")
-                                                closeModal()
-
-                                            }
-                                        }
-                                        className="w-fit px-4 w-lg py-3 bg-blue-300 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                                    >
-
-                                        {
-                                            user && courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"
-                                        }
-                                    </button>
+                        <button type="button" className="attendance-modal-close" onClick={closeModal} aria-label="Fechar modal">
+                            ×
+                        </button>
+                    </header>
+                    <div className="attendance-modal-body">
+                        <section className="attendance-modal-section">
+                            <span className="attendance-modal-label">ID de usuário</span>
+                            <p className="attendance-modal-code">{qrCodeResult}</p>
+                        </section>
+                        <section className="attendance-modal-section">
+                            <span className="attendance-modal-label">Informações gerais</span>
+                            <dl className="attendance-user-details">
+                                <div><dt>Nome</dt><dd>{user?.informacoes_usuario?.nome}</dd></div>
+                                <div><dt>CPF</dt><dd>{user?.informacoes_usuario?.cpf}</dd></div>
+                                <div><dt>E-mail</dt><dd>{user?.informacoes_usuario?.email}</dd></div>
+                                <div><dt>Telefone</dt><dd>{user?.informacoes_usuario?.numero_telefone}</dd></div>
+                            </dl>
+                        </section>
+                        <section className="attendance-modal-section">
+                            <span className="attendance-modal-label">Observações</span>
+                            <div className="attendance-feedback-list" aria-live="polite">
+                                {feedback.map((value, index) => (
+                                    <p key={`${user?._id}-${index}`} className="attendance-feedback attendance-feedback-warning">{value}</p>
+                                ))}
+                                {user && courseData.participants.includes(`${user._id}`) && (
+                                    <p className="attendance-feedback attendance-feedback-positive">
+                                        O congressista está inscrito no minicurso.
+                                    </p>
                                 )}
-                            {
-                                user && courseData.attendanceList.includes(`${user._id}`) && (
-                                    <>
-                                        <button
-                                            onClick={
-                                                async () => {
-                                                    // 
-                                                    setIsLoading(true)
-                                                    const response = await fetch(`/api/post/retirarPresenca`, {
-                                                        method: "POST",
-                                                        headers: {
-                                                            "Content-Type": "application/json",
-                                                        },
-                                                        body: JSON.stringify({
-                                                            eventId: courseData._id,
-                                                            userId: qrCodeResult,
-                                                        }),
-                                                    });
-                                                    if (!response.ok) {
-                                                        setIsLoading(false)
-                                                        alert("Algo deu errado, por favor tente novamente.")
-                                                        return;
-                                                    }
-                                                    await hydrateData()
-                                                    setIsLoading(false)
-                                                    alert("Presença removida com sucesso.")
-                                                    closeModal()
-
-                                                }
-                                            }
-                                            className="w-fit px-4 w-lg py-3 bg-red-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
-                                        >
-                                            Retirar Presença
-                                        </button>
-                                    </>
-                                )
-                            }
-                            <button
-                                onClick={closeModal}
-                                className="w-fit px-4 w-lg py-3 bg-green-600 text-white text-base font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
-                            >
-                                Fechar
-                            </button>
-                        </div>
+                                {user && courseData.participants.includes(`${user._id}`) &&
+                                    courseData.attendanceList.includes(`${user._id}`) && (
+                                        <p className="attendance-feedback attendance-feedback-positive">
+                                            O congressista já possui presença no minicurso.
+                                        </p>
+                                    )}
+                                {feedback.length === 0 && user && (
+                                    <p className="attendance-feedback attendance-feedback-neutral">Nenhuma pendência encontrada.</p>
+                                )}
+                            </div>
+                        </section>
                     </div>
+                    <footer className="attendance-modal-actions">
+                        {user && !courseData.attendanceList.includes(`${user._id}`) && (
+                            <button
+                                type="button"
+                                onClick={
+                                    async () => {
+                                        setIsLoading(true)
+                                        const response = await fetch(`/api/post/darPresenca`, {
+                                            method: "POST",
+                                            headers: {
+                                                "Content-Type": "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                                eventId: courseData._id,
+                                                userId: qrCodeResult,
+                                            }),
+                                        });
+                                        if (!response.ok) {
+                                            setIsLoading(false)
+                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                            return;
+                                        }
+                                        await hydrateData()
+                                        setIsLoading(false)
+                                        alert("Presença adicionada com sucesso.")
+                                        closeModal()
+
+                                    }
+                                }
+                                className="presenca-lista-btn presenca-lista-btn-success"
+                            >
+                                {courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"}
+                            </button>
+                        )}
+                        {user && courseData.attendanceList.includes(`${user._id}`) && (
+                            <button
+                                type="button"
+                                onClick={
+                                    async () => {
+                                        //
+                                        setIsLoading(true)
+                                        const response = await fetch(`/api/post/retirarPresenca`, {
+                                            method: "POST",
+                                            headers: {
+                                                "Content-Type": "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                                eventId: courseData._id,
+                                                userId: qrCodeResult,
+                                            }),
+                                        });
+                                        if (!response.ok) {
+                                            setIsLoading(false)
+                                            alert("Algo deu errado, por favor tente novamente.")
+                                            return;
+                                        }
+                                        await hydrateData()
+                                        setIsLoading(false)
+                                        alert("Presença removida com sucesso.")
+                                        closeModal()
+
+                                    }
+                                }
+                                className="presenca-lista-btn presenca-lista-btn-danger"
+                            >
+                                Retirar Presença
+                            </button>
+                        )}
+                        <button type="button" onClick={closeModal} className="presenca-lista-btn presenca-lista-btn-ghost">
+                            Fechar
+                        </button>
+                    </footer>
                 </div>
             </div>
         </>
@@ -777,18 +828,27 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     });
 
     return (
-        <div className="all-users-modal-overlay mt-10">
-            <div className="all-users-modal-backdrop" onClick={onClose}></div>
-            <div className="all-users-modal-container">
+        <div className="all-users-modal-overlay">
+            <div className="all-users-modal-backdrop" onClick={onClose} aria-hidden="true"></div>
+            <div
+                className="all-users-modal-container"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="all-users-title-minicurso"
+            >
                 <div className="all-users-modal-header">
-                    <h1 className="all-users-modal-title">Escolha um Congressista</h1>
-                    <button onClick={onClose} className="all-users-modal-close-btn" aria-label="Fechar modal">
+                    <div>
+                        <span className="all-users-modal-kicker">Inclusão manual</span>
+                        <h2 id="all-users-title-minicurso" className="all-users-modal-title">Escolha um congressista</h2>
+                    </div>
+                    <button type="button" onClick={onClose} className="all-users-modal-close-btn" aria-label="Fechar modal">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
                 <div className="all-users-modal-search-section">
-                    <h2 className="all-users-modal-search-title">Pesquisar Congressista</h2>
+                    <label className="all-users-modal-search-title" htmlFor="all-users-search-minicurso">Pesquisar congressista</label>
                     <input
+                        id="all-users-search-minicurso"
                         type="text"
                         placeholder="Filtrar por nome ou e-mail..."
                         className="all-users-modal-search-input"
@@ -803,6 +863,7 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
                     <div className="all-users-modal-list">
                         {filteredUsers.map((user) => (
                             <button
+                                type="button"
                                 key={user._id}
                                 onClick={() => onUserSelect(user._id)}
                                 className="all-users-modal-user-button"
@@ -821,9 +882,9 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
                                             <p className="all-users-modal-user-name">
                                                 {user.informacoes_usuario.titulo_honorario} {user.informacoes_usuario.nome}
                                             </p>
-                                            <p className="all-users-modal-user-email">{user.informacoes_usuario.email}</p>
+                                                <p className="all-users-modal-user-email">{user.informacoes_usuario.email}</p>
                                             {user.pagamento.situacao != 1 && (
-                                                <p className="all-users-modal-payment-status" style={{ color: "red" }}>
+                                                <p className="all-users-modal-payment-status">
                                                     Não inscrito no congresso
                                                 </p>
                                             )}
@@ -832,6 +893,9 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
                                 </div>
                             </button>
                         ))}
+                        {filteredUsers.length === 0 && (
+                            <p className="all-users-modal-empty">Nenhum congressista corresponde à busca.</p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -885,10 +949,11 @@ function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: stri
 
     return (
         <button
+            type="button"
             onClick={handleDownload}
             className="presenca-lista-btn presenca-lista-btn-primary"
         >
-            <Table size={18} />
+            <Table size={18} aria-hidden="true" />
             Gerar Planilha
         </button>
     );

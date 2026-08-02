@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ICourse } from "../lib/types/events/event.t";
 import LoadingModal from "./LoadingModal";
 import { ObjectId } from "bson";
 import { X, Plus, Trash } from "lucide-react";
 import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
+import styles from "./CiepsAdmin.module.css";
 //
 // Props do componente, mantendo a sua estrutura
 interface CreateCourseModalProps {
@@ -19,7 +20,7 @@ interface CreateCourseModalProps {
     title?: string
 }
 
-const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ title = "Criar Novo Minicurso", buttonText = "Criar Minicurso", apiMethod = "POST", apiUrl = "/api/post/criarNovoMinicurso/", isOpen, onClose, onSuccess, initialForms = {
+const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ title = "Criar nova atividade", buttonText = "Criar atividade", apiMethod = "POST", apiUrl = "/api/post/criarNovoMinicurso/", isOpen, onClose, onSuccess, initialForms = {
     "name": "",
     "emoji": "",
     "description": "",
@@ -38,6 +39,30 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ title = "Criar No
     const [newFormData, setNewFormData] = useState<Omit<ICourse, "_id" | "_nSerie" | "attendanceList" | "participants" | "participantsCount">>(initialForms);
 
     const [validationError, setValidationError] = useState<string | null>(null);
+    const titleId = useId();
+    const introId = useId();
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        const previouslyFocusedElement = document.activeElement as HTMLElement | null;
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                onClose();
+            }
+        };
+
+        window.addEventListener("keydown", handleEscape);
+        closeButtonRef.current?.focus();
+
+        return () => {
+            window.removeEventListener("keydown", handleEscape);
+            previouslyFocusedElement?.focus();
+        };
+    }, [isOpen, onClose]);
 
     if (!isOpen) return null;
 
@@ -173,263 +198,312 @@ const CreateCourseModal: React.FC<CreateCourseModalProps> = ({ title = "Criar No
 
     // Função para lidar com a submissão do formulário
     const handleSubmit = async () => {
-        //e.preventDefault();
-        //
+        setValidationError(null);
+
         if (!newFormData.name) {
-            alert("Preencha o campo 'Nome do Minicurso' antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("Preencha o nome da atividade antes de continuar.");
+            return;
         }
 
         if (!newFormData.emoji) {
-            alert("Preencha o campo 'Emoji' antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("Preencha o emoji ou ícone antes de continuar.");
+            return;
         }
 
         if (!newFormData.description) {
-            alert("Preencha o campo 'Descrição' antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("Preencha a descrição antes de continuar.");
+            return;
         }
 
         if (!newFormData.organization_name) {
-            alert("Preencha o campo 'Organização' antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("Preencha a organização antes de continuar.");
+            return;
         }
 
         if (!newFormData.type) {
-            alert("Preencha o campo 'Tipo' antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("Preencha o tipo da atividade antes de continuar.");
+            return;
         }
 
         if (!newFormData.dateOpen) {
-            alert("Preencha o campo 'Data Abertura' antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("Preencha a data de abertura antes de continuar.");
+            return;
         }
 
         if (!newFormData.isFree && newFormData.value === 0) {
-            alert("Você configurou o Minicurso como 'Pago'. Assim, é necessário colocar um valor maior que 0 antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("A atividade paga precisa ter um valor maior que zero.");
+            return;
         }
 
-
-        newFormData.timeline.forEach((timeline, index) => {
+        for (const [index, timeline] of newFormData.timeline.entries()) {
             if (!timeline.date_end) {
-                alert(`Programação ${index + 1} - Preencha o campo 'Data de Fim' antes de continuar.`);
-                return; // Impede a submissão do formulário
+                setValidationError(`Programação ${index + 1}: preencha a data de fim.`);
+                return;
             }
             if (!timeline.date_init) {
-                alert(`Programação ${index + 1} - Preencha o campo 'Data de Início' antes de continuar.`);
-                return; // Impede a submissão do formulário
+                setValidationError(`Programação ${index + 1}: preencha a data de início.`);
+                return;
             }
             if (!timeline.description) {
-                alert(`Programação ${index + 1} - Preencha o campo 'Descrição' antes de continuar.`);
-                return; // Impede a submissão do formulário
+                setValidationError(`Programação ${index + 1}: preencha a descrição.`);
+                return;
             }
             if (!timeline.local) {
-                alert(`Programação ${index + 1} - Preencha o campo 'Local' antes de continuar.`);
-                return; // Impede a submissão do formulário
+                setValidationError(`Programação ${index + 1}: preencha o local.`);
+                return;
             }
             if (!timeline.local_description) {
-                alert(`Programação ${index + 1} - Preencha o campo 'Descrição do Local' antes de continuar.`);
-                return; // Impede a submissão do formulário
+                setValidationError(`Programação ${index + 1}: preencha a descrição do local.`);
+                return;
             }
-        })
+        }
 
-
-        // Antes de submeter, valida a timeline
         if (!validateTimeline(newFormData.timeline)) {
-            alert("Há um choque de horários na 'Programação'. Por favor, ajuste as datas e horários.");
-            return; // Impede a submissão do formulário
+            setValidationError("Há um conflito de horários na programação. Ajuste as datas antes de continuar.");
+            return;
         }
         if (!newFormData.timeline.length) {
-            alert("Preencha o campo programação antes de continuar.");
-            return; // Impede a submissão do formulário
+            setValidationError("Adicione ao menos uma etapa à programação.");
+            return;
         }
 
         setLoading(true)
-        // Se a validação passar, continua com a submissão
-        const response = await fetch(apiUrl, {
-            method: apiMethod,
-            body: JSON.stringify(newFormData)
-        })
-        if (!response.ok) {
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: apiMethod,
+                body: JSON.stringify(newFormData)
+            })
             const { message }: { message: string } = await response.json()
+
+            if (!response.ok) {
+                setValidationError(message || "Não foi possível salvar a atividade.");
+                return;
+            }
+
             alert(message)
+            await onSuccess();
+            await onClose();
+            setNewFormData({
+                "name": "",
+                "emoji": "",
+                "description": "",
+                "maxParticipants": 0,
+                "organization_name": "",
+                "dateOpen": "",
+                "isFree": true,
+                "value": 0,
+                "timeline": [],
+                "type": "",
+                "showToUser": false,
+                "isOpen": false,
+            })
+        } catch {
+            setValidationError("Não foi possível salvar a atividade. Verifique sua conexão e tente novamente.");
+        } finally {
             setLoading(false)
-            return;
         }
-        const { message }: { message: string } = await response.json()
-        alert(message)
-        await onSuccess();
-        await onClose();
-        setNewFormData({
-            "name": "",
-            "emoji": "",
-            "description": "",
-            "maxParticipants": 0,
-            "organization_name": "",
-            "dateOpen": "",
-            "isFree": true,
-            "value": 0,
-            "timeline": [],
-            "type": "",
-            "showToUser": false,
-            "isOpen": false,
-        })
-        setLoading(false)
     };
 
     return (
         <>
             <LoadingModal isLoading={loading} />
-            <div className="fixed inset-0 bg-black bg-opacity-60 z-[5000000000] flex items-center justify-center p-4 overflow-y-auto">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] min-h-0 flex flex-col my-4 overflow-hidden">
-                    <header className="flex items-center justify-end gap-4 p-4 sm:p-6 border-b border-gray-200 flex-shrink-0">
-                        <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-100 flex-shrink-0"><X size={24} /></button>
+            <div className={styles.dialogViewport}>
+                <div
+                    aria-hidden="true"
+                    className={styles.dialogBackdrop}
+                    onClick={onClose}
+                />
+
+                <section
+                    aria-busy={loading}
+                    aria-describedby={introId}
+                    aria-labelledby={titleId}
+                    aria-modal="true"
+                    className={`${styles.modalCard} ${styles.courseCard}`}
+                    role="dialog"
+                >
+                    <header className={styles.modalHeader}>
+                        <div className={styles.modalHeading}>
+                            <span className={styles.eyebrow}>Configuração de atividade</span>
+                            <h2 className={styles.modalTitle} id={titleId}>{title}</h2>
+                        </div>
+                        <button
+                            aria-label="Fechar formulário de atividade"
+                            className={styles.closeButton}
+                            onClick={onClose}
+                            ref={closeButtonRef}
+                            type="button"
+                        >
+                            <X aria-hidden="true" size={22} />
+                        </button>
                     </header>
 
-                    <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5 min-h-0">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                            {/* CAMPOS PRINCIPAIS */}
-                            <div>
-                                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Nome do Minicurso</label>
-                                <input type="text" id="name" name="name" value={newFormData.name} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+                    <form
+                        className={styles.courseForm}
+                        id="create-course-form"
+                        noValidate
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            void handleSubmit();
+                        }}
+                    >
+                        <p className={styles.formIntro} id={introId}>
+                            Informe os dados de exibição, inscrição e programação da atividade. Os campos principais e ao menos uma etapa da programação são obrigatórios.
+                        </p>
+
+                        <div className={styles.formGrid}>
+                            <div className={styles.field}>
+                                <label htmlFor="name">Nome da atividade</label>
+                                <input id="name" name="name" onChange={handleChange} required type="text" value={newFormData.name} />
                             </div>
-                            <div>
-                                <label htmlFor="emoji" className="block text-sm font-medium text-gray-700 mb-1">Emoji</label>
-                                <div className="flex items-center gap-3">
-                                    <input type="text" id="emoji" name="emoji" value={newFormData.emoji} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
-                                    <div className="flex items-center justify-center w-12 h-12 rounded-md bg-gray-50 border border-gray-200">
-                                        {renderEmojiAsLucide(newFormData.emoji, { size: 22, className: "text-indigo-600" })}
+
+                            <div className={styles.field}>
+                                <label htmlFor="emoji">Emoji ou ícone</label>
+                                <div className={styles.emojiField}>
+                                    <input id="emoji" name="emoji" onChange={handleChange} required type="text" value={newFormData.emoji} />
+                                    <div aria-hidden="true" className={styles.emojiPreview}>
+                                        {renderEmojiAsLucide(newFormData.emoji, { size: 22 })}
                                     </div>
                                 </div>
                             </div>
-                            <div className="md:col-span-2">
-                                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                                <textarea id="description" name="description" rows={3} value={newFormData.description} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+
+                            <div className={`${styles.field} ${styles.fullField}`}>
+                                <label htmlFor="description">Descrição</label>
+                                <textarea id="description" name="description" onChange={handleChange} required rows={3} value={newFormData.description} />
                             </div>
-                            <div>
-                                <label htmlFor="maxParticipants" className="block text-sm font-medium text-gray-700 mb-1">Máx. Participantes</label>
-                                <input type="number" id="maxParticipants" name="maxParticipants" value={newFormData.maxParticipants} onChange={handleChange} min="0" className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+
+                            <div className={styles.field}>
+                                <label htmlFor="maxParticipants">Máximo de participantes</label>
+                                <input id="maxParticipants" min="0" name="maxParticipants" onChange={handleChange} required type="number" value={newFormData.maxParticipants} />
                             </div>
-                            <div>
-                                <label htmlFor="organization_name" className="block text-sm font-medium text-gray-700 mb-1">Organização</label>
-                                <input type="text" id="organization_name" name="organization_name" value={newFormData.organization_name} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+
+                            <div className={styles.field}>
+                                <label htmlFor="organization_name">Organização</label>
+                                <input id="organization_name" name="organization_name" onChange={handleChange} required type="text" value={newFormData.organization_name} />
                             </div>
-                            <div>
-                                <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                                <input type="text" id="type" name="type" value={newFormData.type} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+
+                            <div className={styles.field}>
+                                <label htmlFor="type">Tipo</label>
+                                <input id="type" name="type" onChange={handleChange} required type="text" value={newFormData.type} />
                             </div>
-                            <div>
-                                <label htmlFor="dateOpen" className="block text-sm font-medium text-gray-700 mb-1">Data de Abertura</label>
-                                <input type="datetime-local" id="dateOpen" name="dateOpen" value={newFormData.dateOpen} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required />
+
+                            <div className={styles.field}>
+                                <label htmlFor="dateOpen">Data de abertura</label>
+                                <input id="dateOpen" name="dateOpen" onChange={handleChange} required type="datetime-local" value={newFormData.dateOpen} />
                             </div>
-                            <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
-                                <div className="flex items-center">
-                                    <input type="checkbox" id="isFree" name="isFree" checked={newFormData.isFree} onChange={handleChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" required />
-                                    <label htmlFor="isFree" className="ml-2 text-sm text-gray-900">Minicurso Gratuito?</label>
-                                </div>
-                                <div className="flex items-center">
-                                    <input type="checkbox" id="showToUser" name="showToUser" checked={newFormData.showToUser} onChange={handleChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" required />
-                                    <label htmlFor="showToUser" className="ml-2 text-sm text-gray-900">Mostrar para o usuário?</label>
-                                </div>
-                                <div className="flex items-center">
-                                    <input type="checkbox" id="isOpen" name="isOpen" checked={newFormData.isOpen} onChange={handleChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" required />
-                                    <label htmlFor="isOpen" className="ml-2 text-sm text-gray-900">Inscrições Abertas?</label>
-                                </div>
+
+                            <div className={styles.checkboxGrid}>
+                                <label className={styles.checkboxCard} htmlFor="isFree">
+                                    <input checked={newFormData.isFree} id="isFree" name="isFree" onChange={handleChange} type="checkbox" />
+                                    <span>Atividade gratuita</span>
+                                </label>
+                                <label className={styles.checkboxCard} htmlFor="showToUser">
+                                    <input checked={newFormData.showToUser} id="showToUser" name="showToUser" onChange={handleChange} type="checkbox" />
+                                    <span>Mostrar para o usuário</span>
+                                </label>
+                                <label className={styles.checkboxCard} htmlFor="isOpen">
+                                    <input checked={newFormData.isOpen} id="isOpen" name="isOpen" onChange={handleChange} type="checkbox" />
+                                    <span>Inscrições abertas</span>
+                                </label>
                             </div>
-                            <div className="md:col-span-2">
-                                <label htmlFor="value" className="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-                                <input type="number" id="value" name="value" value={newFormData.value} onChange={handleChange} disabled={newFormData.isFree} className={`w-full p-2 border border-gray-300 rounded-lg focus:outline-none ${newFormData.isFree ? 'bg-gray-100 cursor-not-allowed' : 'focus:ring-2 focus:ring-indigo-500'}`} required />
+
+                            <div className={`${styles.field} ${styles.fullField}`}>
+                                <label htmlFor="value">Valor (R$)</label>
+                                <input disabled={newFormData.isFree} id="value" name="value" onChange={handleChange} required type="number" value={newFormData.value} />
                             </div>
                         </div>
 
-                        {/* TIMELINE DINÂMICA */}
-                        <div className="w-full space-y-2">
-                            <div className="flex justify-between items-center">
-                                <p className="text-xl font-bold text-gray-800">Programação</p>
-                                <button
-                                    type="button"
-                                    onClick={handleAddTimelineItem}
-                                    className="flex items-center text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-lg"
-                                >
-                                    <Plus size={18} className="mr-1" /> Adicionar Programação
+                        <section aria-labelledby="timeline-title" className={styles.timelineSection}>
+                            <div className={styles.timelineHeader}>
+                                <h3 className={styles.timelineTitle} id="timeline-title">Programação</h3>
+                                <button className={styles.addButton} onClick={handleAddTimelineItem} type="button">
+                                    <Plus aria-hidden="true" size={18} />
+                                    Adicionar programação
                                 </button>
                             </div>
+
                             {validationError && (
-                                <p className="text-sm text-red-600 bg-red-50 p-2 rounded-lg">
+                                <p aria-live="polite" className={styles.validationError} role="alert">
                                     {validationError}
                                 </p>
                             )}
-                            <div className="border border-gray-300 p-2 w-full rounded-lg space-y-4">
-                                {
-                                    newFormData.timeline.length === 0 ?
-                                        <div className="w-full flex items-center justify-center p-4">
-                                            <p className="text-gray-500 italic">Nenhuma programação adicionada.</p>
-                                        </div>
-                                        :
-                                        newFormData.timeline.map((timelineItem, index) => (
-                                            <div key={timelineItem._id} className="relative p-4 border border-gray-200 rounded-lg">
-                                                <div className="flex justify-between items-center mb-4">
-                                                    <h3 className="font-bold text-lg">Programação {index + 1}</h3>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRemoveTimelineItem(index)}
-                                                        className="p-1 text-red-500 hover:bg-gray-100 rounded-full"
-                                                    >
-                                                        <Trash size={20} />
-                                                    </button>
-                                                </div>
 
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                                                    <div className="md:col-span-2">
-                                                        <label htmlFor={`timeline-name-${index}`} className="block text-sm font-medium text-gray-700 mb-1">Nome da Etapa</label>
-                                                        <input type="text" id={`timeline-name-${index}`} name="name" value={timelineItem.name} onChange={(e) => handleTimelineChange(index, e)} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor={`timeline-date_init-${index}`} className="block text-sm font-medium text-gray-700 mb-1">Data de Início</label>
-                                                        <input type="datetime-local" id={`timeline-date_init-${index}`} name="date_init" value={timelineItem.date_init} onChange={(e) => handleTimelineChange(index, e)} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor={`timeline-date_end-${index}`} className="block text-sm font-medium text-gray-700 mb-1">Data de Fim</label>
-                                                        <input type="datetime-local" id={`timeline-date_end-${index}`} name="date_end" value={timelineItem.date_end} onChange={(e) => handleTimelineChange(index, e)} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                                                    </div>
-                                                    <div className="md:col-span-2">
-                                                        <label htmlFor={`timeline-description-${index}`} className="block text-sm font-medium text-gray-700 mb-1">Descrição da Etapa</label>
-                                                        <textarea id={`timeline-description-${index}`} name="description" rows={2} value={timelineItem.description} onChange={(e) => handleTimelineChange(index, e)} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor={`timeline-local-${index}`} className="block text-sm font-medium text-gray-700 mb-1">Local</label>
-                                                        <input type="text" id={`timeline-local-${index}`} name="local" value={timelineItem.local} onChange={(e) => handleTimelineChange(index, e)} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor={`timeline-local_description-${index}`} className="block text-sm font-medium text-gray-700 mb-1">Descrição do Local</label>
-                                                        <input type="text" id={`timeline-local_description-${index}`} name="local_description" value={timelineItem.local_description} onChange={(e) => handleTimelineChange(index, e)} className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                                                    </div>
+                            <div className={styles.timelineList}>
+                                {newFormData.timeline.length === 0 ? (
+                                    <div className={styles.timelineEmpty}>
+                                        Nenhuma programação adicionada.
+                                    </div>
+                                ) : (
+                                    newFormData.timeline.map((timelineItem, index) => (
+                                        <article className={styles.timelineCard} key={timelineItem._id}>
+                                            <div className={styles.timelineCardHeader}>
+                                                <h4 className={styles.timelineCardTitle}>
+                                                    <span className={styles.timelineNumber}>{index + 1}</span>
+                                                    Etapa da programação
+                                                </h4>
+                                                <button
+                                                    aria-label={`Remover programação ${index + 1}`}
+                                                    className={`${styles.iconButton} ${styles.removeButton}`}
+                                                    onClick={() => handleRemoveTimelineItem(index)}
+                                                    type="button"
+                                                >
+                                                    <Trash aria-hidden="true" size={18} />
+                                                </button>
+                                            </div>
+
+                                            <div className={styles.timelineGrid}>
+                                                <div className={`${styles.field} ${styles.fullField}`}>
+                                                    <label htmlFor={`timeline-name-${index}`}>Nome da etapa</label>
+                                                    <input id={`timeline-name-${index}`} name="name" onChange={(event) => handleTimelineChange(index, event)} type="text" value={timelineItem.name} />
+                                                </div>
+                                                <div className={styles.field}>
+                                                    <label htmlFor={`timeline-date_init-${index}`}>Data de início</label>
+                                                    <input id={`timeline-date_init-${index}`} name="date_init" onChange={(event) => handleTimelineChange(index, event)} type="datetime-local" value={timelineItem.date_init} />
+                                                </div>
+                                                <div className={styles.field}>
+                                                    <label htmlFor={`timeline-date_end-${index}`}>Data de fim</label>
+                                                    <input id={`timeline-date_end-${index}`} name="date_end" onChange={(event) => handleTimelineChange(index, event)} type="datetime-local" value={timelineItem.date_end} />
+                                                </div>
+                                                <div className={`${styles.field} ${styles.fullField}`}>
+                                                    <label htmlFor={`timeline-description-${index}`}>Descrição da etapa</label>
+                                                    <textarea id={`timeline-description-${index}`} name="description" onChange={(event) => handleTimelineChange(index, event)} rows={2} value={timelineItem.description} />
+                                                </div>
+                                                <div className={styles.field}>
+                                                    <label htmlFor={`timeline-local-${index}`}>Local</label>
+                                                    <input id={`timeline-local-${index}`} name="local" onChange={(event) => handleTimelineChange(index, event)} type="text" value={timelineItem.local} />
+                                                </div>
+                                                <div className={styles.field}>
+                                                    <label htmlFor={`timeline-local_description-${index}`}>Descrição do local</label>
+                                                    <input id={`timeline-local_description-${index}`} name="local_description" onChange={(event) => handleTimelineChange(index, event)} type="text" value={timelineItem.local_description} />
                                                 </div>
                                             </div>
-                                        ))
-                                }
+                                        </article>
+                                    ))
+                                )}
                             </div>
-                        </div>
+                        </section>
                     </form>
 
-                    <footer className="flex justify-end p-6 border-t border-gray-200 gap-2 flex-shrink-0">
+                    <footer className={styles.modalFooter}>
                         <button
+                            className={styles.secondaryButton}
+                            disabled={loading}
                             onClick={onClose}
                             type="button"
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
                         >
                             Cancelar
                         </button>
                         <button
-                            onClick={() => { handleSubmit() }}
+                            className={styles.primaryButton}
+                            disabled={loading}
                             form="create-course-form"
-                            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                            type="submit"
                         >
                             {buttonText}
                         </button>
                     </footer>
-                </div>
+                </section>
             </div>
         </>
     );
