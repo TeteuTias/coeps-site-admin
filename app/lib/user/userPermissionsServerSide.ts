@@ -1,4 +1,23 @@
 import { pathToRegexp } from "path-to-regexp";
+
+const DEFAULT_FINANCE_ADMIN_ID = "67098341f7397b370e9cb8ba";
+
+function financeAdminIds() {
+    const configured = (process.env.FINANCE_ADMIN_USER_IDS ?? "")
+        .split(/[;,\s]+/)
+        .map(value => value.trim().replace(/^auth0\|/, ""))
+        .filter(Boolean);
+
+    return new Set(configured.length > 0 ? configured : [DEFAULT_FINANCE_ADMIN_ID]);
+}
+
+function isFinanceCodesRoute(pathname: string) {
+    if (pathname === "/financeiro" || pathname.startsWith("/financeiro/")) {
+        return true;
+    }
+
+    return /^\/api\/(?:get|post|put|delete)\/pagamentos(?:\/|$)/.test(pathname);
+}
 // import getUserIdServerSide from "./getUserIdServerSide";
 
 // Objeto para permissões de rotas de API (ex: /api/trabalhos/:id)
@@ -69,6 +88,12 @@ const blockedApiRoutes: { [key: string]: string[] } = {
  */
 export default async function checkUserPermission(url: URL, type: 'page' | 'api', userIdStr: string): Promise<boolean> {
     const { pathname } = url;
+
+    // Segunda barreira para impedir que wildcards legados de API concedam
+    // acesso a operações financeiras sensíveis.
+    if (isFinanceCodesRoute(pathname)) {
+        return financeAdminIds().has(userIdStr.replace(/^auth0\|/, ""));
+    }
 
     // 2. Seleciona o conjunto de regras correto (página ou API) com base no parâmetro 'type'.
     const permissionRules = type === 'page' ? permittedRoutes : permittedRoutesApi;
