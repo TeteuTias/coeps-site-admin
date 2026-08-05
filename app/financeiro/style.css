@@ -871,33 +871,3 @@
     justify-content: center;
   }
 }
-.financeiro-codes-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-}
-
-.financeiro-codes-entry .financeiro-section-title {
-  justify-content: flex-start;
-  text-align: left;
-  margin-bottom: 0.55rem;
-}
-
-.financeiro-codes-entry p {
-  margin: 0;
-  color: var(--cinza);
-  opacity: 0.85;
-  line-height: 1.55;
-}
-
-.financeiro-codes-entry .financeiro-btn {
-  flex: 0 0 auto;
-}
-
-@media (max-width: 720px) {
-  .financeiro-codes-entry {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}

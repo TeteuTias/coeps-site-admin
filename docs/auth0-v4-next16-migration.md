@@ -14,7 +14,7 @@ consumidores que esperavam JSON.
 As variáveis atuais são:
 
 - `AUTH0_DOMAIN`: hostname do tenant, sem `https://` e sem barra final.
-- `APP_BASE_URL`: URL da aplicação; localmente, `http://localhost:3000`.
+- `APP_BASE_URL`: URL da aplicação; localmente, `http://localhost:3001`.
 - `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET` e `AUTH0_SECRET`.
 
 Durante a transição, `AUTH0_ISSUER_BASE_URL` e `AUTH0_BASE_URL` continuam
@@ -73,8 +73,8 @@ npm run dev
 Sem autenticação, verifique:
 
 ```powershell
-curl.exe -i http://localhost:3000/
-curl.exe -i http://localhost:3000/api/get/todosCongressistas
+curl.exe -i http://localhost:3001/
+curl.exe -i http://localhost:3001/api/get/todosCongressistas
 ```
 
 A página deve iniciar login e a API deve responder `401 application/json`.

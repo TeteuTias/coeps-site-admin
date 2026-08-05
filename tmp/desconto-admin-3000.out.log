@@ -1,0 +1,14 @@
+
+> coeps-site-admin@0.1.0 dev
+> next dev
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://100.100.110.95:3000
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 1792ms
+ GET / 200 in 824ms (compile: 316ms, proxy.ts: 18ms, render: 490ms)
+ GET / 200 in 49ms (compile: 4ms, proxy.ts: 7ms, render: 38ms)
+[?25h

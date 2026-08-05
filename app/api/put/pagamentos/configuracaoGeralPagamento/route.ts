@@ -1,16 +1,37 @@
-import { ObjectId } from "mongodb";
-import { connectToDatabase } from "@/app/lib/mongodb";
-import { requireFinanceAdmin } from "@/app/lib/payments/finance-admin";
-import { normalizeEditionId } from "@/app/lib/payments/payment-code-repository";
+import { NextRequest, NextResponse } from 'next/server';
+import { ObjectId } from 'bson';
+import { connectToDatabase } from '@/app/lib/mongodb';
+import { withApiAuthRequired } from "@/app/lib/auth0";
 
 function validNonNegativeAmount(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export async function PUT(request: Request) {
-  const authorization = await requireFinanceAdmin(request);
-  if (!authorization.authorized) return authorization.response;
+//
+//
+export const PUT = withApiAuthRequired(async function PUT(req: Request) {
+    // 1. Validar o método da requisição (opcional, mas boa prática)
+    if (req.method !== 'PUT') {
+        return Response.json({ error: 'Método não permitido' }, { status: 405 });
+    }
+
+    try {
+        // 2. Extrair os dados do corpo da requisição
+        const body = await req.json();
+        const { nome, valorAVista, _id, valorBoleto, valorDebito, valorPix } = body as {
+            nome: string;
+            _id: string;
+            valorAVista: number;
+            valorBoleto: number;
+            valorDebito: number;
+            valorPix: number;
+        }
+        // 3. Autenticar e validar os dados recebidos
+
+        if (!ObjectId.isValid(_id)) {
+            return Response.json({ error: '_id não válido.' }, { status: 400 });
+        }
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -107,40 +128,11 @@ export async function PUT(request: Request) {
             { session },
           );
 
-          await db.collection("ingressos_config").updateOne(
-            { _id: objectId },
-            { $set: updateFields },
-            { session },
-          );
-        });
-      } finally {
-        await session.endSession();
-      }
-    } else {
-      await db.collection("ingressos_config").updateOne(
-        { _id: objectId },
-        { $set: updateFields },
-      );
+    } catch {
+        // Captura erros de parsing do JSON ou outros erros inesperados
+        return Response.json(
+            { error: "invalid_request", message: "Não foi possível validar os dados enviados." },
+            { status: 400 }
+        );
     }
-
-    return Response.json({
-      message: editionChanged
-        ? "Configuração salva e nova edição iniciada com zero pagantes legados."
-        : "Configuração financeira salva com sucesso.",
-      data: {
-        _id: id,
-        nome,
-        ...amounts,
-        edicaoId: explicitEdition ? edicaoId : currentConfig.edicaoId,
-        ativo: explicitEdition ? true : currentConfig.ativo,
-        pagantesLegados: editionChanged ? 0 : currentConfig.pagantesLegados,
-      },
-    });
-  } catch (error) {
-    console.error("Erro ao atualizar configuração financeira:", error);
-    return Response.json(
-      { error: "invalid_request", message: "Não foi possível validar os dados enviados." },
-      { status: 400 },
-    );
-  }
-}
+})
