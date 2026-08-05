@@ -6,7 +6,7 @@ import { IPaymentConfig } from "../lib/types/payments/payment.t"
 import { IUser } from "../lib/types/user/user.t"
 import { useRouter } from "next/navigation"
 import './style.css'
-import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX } from 'lucide-react'
+import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX, Tag } from 'lucide-react'
 
 type IParcelamento = IPaymentConfig["parcelamentos"][0];
 
@@ -24,6 +24,7 @@ export default function Page() {
     const [isEditingParcelamentos, setIsEditingParcelamentos] = useState(false);
     const [editableInfo, setEditableInfo] = useState({
         nome: '',
+        edicaoId: '',
         valorAVista: 0,
         valorBoleto: 0,
         valorDebito: 0,
@@ -122,6 +123,7 @@ export default function Page() {
             setPaymentData(fetchedData)
             setEditableInfo({
                 nome: fetchedData.nome,
+                edicaoId: fetchedData.edicaoId ?? '',
                 valorAVista: fetchedData.valorAVista,
                 valorBoleto: fetchedData.valorBoleto,
                 valorDebito: fetchedData.valorDebito,
@@ -145,13 +147,24 @@ export default function Page() {
 
     const handleInfoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
+        const numericFields = ["valorAVista", "valorBoleto", "valorDebito", "valorPix"];
         setEditableInfo(prev => ({
             ...prev,
-            [name]: name === 'valorAVista' ? parseFloat(value) || 0 : value
+            [name]: numericFields.includes(name) ? parseFloat(value) || 0 : value
         }));
     };
 
     const handleSaveChanges = async () => {
+        const editionChanged = Boolean(
+            editableInfo.edicaoId && editableInfo.edicaoId !== paymentData?.edicaoId
+        )
+        if (
+            editionChanged &&
+            !window.confirm("Iniciar uma nova edição zera o contador de pagantes legados. Deseja continuar?")
+        ) {
+            return
+        }
+
         try {
             setLoading(true)
             const response = await fetch('/api/put/pagamentos/configuracaoGeralPagamento', {
@@ -167,16 +180,12 @@ export default function Page() {
             };
 
             const updatedData = await response.json();
-            setPaymentData(prev => ({ ...prev, ...updatedData }));
+            setPaymentData(prev => prev ? ({ ...prev, ...updatedData.data }) : prev);
             setLoading(false)
 
         } catch (error) {
             console.error("Erro ao salvar:", error);
             alert("Não foi possível salvar as alterações. Tente novamente.");
-        }
-
-        if (paymentData) {
-            setPaymentData({ ...paymentData, ...editableInfo });
         }
 
         setIsEditingInfo(false);
@@ -186,6 +195,7 @@ export default function Page() {
         if (paymentData) {
             setEditableInfo({
                 nome: paymentData.nome,
+                edicaoId: paymentData.edicaoId ?? '',
                 valorAVista: paymentData.valorAVista,
                 valorBoleto: paymentData.valorBoleto,
                 valorDebito: paymentData.valorDebito,
@@ -230,6 +240,7 @@ export default function Page() {
             setPaymentData(fetchedData)
             setEditableInfo({
                 nome: fetchedData.nome,
+                edicaoId: fetchedData.edicaoId ?? '',
                 valorAVista: fetchedData.valorAVista,
                 valorBoleto: fetchedData.valorBoleto,
                 valorDebito: fetchedData.valorDebito,
@@ -308,6 +319,26 @@ export default function Page() {
                     </div>
                 </div>
 
+                <div className="financeiro-section financeiro-codes-entry">
+                    <div>
+                        <h2 className="financeiro-section-title">
+                            <Tag size={24} />
+                            Códigos de desconto e rastreio
+                        </h2>
+                        <p>
+                            Gere descontos de uso único, associe rastreios a divulgadores e acompanhe as vendas confirmadas por código.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        className="financeiro-btn financeiro-btn-primary"
+                        onClick={() => router.push("/financeiro/codigos")}
+                    >
+                        <Tag size={18} />
+                        Gerenciar códigos
+                    </button>
+                </div>
+
                 {/* Pagamentos Aceitos */}
                 <div className="financeiro-section">
                     <h2 className="financeiro-section-title">
@@ -370,6 +401,24 @@ export default function Page() {
                                     value={editableInfo.nome}
                                     onChange={handleInfoInputChange}
                                     className="financeiro-input"
+                                />
+                            </div>
+                            <div className="financeiro-form-group">
+                                <label htmlFor="edicaoId" className="financeiro-label">
+                                    Identificador da edição ativa
+                                    <span className="financeiro-info-text">
+                                        Exemplo: COEPS-2026. Alterar este campo inicia uma nova edição e zera os pagantes legados.
+                                    </span>
+                                </label>
+                                <input
+                                    type="text"
+                                    id="edicaoId"
+                                    name="edicaoId"
+                                    value={editableInfo.edicaoId}
+                                    onChange={handleInfoInputChange}
+                                    className="financeiro-input"
+                                    maxLength={64}
+                                    required
                                 />
                             </div>
                             <div className="financeiro-form-row">
@@ -437,6 +486,13 @@ export default function Page() {
                                 <span className="financeiro-info-label">Nome do Lote:</span>
                                 <span className="financeiro-info-value">{paymentData.nome}</span>
                                 <span className="financeiro-info-note">Aparecerá na fatura do cartão</span>
+                            </div>
+                            <div className="financeiro-info-item">
+                                <span className="financeiro-info-label">Edição ativa:</span>
+                                <span className="financeiro-info-value">{paymentData.edicaoId ?? "Não configurada"}</span>
+                                <span className="financeiro-info-note">
+                                    Pagantes legados: {paymentData.pagantesLegados ?? 0}
+                                </span>
                             </div>
                             <div className="financeiro-info-grid">
                                 <div className="financeiro-info-item">
@@ -689,7 +745,7 @@ export default function Page() {
                         </h2>
                     </div>
                     <div className="financeiro-users-grid">
-                        {filteredUsers.length > 0 ? payedUsers.map((user) => (
+                        {filteredUsers.length > 0 ? filteredUsers.map((user) => (
                             <div key={user._id} className="financeiro-user-card">
                                 <div className="financeiro-user-info">
                                     <div className="financeiro-user-item">

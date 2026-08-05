@@ -1,5 +1,8 @@
 export interface IPaymentConfig {
     "_id": string & { readonly __brand: 'ObjectId' },
+    "edicaoId"?: string,
+    "ativo"?: boolean,
+    "pagantesLegados"?: number,
     "dataInit": "",
     "dataEnd": "",
     "parcelamentos": {

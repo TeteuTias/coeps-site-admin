@@ -3,6 +3,10 @@ import { ObjectId } from 'bson';
 import { connectToDatabase } from '@/app/lib/mongodb';
 import { withApiAuthRequired } from "@/app/lib/auth0";
 
+function validNonNegativeAmount(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
 
 //
 //
@@ -29,66 +33,100 @@ export const PUT = withApiAuthRequired(async function PUT(req: Request) {
             return Response.json({ error: '_id não válido.' }, { status: 400 });
         }
 
-        if (!nome || typeof nome !== 'string' || nome.trim() === '') {
-            return Response.json({ error: 'O nome do lote é obrigatório e deve ser um texto válido.' }, { status: 400 });
-        }
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    const id = typeof body._id === "string" ? body._id : "";
+    const nome = typeof body.nome === "string" ? body.nome.trim() : "";
+    const explicitEdition = body.edicaoId !== undefined;
+    const edicaoId = explicitEdition ? normalizeEditionId(body.edicaoId) : null;
 
-        if (Number(valorAVista) === undefined || Number(valorAVista) < 0) {
-            return Response.json({ error: 'O valor à vista é obrigatório e deve ser um número positivo.' }, { status: 400 });
-        }
+    if (!ObjectId.isValid(id)) {
+      return Response.json(
+        { error: "invalid_config_id", message: "O identificador da configuração é inválido." },
+        { status: 400 },
+      );
+    }
+    if (!nome) {
+      return Response.json(
+        { error: "invalid_name", message: "O nome do lote é obrigatório." },
+        { status: 400 },
+      );
+    }
+    if (explicitEdition && !edicaoId) {
+      return Response.json(
+        { error: "invalid_edition", message: "O identificador da edição é inválido." },
+        { status: 400 },
+      );
+    }
 
-        if (Number(valorBoleto) === undefined || Number(valorBoleto) < 0) {
-            return Response.json({ error: 'O valor `BOLETO` é obrigatório e deve ser um número positivo.' }, { status: 400 });
-        }
+    const amounts = {
+      valorAVista: validNonNegativeAmount(body.valorAVista),
+      valorBoleto: validNonNegativeAmount(body.valorBoleto),
+      valorDebito: validNonNegativeAmount(body.valorDebito),
+      valorPix: validNonNegativeAmount(body.valorPix),
+    };
+    if (Object.values(amounts).some((value) => value === null)) {
+      return Response.json(
+        {
+          error: "invalid_amount",
+          message: "Todos os valores devem ser números maiores ou iguais a zero.",
+        },
+        { status: 400 },
+      );
+    }
 
-        if (Number(valorDebito) === undefined || Number(valorDebito) < 0) {
-            return Response.json({ error: 'O valor `Débito` é obrigatório e deve ser um número positivo.' }, { status: 400 });
-        }
+    const { client, db } = await connectToDatabase();
+    const objectId = new ObjectId(id);
+    const currentConfig = await db.collection("ingressos_config").findOne(
+      { _id: objectId },
+      { projection: { edicaoId: 1, pagantesLegados: 1, ativo: 1 } },
+    );
+    if (!currentConfig) {
+      return Response.json(
+        { error: "config_not_found", message: "Configuração financeira não encontrada." },
+        { status: 404 },
+      );
+    }
 
-        if (Number(valorPix) === undefined || Number(valorPix) < 0) {
-            return Response.json({ error: 'O valor `PIX` é obrigatório e deve ser um número positivo.' }, { status: 400 });
-        }
+    const editionChanged = Boolean(
+      explicitEdition &&
+        edicaoId &&
+        currentConfig.edicaoId &&
+        currentConfig.edicaoId !== edicaoId,
+    );
+    const updatedAt = new Date();
+    const updateFields: Record<string, unknown> = {
+      nome,
+      ...amounts,
+      updatedAt,
+      updatedBy: authorization.identity.userId,
+    };
 
+    if (explicitEdition && edicaoId) {
+      updateFields.edicaoId = edicaoId;
+      updateFields.ativo = true;
 
-        // 4. Colocando no banco de dados
-        const { db } = await connectToDatabase();
-        const colecao = "ingressos_config"
-        const result = await db.collection(colecao).updateOne(
-            { _id: new ObjectId(_id) }, {
-            $set: {
-                nome: nome,
-                valorAVista: Number(valorAVista),
-                valorBoleto: Number(valorBoleto),
-                valorDebito: Number(valorDebito),
-                valorPix: Number(valorPix)
-            },
-        }
-        )
+      // Uma nova edição começa sem carregar o snapshot legado da anterior.
+      // Salvar novamente a mesma edição preserva o valor já migrado.
+      if (editionChanged) updateFields.pagantesLegados = 0;
+    }
 
-        // 7. Verifica se o documento foi encontrado e modificado
-        if (result.matchedCount === 0) {
-            // Se matchedCount é 0, significa que nenhum documento com o _id fornecido foi encontrado.
-            return NextResponse.json({ error: `Documento de configuração com ID ${_id} não encontrado.` }, { status: 404 });
-        }
+    if (explicitEdition && edicaoId) {
+      const session = client.startSession();
 
-        if (result.modifiedCount === 0 && result.matchedCount === 1) {
-            // Se modifiedCount é 0 mas o documento foi encontrado, os dados enviados são os mesmos já existentes no banco.
-            // Isso pode ser tratado como sucesso.
-            return NextResponse.json({ message: 'Nenhuma alteração necessária, os dados já estavam atualizados.', data: { nome, valorAVista } }, { status: 200 });
-        }
-
-        // 6. Retornar uma resposta de sucesso se a validação passar
-        return Response.json(
+      try {
+        await session.withTransaction(async () => {
+          await db.collection("ingressos_config").updateMany(
+            { _id: { $ne: objectId }, ativo: true },
             {
-                message: 'Dados recebidos e validados com sucesso!',
-                data: {
-                    nome,
-                    valorAVista,
-                    _id
-                },
+              $set: {
+                ativo: false,
+                updatedAt,
+                updatedBy: authorization.identity.userId,
+              },
             },
-            { status: 200 }
-        );
+            { session },
+          );
 
     } catch {
         // Captura erros de parsing do JSON ou outros erros inesperados
