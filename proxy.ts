@@ -66,7 +66,7 @@ export async function proxy(req: NextRequest) {
   }
 
   const userId = session.user.sub.replace(/^auth0\|/, "");
-  let canUserAccess = false;
+  let canUserAccess = false; 
   try {
     canUserAccess = await checkUserPermission(
       new URL(req.url),
