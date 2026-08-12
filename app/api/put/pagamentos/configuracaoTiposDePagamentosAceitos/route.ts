@@ -1,74 +1,85 @@
-// src/app/api/put/pagamentos/configuracaoParcelamentos/route.ts
+import { connectToDatabase } from "@/app/lib/mongodb";
+import { requireFinanceAdmin } from "@/app/lib/payments/finance-admin";
+import {
+  assertLoadedActiveConfig,
+  PaymentConfigError,
+} from "@/app/lib/payments/payment-config-repository";
+import type { IPaymentConfig } from "@/app/lib/types/payments/payment.t";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { ObjectId } from 'bson';
-import { connectToDatabase } from '@/app/lib/mongodb';
-import { IPaymentConfig } from '@/app/lib/types/payments/payment.t';
-import { withApiAuthRequired } from "@/app/lib/auth0";
-// --- Helper Types e Funções de Validação ---
+const ALLOWED_PAYMENT_TYPES: IPaymentConfig["pagamentosAceitos"] = [
+  "PIX",
+  "BOLETO",
+  "CREDIT_CARD",
+  "DEBIT_CARD",
+];
 
-// Tipo para um único item de parcelamento, para clareza
-type ParcelamentoItem = IPaymentConfig["parcelamentos"]
+function parsePaymentTypes(value: unknown): IPaymentConfig["pagamentosAceitos"] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed = value.filter(
+    (item): item is IPaymentConfig["pagamentosAceitos"][number] =>
+      typeof item === "string" &&
+      ALLOWED_PAYMENT_TYPES.includes(
+        item as IPaymentConfig["pagamentosAceitos"][number],
+      ),
+  );
+  if (parsed.length !== value.length || new Set(parsed).size !== parsed.length) {
+    return null;
+  }
+  return parsed;
+}
 
+export async function PUT(request: Request) {
+  const authorization = await requireFinanceAdmin(request);
+  if (!authorization.authorized) return authorization.response;
 
-/**
- * Valida se o array de parcelamentos recebido do cliente é seguro para ser salvo no banco.
- * @param parcelamentos - O array a ser validado.
- * @returns {boolean} - True se for válido, false caso contrário.
- */
-
-
-
-// --- Rota Principal ---
-export const PUT = withApiAuthRequired(async function PUT(req: Request) {
-    try {
-        const allPaymentTypes: IPaymentConfig["pagamentosAceitos"] = ["PIX", "BOLETO", "CREDIT_CARD", "DEBIT_CARD"]
-
-        // 1. CONECTAR AO BANCO DE DADOS
-        const { db } = await connectToDatabase();
-
-
-
-        // 2. EXTRAIR DADOS DO CORPO DA REQUISIÇÃO
-        const body = await req.json();
-        const { _id, parcelamentos } = body;
-
-        // 4. PREPARAR E EXECUTAR A OPERAÇÃO NO BANCO
-        const colecao = 'ingressos_config'; // O nome da sua coleção
-
-
-        // O operador `$set` substitui o valor de um campo pelo valor especificado.
-        // Aqui, ele vai substituir todo o array 'parcelamentos' pelo novo array enviado pelo frontend.
-        // Isso lida com adições, exclusões e modificações de uma só vez.
-        const dadosParaAtualizar = {
-            $set: {
-                pagamentosAceitos: parcelamentos,
-            },
-        };
-
-        const result = await db.collection(colecao).updateOne(
-            {
-                _id: new ObjectId(_id)
-            },
-            dadosParaAtualizar
-        );
-        // 5. ANALISAR O RESULTADO E ENVIAR A RESPOSTA
-        if (result.matchedCount === 0) {
-            return NextResponse.json({ error: `Documento de configuração com ID ${_id} não encontrado.` }, { status: 404 });
-        }
-
-        return NextResponse.json(
-            {
-                message: 'Formas de parcelamento atualizadas com sucesso!',
-                data: { parcelamentos }, // Retorna os dados atualizados para confirmação
-            },
-            { status: 200 }
-        );
-
-    } catch {
-        return NextResponse.json(
-            { error: "internal_server_error", message: "Não foi possível atualizar os tipos de pagamento." },
-            { status: 500 }
-        );
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    const configId = typeof body._id === "string" ? body._id : "";
+    const pagamentosAceitos = parsePaymentTypes(body.parcelamentos);
+    if (!pagamentosAceitos) {
+      return Response.json(
+        {
+          error: "invalid_payment_types",
+          message: "A lista de formas de pagamento é inválida.",
+        },
+        { status: 400 },
+      );
     }
-})
+
+    const { db } = await connectToDatabase();
+    const activeConfig = await assertLoadedActiveConfig(db, configId);
+    const result = await db.collection("ingressos_config").updateOne(
+      { _id: activeConfig._id },
+      {
+        $set: {
+          pagamentosAceitos,
+          updatedAt: new Date(),
+          updatedBy: authorization.identity.userId,
+        },
+      },
+    );
+    if (result.matchedCount !== 1) {
+      return Response.json(
+        { error: "config_changed", message: "A configuração mudou. Recarregue a página." },
+        { status: 409 },
+      );
+    }
+
+    return Response.json({
+      message: "Formas de pagamento atualizadas com sucesso.",
+      data: { pagamentosAceitos },
+    });
+  } catch (error) {
+    if (error instanceof PaymentConfigError) {
+      return Response.json(
+        { error: error.code, message: error.message },
+        { status: error.status },
+      );
+    }
+    console.error("Erro ao atualizar formas de pagamento:", error);
+    return Response.json(
+      { error: "internal_server_error", message: "Não foi possível atualizar os tipos de pagamento." },
+      { status: 500 },
+    );
+  }
+}

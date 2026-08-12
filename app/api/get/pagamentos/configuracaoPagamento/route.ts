@@ -1,43 +1,35 @@
 import { withApiAuthRequired } from "@/app/lib/auth0";
-import { connectToDatabase } from '@/app/lib/mongodb';
-import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
-//
-//
-// Exemplo de return:
-// {"data":{"isPos_registration":0,"informacoes_usuario":{"nome:":"","email":"mateus2.0@icloud.com","data_criacao":"2024-07-08T22:48:41.110Z"}}}
-// Exemplo de return erro:
-// 
+import { connectToDatabase } from "@/app/lib/mongodb";
+import {
+  getActivePaymentConfig,
+  serializePaymentConfig,
+} from "@/app/lib/payments/payment-config-repository";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
-// POR ENQUANTO ELE PUXA SÓ O 66bcfceedc9c7250e85b2ac6
-// SE PRECISAR DEPOIS ELE PUXA O RESTANTE BASEADO NA DATA E SEI LÁ O QUE MAIS.
-
-export const GET = withApiAuthRequired(async function GET(request, { params }) {
-    try {
-        // Verificando se está logado
-        // Puxando configs
-
-        const { db } = await connectToDatabase();
-        const colecao = "ingressos_config"
-        const result = await db.collection(colecao).find(
-            { _id: new ObjectId("66bcfceedc9c7250e85b2ac6") },
-        ).toArray()
-
-        /*
-            const userRegistrationsCount = await db.collection(colecao).countDocuments({
-              participants: _id
-            });
-            const alreadIinscrivy = 3 - userRegistrationsCount > 0 ? 3 - userRegistrationsCount : 0
-        */
-
-        return NextResponse.json({ ...result[0] }, { status: 200 });
-        // result[0] => IPaymentConfig
-
+export const GET = withApiAuthRequired(async function GET() {
+  try {
+    const { db } = await connectToDatabase();
+    const config = await getActivePaymentConfig(db);
+    if (!config) {
+      return Response.json(
+        {
+          error: "config_not_found",
+          message: "Nenhuma configuração financeira ativa foi encontrada.",
+        },
+        { status: 404 },
+      );
     }
-    catch (error) {
-        console.log(error)
-        return NextResponse.json({ "message": error }, { status: 500 })
-    }
-})
+
+    return Response.json(serializePaymentConfig(config));
+  } catch (error) {
+    console.error("Erro ao carregar configuração financeira:", error);
+    return Response.json(
+      {
+        error: "internal_server_error",
+        message: "Não foi possível carregar a configuração financeira.",
+      },
+      { status: 500 },
+    );
+  }
+});
