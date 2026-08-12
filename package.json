@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:payments-admin": "node --experimental-strip-types --test \"app/lib/payments/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.5.1",

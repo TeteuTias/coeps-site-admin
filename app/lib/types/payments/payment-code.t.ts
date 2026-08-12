@@ -89,18 +89,42 @@ export interface PaymentAttributionDocument {
     paymentId?: string;
     invoiceNumber?: string;
   };
+  refundStatus?: "PARTIAL" | "IN_PROGRESS" | "FULL" | string;
+  refundsSnapshot?: PaymentRefundsSnapshot;
+  chargebackStatus?: "REQUESTED" | "DISPUTED" | string;
   status: PaymentAttributionStatus;
   createdAt: Date;
   confirmedAt?: Date;
   updatedAt: Date;
 }
 
+export interface PaymentRefundItem {
+  value: number;
+  valueCentavos: number;
+  status: string;
+  dateCreated: string | null;
+  transactionReceiptUrl: string | null;
+}
+
+export interface PaymentRefundsSnapshot {
+  items: PaymentRefundItem[];
+  totalDone: number;
+  totalDoneCentavos: number;
+  capturedAt: Date;
+}
+
 export interface PaymentCodeMetrics {
   confirmadas: number;
+  confirmadasBrutas: number;
   pendentes: number;
   estornadas: number;
   canceladasOuExpiradas: number;
+  emRevisaoFinanceira: number;
   valorConfirmadoCentavos: number;
+  valorBrutoConfirmadoCentavos: number;
+  valorEstornadoDoneCentavos: number;
+  valorEmRiscoCentavos: number;
+  valorLiquidoCentavos: number;
 }
 
 export interface PaymentCodeListItem {

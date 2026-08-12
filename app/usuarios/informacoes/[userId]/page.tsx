@@ -1,5 +1,6 @@
 "use client"
 import { IPayment } from "@/app/lib/types/payments/payment.t"
+import type { AdminModernPayment, AdminUserPaymentsResponse } from "@/app/lib/types/payments/payment-admin.t"
 import { IUser } from "@/app/lib/types/user/user.t"
 import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight } from "lucide-react";
 import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
@@ -8,10 +9,11 @@ import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ICourse } from "@/app/lib/types/events/event.t";
 import { ObjectId } from "bson";
+import { getPaymentStatusTone } from "@/app/lib/payments/payment-status-appearance";
 
 
 //
-const getPaymentStatusTranslation = (status: IPayment["lista_pagamentos"][0]["_webhook"][0]["event"]): string => {
+const getPaymentStatusTranslation = (status?: string): string => {
     switch (status) {
         case "PAYMENT_CREATED": return "Gerada";
         case "PAYMENT_AWAITING_RISK_ANALYSIS": return "Análise de Risco";
@@ -29,6 +31,7 @@ const getPaymentStatusTranslation = (status: IPayment["lista_pagamentos"][0]["_w
         case "PAYMENT_REFUNDED": return "Estornado";
         case "PAYMENT_PARTIALLY_REFUNDED": return "Estorno Parcial";
         case "PAYMENT_REFUND_IN_PROGRESS": return "Estorno em Progresso";
+        case "PAYMENT_REFUND_DENIED": return "Estorno Negado";
         case "PAYMENT_RECEIVED_IN_CASH_UNDONE": return "Recebimento Desfeito";
         case "PAYMENT_CHARGEBACK_REQUESTED": return "Chargeback Solicitado";
         case "PAYMENT_CHARGEBACK_DISPUTE": return "Chargeback em Disputa";
@@ -40,21 +43,26 @@ const getPaymentStatusTranslation = (status: IPayment["lista_pagamentos"][0]["_w
         case "PAYMENT_SPLIT_CANCELLED": return "Split Cancelado";
         case "PAYMENT_SPLIT_DIVERGENCE_BLOCK": return "Bloqueio por Split";
         case "PAYMENT_SPLIT_DIVERGENCE_BLOCK_FINISHED": return "Bloqueio Finalizado";
-        default: return "----";
+        case "CONFIRMED": return "Confirmado";
+        case "RECEIVED": return "Recebido";
+        case "PENDING": return "Pendente";
+        case "OVERDUE": return "Vencido";
+        case "REFUNDED": return "Estornado";
+        default: return status || "Não informado";
     }
 };
 //
-const getPaymentStatusIconAndColor = (status: string) => {
-    if (status?.includes("RECEIVED") || status?.includes("CONFIRMED")) {
-        return { Icon: CheckCircle, color: "text-green-500", bgColor: "bg-green-100" };
+const getPaymentStatusIconAndColor = (status?: string) => {
+    switch (getPaymentStatusTone(status)) {
+        case "success":
+            return { Icon: CheckCircle, color: "text-green-500", bgColor: "bg-green-100" };
+        case "danger":
+            return { Icon: XCircle, color: "text-red-500", bgColor: "bg-red-100" };
+        case "warning":
+            return { Icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-100" };
+        default:
+            return { Icon: AlertCircle, color: "text-gray-500", bgColor: "bg-gray-100" };
     }
-    if (status?.includes("OVERDUE") || status?.includes("REFUSED") || status?.includes("REPROVED")) {
-        return { Icon: XCircle, color: "text-red-500", bgColor: "bg-red-100" };
-    }
-    if (status?.includes("AWAITING") || status?.includes("IN_PROGRESS")) {
-        return { Icon: Clock, color: "text-yellow-500", bgColor: "bg-yellow-100" };
-    }
-    return { Icon: AlertCircle, color: "text-gray-500", bgColor: "bg-gray-100" };
 };
 //
 
@@ -73,6 +81,10 @@ export default function Page() {
         tipo_pagamento: '' // Campo adicionado ao estado
     });
     const [dataCourses, setCourses] = useState<ICourse[]>([])
+    const [modernPayments, setModernPayments] = useState<AdminModernPayment[]>([])
+    const [modernPaymentIssues, setModernPaymentIssues] = useState({ reviewRequired: 0, failed: 0 })
+    const [canViewModernPayments, setCanViewModernPayments] = useState(false)
+    const [modernPaymentsError, setModernPaymentsError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const router = useRouter()
@@ -87,7 +99,6 @@ export default function Page() {
             if (!response.ok) throw new Error("Usuário não encontrado");
             const userData: { data: IUser } = await response.json()
             setUser(userData.data)
-            console.log(userData.data)
             // Popula o estado do formulário com todos os dados, incluindo o novo campo
             setFormData({
                 id_api: userData.data.id_api || "",
@@ -99,6 +110,28 @@ export default function Page() {
                 tipo_pagamento: userData.data.pagamento.tipo_pagamento || '',
                 isPos_registration: userData.data.isPos_registration,
             });
+
+            try {
+                setModernPaymentsError(null)
+                const modernResponse = await fetch(`/api/get/pagamentos/usuario/${userId}`)
+                if (modernResponse.ok) {
+                    const modernData = await modernResponse.json() as AdminUserPaymentsResponse
+                    setModernPayments(modernData.payments)
+                    setModernPaymentIssues(modernData.issueCounts)
+                    setCanViewModernPayments(true)
+                } else if (modernResponse.status === 403) {
+                    setModernPayments([])
+                    setCanViewModernPayments(false)
+                } else {
+                    setModernPayments([])
+                    setCanViewModernPayments(true)
+                    setModernPaymentsError("Não foi possível carregar as compras modernas.")
+                }
+            } catch {
+                setModernPayments([])
+                setCanViewModernPayments(true)
+                setModernPaymentsError("Não foi possível carregar as compras modernas.")
+            }
         } catch (error) {
             console.error("Falha ao buscar usuário:", error)
             setUser(null)
@@ -166,6 +199,8 @@ export default function Page() {
             </div>
         )
     }
+
+    const legacyPayments = user.pagamento?.lista_pagamentos ?? []
 
     //
     //
@@ -278,14 +313,49 @@ export default function Page() {
                         dataCourses.map((minicurso) => <CourseCard key={minicurso._id} minicurso={{ ...minicurso }} />)
                 }
             </div>
+            {canViewModernPayments && (
+                <section className="w-full max-w-4xl mx-auto space-y-4" aria-labelledby="modern-payments-heading">
+                    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <h2 id="modern-payments-heading" className="text-xl font-bold text-gray-900">Compras modernas</h2>
+                                <p className="mt-1 text-sm text-gray-600">
+                                    Dados conciliados entre atribuição, sessão e eventos operacionais. O payload bruto do webhook não é exibido.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                                <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">
+                                    {modernPaymentIssues.reviewRequired} em revisão
+                                </span>
+                                <span className="rounded-full bg-red-100 px-3 py-1 text-red-800">
+                                    {modernPaymentIssues.failed} falhas
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {modernPaymentsError ? (
+                        <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800" role="alert">
+                            {modernPaymentsError}
+                        </p>
+                    ) : modernPayments.length === 0 ? (
+                        <p className="rounded-lg border border-gray-200 bg-white p-5 text-center text-sm font-semibold text-gray-600">
+                            Não há compras na estrutura moderna para este usuário.
+                        </p>
+                    ) : (
+                        modernPayments.map((payment) => (
+                            <ModernPaymentCard key={payment.compraId} payment={payment} />
+                        ))
+                    )}
+                </section>
+            )}
             <div className="w-full text-center text-white font-bold text-2xl">
-                <h1>PAGAMENTOS</h1>
+                <h1>HISTÓRICO LEGADO DE PAGAMENTOS</h1>
             </div>
             <div className="flex flex-col items-center justify-center content-center max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5 px-10">
                 {
-                    user.pagamento.lista_pagamentos.length === 0 ?
+                    legacyPayments.length === 0 ?
                         <p className="w-full text-center py-2 font-semibold">Não há pagamentos prévios</p> :
-                        user.pagamento.lista_pagamentos.map((pagamento) => <UserComponent key={pagamento._id} pagamento={{ ...pagamento }} />)
+                        legacyPayments.map((pagamento) => <UserComponent key={pagamento._id} pagamento={{ ...pagamento }} />)
                 }
             </div>
         </div >
@@ -396,6 +466,275 @@ const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
     );
 };
 
+function formatPaymentCents(value: number | null) {
+    if (value === null) return "Não informado"
+    return new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+    }).format(value / 100)
+}
+
+function formatAdminDate(value: string | null) {
+    if (!value) return "Não informado"
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return "Não informado"
+    return new Intl.DateTimeFormat("pt-BR", {
+        dateStyle: "short",
+        timeStyle: "short",
+    }).format(date)
+}
+
+const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment }) => {
+    const hasOperationalRisk = Boolean(
+        payment.financialRisk ||
+        payment.missingAssignment ||
+        payment.missingSession ||
+        payment.webhookIssues.length > 0 ||
+        payment.reconciliationReason,
+    )
+    const statusStyle = hasOperationalRisk
+        ? "bg-amber-100 text-amber-900"
+        : payment.attributionStatus === "CONFIRMADA"
+            ? "bg-green-100 text-green-800"
+            : payment.attributionStatus === "ESTORNADA"
+                ? "bg-red-100 text-red-800"
+                : "bg-gray-100 text-gray-800"
+    const financialFlags = [
+        ["Evento em revisão", payment.financialReviewEvent],
+        ["Recebimento em dinheiro", payment.cashReceiptStatus],
+        ["Falha de pagamento", payment.paymentFailureStatus],
+        ["Restauração", payment.restorationStatus],
+        ["Liquidação PIX", payment.pixSettlementStatus],
+    ].filter((entry): entry is [string, string] => Boolean(entry[1]))
+
+    return (
+        <article className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle}`}>
+                            {payment.attributionStatus ?? "ATRIBUIÇÃO AUSENTE"}
+                        </span>
+                        {payment.sessionStatus && (
+                            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+                                Sessão: {payment.sessionStatus}
+                            </span>
+                        )}
+                    </div>
+                    <p className="mt-3 text-xs text-gray-500">Compra</p>
+                    <code className="break-all text-xs font-semibold text-gray-800">{payment.compraId}</code>
+                </div>
+                <div className="sm:text-right">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Valor bruto</p>
+                    <p className="text-2xl font-bold text-indigo-700">
+                        {formatPaymentCents(payment.amountCentavos.final)}
+                    </p>
+                    <p className="text-sm font-semibold text-green-700">
+                        Líquido após refund DONE: {formatPaymentCents(payment.amountCentavos.net)}
+                    </p>
+                    {payment.amountCentavos.refundDone > 0 && (
+                        <p className="text-xs text-orange-700">
+                            Refund DONE: {formatPaymentCents(payment.amountCentavos.refundDone)}
+                        </p>
+                    )}
+                    {payment.amountCentavos.desconto !== null && payment.amountCentavos.desconto > 0 && (
+                        <p className="text-xs text-gray-500">
+                            Desconto: {formatPaymentCents(payment.amountCentavos.desconto)}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {(payment.missingAssignment || payment.missingSession) && (
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-900">
+                    Integridade incompleta:
+                    {payment.missingAssignment ? " atribuição ausente." : ""}
+                    {payment.missingSession ? " sessão ausente." : ""}
+                    {" "}A compra exige conciliação antes de qualquer ação manual.
+                </div>
+            )}
+
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                <div><dt className="font-semibold text-gray-500">Edição</dt><dd>{payment.edicaoId ?? "Não informada"}</dd></div>
+                <div><dt className="font-semibold text-gray-500">Método</dt><dd>{payment.method ?? "Não informado"}</dd></div>
+                <div><dt className="font-semibold text-gray-500">Estado Asaas</dt><dd>{payment.gatewayState ?? "Não informado"}</dd></div>
+                <div><dt className="font-semibold text-gray-500">Criada em</dt><dd>{formatAdminDate(payment.createdAt)}</dd></div>
+                <div><dt className="font-semibold text-gray-500">Confirmada em</dt><dd>{formatAdminDate(payment.confirmedAt)}</dd></div>
+                <div><dt className="font-semibold text-gray-500">Atualizada em</dt><dd>{formatAdminDate(payment.updatedAt)}</dd></div>
+            </dl>
+
+            <div className="mt-4 grid gap-2 rounded-md bg-gray-50 p-4 text-xs text-gray-700">
+                <p>Payment ID: <code className="break-all font-semibold">{payment.paymentId ?? "—"}</code></p>
+                <p>Checkout ID: <code className="break-all font-semibold">{payment.checkoutId ?? "—"}</code></p>
+                <p>Invoice: <code className="break-all font-semibold">{payment.invoiceNumber ?? "—"}</code></p>
+            </div>
+
+            {payment.installmentPlan && (
+                <section className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-4">
+                    <h3 className="font-bold text-blue-950">Plano de parcelamento Asaas</h3>
+                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                        <div><dt className="font-semibold text-blue-700">Installment ID</dt><dd className="break-all font-mono text-xs">{payment.installmentPlan.installmentId}</dd></div>
+                        <div><dt className="font-semibold text-blue-700">Parcelas</dt><dd>{payment.installmentPlan.count} × {formatPaymentCents(payment.installmentPlan.installmentValueCentavos)}</dd></div>
+                        <div><dt className="font-semibold text-blue-700">Total do plano</dt><dd>{formatPaymentCents(payment.installmentPlan.totalValueCentavos)}</dd></div>
+                        <div><dt className="font-semibold text-blue-700">Refund DONE acumulado</dt><dd>{formatPaymentCents(payment.installmentPlan.refundTotalDoneCentavos)}</dd></div>
+                    </dl>
+                    <h4 className="mt-4 text-sm font-bold text-blue-950">Cobranças observadas</h4>
+                    {payment.installmentPlan.observedPayments.length === 0 ? (
+                        <p className="mt-2 text-xs text-blue-800">Nenhuma cobrança individual observada.</p>
+                    ) : (
+                        <ul className="mt-2 space-y-2">
+                            {payment.installmentPlan.observedPayments.map((observed) => (
+                                <li key={observed.paymentId} className="rounded bg-white/80 p-3 text-xs text-gray-800">
+                                    <div className="flex flex-wrap justify-between gap-2">
+                                        <strong>Parcela {observed.installmentNumber ?? "—"} · {observed.status}</strong>
+                                        <span>{formatPaymentCents(observed.valueCentavos)}</span>
+                                    </div>
+                                    <p className="mt-1 break-all">Payment ID: <code>{observed.paymentId}</code></p>
+                                    <p className="mt-1">Invoice: <code>{observed.invoiceNumber ?? "—"}</code></p>
+                                    <p className="mt-1">Último evento: <code>{observed.lastEvent}</code></p>
+                                    {observed.lastEventId && (
+                                        <p className="mt-1 break-all">ID do último evento: <code>{observed.lastEventId}</code></p>
+                                    )}
+                                    <p className="mt-1 text-gray-500">Observado em {formatAdminDate(observed.observedAt)}</p>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    {payment.installmentPlan.refundsByPayment.length > 0 && (
+                        <>
+                            <h4 className="mt-4 text-sm font-bold text-blue-950">Estornos por cobrança</h4>
+                            <ul className="mt-2 space-y-2">
+                                {payment.installmentPlan.refundsByPayment.map((refund) => (
+                                    <li key={refund.paymentId} className="rounded bg-white/80 p-3 text-xs text-gray-800">
+                                        <p className="break-all">Payment ID: <code>{refund.paymentId}</code></p>
+                                        <p className="mt-1 font-semibold">
+                                            DONE: {formatPaymentCents(refund.refundsSnapshot.totalDoneCentavos)}
+                                        </p>
+                                        <p className="mt-1 text-gray-500">
+                                            {refund.refundsSnapshot.items.length} registro(s) de refund
+                                        </p>
+                                        <p className="mt-1 text-gray-500">
+                                            Snapshot capturado em {formatAdminDate(refund.refundsSnapshot.capturedAt)}
+                                        </p>
+                                        {refund.refundsSnapshot.items.length > 0 && (
+                                            <ul className="mt-2 space-y-2 border-t border-blue-100 pt-2">
+                                                {refund.refundsSnapshot.items.map((item, index) => (
+                                                    <li key={`${item.dateCreated ?? "refund"}-${index}`}>
+                                                        <div className="flex flex-wrap justify-between gap-2">
+                                                            <strong>{item.status}</strong>
+                                                            <span>{formatPaymentCents(item.valueCentavos)}</span>
+                                                        </div>
+                                                        <p className="mt-1 text-gray-500">Criado em {item.dateCreated ?? "data não informada"}</p>
+                                                        {item.transactionReceiptUrl && (
+                                                            <Link
+                                                                href={item.transactionReceiptUrl}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="mt-1 inline-flex font-bold text-indigo-700 underline"
+                                                            >
+                                                                Abrir comprovante do estorno
+                                                            </Link>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+                </section>
+            )}
+
+            {(payment.refundStatus || payment.refundsSnapshot) && (
+                <section className="mt-4 rounded-md border border-orange-200 bg-orange-50 p-4">
+                    <h3 className="font-bold text-orange-900">Estorno: {payment.refundStatus ?? "registrado"}</h3>
+                    {payment.refundsSnapshot && (
+                        <>
+                            <p className="mt-1 text-sm text-orange-900">
+                                Total concluído: {formatPaymentCents(payment.refundsSnapshot.totalDoneCentavos)}
+                            </p>
+                            <p className="mt-1 text-xs text-orange-800">
+                                Snapshot capturado em {formatAdminDate(payment.refundsSnapshot.capturedAt)}
+                            </p>
+                            <ul className="mt-3 space-y-2">
+                                {payment.refundsSnapshot.items.map((refund, index) => (
+                                    <li key={`${refund.dateCreated ?? "refund"}-${index}`} className="rounded bg-white/80 p-3 text-sm text-gray-800">
+                                        <div className="flex flex-wrap justify-between gap-2">
+                                            <strong>{refund.status}</strong>
+                                            <span>{formatPaymentCents(refund.valueCentavos)}</span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-gray-500">Criado em {refund.dateCreated ?? "data não informada"}</p>
+                                        {refund.transactionReceiptUrl && (
+                                            <Link
+                                                href={refund.transactionReceiptUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="mt-2 inline-flex text-xs font-bold text-indigo-700 underline"
+                                            >
+                                                Abrir comprovante do estorno
+                                            </Link>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+                </section>
+            )}
+
+            {(payment.chargebackStatus || payment.chargebackResolution) && (
+                <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-900">
+                    Chargeback: {payment.chargebackStatus ?? "RESOLVIDO"}
+                    {payment.chargebackResolution ? ` · Resolução: ${payment.chargebackResolution}` : ""}.
+                    {payment.chargebackStatus && " Esta compra permanece destacada como valor em risco até a resolução."}
+                </div>
+            )}
+
+            {financialFlags.length > 0 && (
+                <dl className="mt-4 grid gap-2 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm sm:grid-cols-2">
+                    {financialFlags.map(([label, value]) => (
+                        <div key={label}>
+                            <dt className="font-semibold text-amber-800">{label}</dt>
+                            <dd className="break-all font-mono text-xs text-amber-950">{value}</dd>
+                        </div>
+                    ))}
+                </dl>
+            )}
+
+            {payment.reconciliationReason && (
+                <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <strong>Conciliação necessária:</strong> {payment.reconciliationReason}
+                </div>
+            )}
+
+            {payment.webhookIssues.length > 0 && (
+                <section className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+                    <h3 className="font-bold text-amber-950">Eventos que exigem atenção</h3>
+                    <p className="mt-1 text-xs text-amber-800">Somente metadados operacionais seguros são exibidos.</p>
+                    <ul className="mt-3 space-y-2">
+                        {payment.webhookIssues.map((issue) => (
+                            <li key={issue.eventId} className="rounded bg-white/80 p-3 text-xs text-gray-800">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <strong>{issue.status} · {issue.eventType}</strong>
+                                    <span>{issue.attempts} tentativa(s)</span>
+                                </div>
+                                <p className="mt-1">Motivo: <code>{issue.reason}</code></p>
+                                <p className="mt-1 break-all text-gray-500">Evento: {issue.eventId}</p>
+                                {issue.installmentId && (
+                                    <p className="mt-1 break-all text-gray-500">Installment: {issue.installmentId}</p>
+                                )}
+                                <p className="mt-1 text-gray-500">Recebido em {formatAdminDate(issue.receivedAt)}</p>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+        </article>
+    )
+}
+
 const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = ({ pagamento }) => {
     const [event, setEvent] = useState<ICourse | null>(null)
 
@@ -417,7 +756,10 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
 
     //
     //
-    const statusInfo = getPaymentStatusIconAndColor(pagamento?._webhook?.[0]?.event);
+    const latestWebhook = pagamento._webhook?.[pagamento._webhook.length - 1]?.event
+    const currentStatus = pagamento.status || latestWebhook
+    const statusInfo = getPaymentStatusIconAndColor(currentStatus);
+    const StatusIcon = statusInfo.Icon
     return (
         <div className="">
 
@@ -426,8 +768,9 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-3">
                     {/* Status e Descrição */}
                     <div className="flex-1">
-                        <span className="px-3 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
-                            {getPaymentStatusTranslation(pagamento._webhook?.[0]?.event)}
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full ${statusInfo.bgColor} ${statusInfo.color}`}>
+                            <StatusIcon className="h-3.5 w-3.5" />
+                            {getPaymentStatusTranslation(currentStatus)}
                         </span>
                         <p className="text-lg font-bold text-gray-800 mt-2">{pagamento.description || "Pagamento"}</p>
                     </div>

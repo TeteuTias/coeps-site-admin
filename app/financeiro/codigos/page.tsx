@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ConfirmationModal from "@/app/components/ConfirmationModal";
+import type { AdminPaymentLedgerBacklog } from "@/app/lib/types/payments/payment-admin.t";
 import {
   ArrowLeft,
   BadgePercent,
   Ban,
   CheckCircle2,
+  CircleX,
   Clipboard,
   History,
   Link2,
@@ -17,6 +19,7 @@ import {
   Search,
   ShieldAlert,
   Tag,
+  TriangleAlert,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -27,10 +30,16 @@ type CodeStatus = "ATIVO" | "RESERVADO" | "INATIVO" | "USADO" | "CONSUMIDO";
 
 interface CodeMetrics {
   confirmadas: number;
+  confirmadasBrutas: number;
   pendentes: number;
   estornadas: number;
   canceladasOuExpiradas: number;
+  emRevisaoFinanceira: number;
   valorConfirmadoCentavos: number;
+  valorBrutoConfirmadoCentavos: number;
+  valorEstornadoDoneCentavos: number;
+  valorEmRiscoCentavos: number;
+  valorLiquidoCentavos: number;
 }
 
 interface CodeItem {
@@ -58,9 +67,20 @@ interface CodesResponse {
     descontos: number;
     rastreios: number;
     vendasConfirmadas: number;
+    vendasBrutas: number;
     pagamentosPendentes: number;
     vendasEstornadas: number;
+    revisoesFinanceiras: number;
+    atribuicoesSemSessao: number;
+    sessoesSemAtribuicao: number;
+    webhooksEmRevisao: number;
+    webhooksFalhos: number;
+    valorBrutoConfirmadoCentavos: number;
+    valorEstornadoDoneCentavos: number;
+    valorEmRiscoCentavos: number;
+    valorLiquidoCentavos: number;
   };
+  ledger: AdminPaymentLedgerBacklog;
   pagination: {
     page: number;
     limit: number;
@@ -92,8 +112,31 @@ const EMPTY_METRICS: CodesResponse["metrics"] = {
   descontos: 0,
   rastreios: 0,
   vendasConfirmadas: 0,
+  vendasBrutas: 0,
   pagamentosPendentes: 0,
   vendasEstornadas: 0,
+  revisoesFinanceiras: 0,
+  atribuicoesSemSessao: 0,
+  sessoesSemAtribuicao: 0,
+  webhooksEmRevisao: 0,
+  webhooksFalhos: 0,
+  valorBrutoConfirmadoCentavos: 0,
+  valorEstornadoDoneCentavos: 0,
+  valorEmRiscoCentavos: 0,
+  valorLiquidoCentavos: 0,
+};
+
+const EMPTY_LEDGER: AdminPaymentLedgerBacklog = {
+  counts: { pending: 0, processing: 0, failed: 0, reviewRequired: 0 },
+  oldestOutstandingAt: null,
+  oldestOutstandingAgeSeconds: null,
+  worker: {
+    locked: false,
+    leaseUntil: null,
+    leaseExpired: false,
+    blockedByFailedEvent: false,
+    updatedAt: null,
+  },
 };
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -129,16 +172,24 @@ function formatDate(value: string | null) {
 
 function usageCount(item: CodeItem) {
   return (
-    item.metrics.confirmadas +
+    item.metrics.confirmadasBrutas +
     item.metrics.pendentes +
-    item.metrics.estornadas +
     item.metrics.canceladasOuExpiradas
   );
+}
+
+function formatAge(seconds: number | null) {
+  if (seconds === null) return "Sem eventos pendentes";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
 }
 
 export default function PaymentCodesPage() {
   const [items, setItems] = useState<CodeItem[]>([]);
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
+  const [ledger, setLedger] = useState(EMPTY_LEDGER);
   const [activeEditionId, setActiveEditionId] = useState<string | null>(null);
   const [editionInput, setEditionInput] = useState("");
   const [editionId, setEditionId] = useState("");
@@ -185,6 +236,7 @@ export default function PaymentCodesPage() {
 
       setItems(data.items);
       setMetrics(data.metrics);
+      setLedger(data.ledger);
       setPagination(data.pagination);
       setActiveEditionId(data.activeEditionId);
       setHasLoadedCodes(true);
@@ -214,9 +266,43 @@ export default function PaymentCodesPage() {
   const metricCards = useMemo(
     () => [
       { label: "Códigos ativos", value: metrics.ativos, icon: Tag },
-      { label: "Descontos", value: metrics.descontos, icon: BadgePercent },
-      { label: "Rastreios", value: metrics.rastreios, icon: Link2 },
-      { label: "Vendas confirmadas", value: metrics.vendasConfirmadas, icon: CheckCircle2 },
+      { label: "Vendas brutas", value: metrics.vendasBrutas, icon: Link2 },
+      { label: "Confirmadas sem risco", value: metrics.vendasConfirmadas, icon: CheckCircle2 },
+      {
+        label: "Compras em revisão financeira",
+        value: metrics.revisoesFinanceiras,
+        icon: TriangleAlert,
+      },
+      {
+        label: "Atribuições sem sessão",
+        value: metrics.atribuicoesSemSessao,
+        icon: ShieldAlert,
+      },
+      {
+        label: "Sessões sem atribuição",
+        value: metrics.sessoesSemAtribuicao,
+        icon: ShieldAlert,
+      },
+      {
+        label: "Valor bruto confirmado",
+        value: moneyFromCents(metrics.valorBrutoConfirmadoCentavos),
+        icon: BadgePercent,
+      },
+      {
+        label: "Estornos concluídos (DONE)",
+        value: moneyFromCents(metrics.valorEstornadoDoneCentavos),
+        icon: CircleX,
+      },
+      {
+        label: "Valor em risco",
+        value: moneyFromCents(metrics.valorEmRiscoCentavos),
+        icon: ShieldAlert,
+      },
+      {
+        label: "Valor líquido após DONE",
+        value: moneyFromCents(metrics.valorLiquidoCentavos),
+        icon: CheckCircle2,
+      },
     ],
     [metrics],
   );
@@ -514,6 +600,42 @@ export default function PaymentCodesPage() {
           ))}
         </section>
 
+        <section className="codigos-ledger-panel" aria-labelledby="ledger-heading">
+          <div className="codigos-ledger-heading">
+            <div>
+              <p className="codigos-eyebrow">Operação global do webhook</p>
+              <h2 id="ledger-heading">Fila e worker de conciliação</h2>
+            </div>
+            <span className={ledger.worker.locked ? "is-locked" : "is-unlocked"}>
+              {ledger.worker.locked ? "Worker com lease ativo" : "Worker sem lease ativo"}
+            </span>
+          </div>
+          <div className="codigos-ledger-grid">
+            <div><strong>{ledger.counts.pending}</strong><span>PENDING</span></div>
+            <div><strong>{ledger.counts.processing}</strong><span>PROCESSING</span></div>
+            <div><strong>{ledger.counts.failed}</strong><span>FAILED</span></div>
+            <div><strong>{ledger.counts.reviewRequired}</strong><span>REVIEW_REQUIRED</span></div>
+          </div>
+          <dl className="codigos-ledger-details">
+            <div>
+              <dt>Evento pendente mais antigo</dt>
+              <dd>{formatAge(ledger.oldestOutstandingAgeSeconds)} · {formatDate(ledger.oldestOutstandingAt)}</dd>
+            </div>
+            <div>
+              <dt>Lease até</dt>
+              <dd>{formatDate(ledger.worker.leaseUntil)}</dd>
+            </div>
+            <div>
+              <dt>Estado do lease</dt>
+              <dd>{ledger.worker.leaseExpired ? "Expirado" : ledger.worker.locked ? "Ativo" : "Livre"}</dd>
+            </div>
+            <div>
+              <dt>Bloqueio por falha</dt>
+              <dd>{ledger.worker.blockedByFailedEvent ? "Sim — exige atenção" : "Não"}</dd>
+            </div>
+          </dl>
+        </section>
+
         <section className="codigos-create-grid">
           <form className="codigos-panel" onSubmit={createDiscount}>
             <div className="codigos-panel-title">
@@ -651,11 +773,16 @@ export default function PaymentCodesPage() {
                     <th>Código</th>
                     <th>Configuração</th>
                     <th>Status</th>
-                    <th>Confirmadas</th>
+                    <th>Vendas brutas</th>
+                    <th>Confirmadas sem risco</th>
                     <th>Pendentes</th>
                     <th>Estornadas</th>
                     <th>Canceladas/expiradas</th>
-                    <th>Valor confirmado</th>
+                    <th>Revisão financeira</th>
+                    <th>Valor bruto</th>
+                    <th>Refund DONE</th>
+                    <th>Valor em risco</th>
+                    <th>Valor líquido</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
@@ -705,11 +832,16 @@ export default function PaymentCodesPage() {
                             {item.status}
                           </span>
                         </td>
+                        <td>{item.metrics.confirmadasBrutas}</td>
                         <td>{item.metrics.confirmadas}</td>
                         <td>{item.metrics.pendentes}</td>
                         <td>{item.metrics.estornadas}</td>
                         <td>{item.metrics.canceladasOuExpiradas}</td>
-                        <td>{moneyFromCents(item.metrics.valorConfirmadoCentavos)}</td>
+                        <td>{item.metrics.emRevisaoFinanceira}</td>
+                        <td>{moneyFromCents(item.metrics.valorBrutoConfirmadoCentavos)}</td>
+                        <td>{moneyFromCents(item.metrics.valorEstornadoDoneCentavos)}</td>
+                        <td>{moneyFromCents(item.metrics.valorEmRiscoCentavos)}</td>
+                        <td>{moneyFromCents(item.metrics.valorLiquidoCentavos)}</td>
                         <td>
                           <div className="codigos-actions">
                             <button

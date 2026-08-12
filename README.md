@@ -23,8 +23,27 @@ compatibilidade.
 ```powershell
 npm run typecheck
 npm run lint
+npm run test:payments-admin
 npm run build
 ```
+
+## Leitura administrativa de pagamentos
+
+O painel financeiro une `pagamentos.atribuicoes` por `usuarioId` com
+`pagamentos.sessoes` por `owner`. Ele também consulta somente os campos raiz
+sanitizados do ledger v2; o `payload` do webhook nunca faz parte da resposta.
+
+Antes do rollout, execute no repositório do site a migração de índices que cria,
+no mínimo:
+
+- `pagamentos.sessoes`: `{ owner: 1, createdAt: -1 }`;
+- `pagamentos.webhook_eventos_v2`: `{ purchaseId: 1, status: 1, receivedAt: -1 }`;
+- `pagamentos.webhook_eventos_v2`: `{ paymentId: 1, status: 1, receivedAt: -1 }`;
+- `pagamentos.webhook_eventos_v2`: `{ installmentId: 1, status: 1, receivedAt: -1 }`,
+  com filtro parcial para `installmentId` string.
+
+O admin não cria índices e não deve compensar índice ausente consultando
+`payload.*`. A ausência desses índices é bloqueador operacional para produção.
 
 Consulte [docs/auth0-v4-next16-migration.md](docs/auth0-v4-next16-migration.md)
 para o contrato de erros e os detalhes da migração.
