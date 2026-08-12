@@ -1,21 +1,42 @@
+export interface IParcelamento {
+    codigo: number,
+    valorCadaParcela: number,
+    totalParcelas: number
+}
+
+export interface IPrecosLote {
+    valorAVista: number,
+    valorBoleto: number,
+    valorDebito: number,
+    valorPix: number,
+    parcelamentos: IParcelamento[]
+}
+
+export interface ILoteAutomatico {
+    codigo: number,
+    nome: string,
+    limiteVagas: number,
+    precos: IPrecosLote
+}
+
 export interface IPaymentConfig {
     "_id": string & { readonly __brand: 'ObjectId' },
     "edicaoId"?: string,
     "ativo"?: boolean,
     "pagantesLegados"?: number,
-    "dataInit": "",
-    "dataEnd": "",
-    "parcelamentos": {
-        "codigo": number,
-        "valorCadaParcela": number,
-        "totalParcelas": number
-    }[],
+    "dataInit": string,
+    "dataEnd": string,
+    "parcelamentos": IParcelamento[],
     "nome": string, // exemplo => "Terceiro Lote - COEPS",
     "valorAVista": number,
     "valorBoleto": number,
     "valorDebito": number,
     "valorPix": number,
-    "pagamentosAceitos": ("PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD")[]
+    "pagamentosAceitos": ("PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD")[],
+    "modo"?: "automatico" | "manual",
+    "configuracaoLotesAutomaticos"?: {
+        "lotes": ILoteAutomatico[]
+    }
 }
 
 

@@ -9,6 +9,7 @@ import {
   type PaymentCodeStatus,
   type PaymentCodeType,
 } from "../types/payments/payment-code.t.ts";
+import { getActivePaymentConfig } from "./payment-config-repository.ts";
 
 export const PAYMENT_CODES_COLLECTION = "pagamentos.codigos";
 export const PAYMENT_ATTRIBUTIONS_COLLECTION = "pagamentos.atribuicoes";
@@ -73,34 +74,7 @@ export function parseResponsible(value: unknown): PaymentCodeResponsible | null 
 }
 
 export async function getActiveEditionId(db: Db, session?: ClientSession) {
-  const configuredRaw = process.env.PAYMENT_EDITION_ID?.trim()
-    ? process.env.PAYMENT_EDITION_ID
-    : process.env.COEPS_ACTIVE_EDITION_ID;
-  if (configuredRaw?.trim()) {
-    const configuredEdition = normalizeEditionId(configuredRaw);
-    if (!configuredEdition) return null;
-
-    const configured = await db.collection("ingressos_config").findOne(
-      { ativo: true, edicaoId: configuredEdition },
-      { projection: { edicaoId: 1 }, session },
-    );
-    return normalizeEditionId(configured?.edicaoId) === configuredEdition
-      ? configuredEdition
-      : null;
-  }
-
-  const config = await db.collection("ingressos_config").findOne(
-    {
-      ativo: true,
-      edicaoId: { $type: "string" },
-    },
-    {
-      projection: { edicaoId: 1 },
-      sort: { updatedAt: -1, dataEnd: -1 },
-      session,
-    },
-  );
-
+  const config = await getActivePaymentConfig(db, session);
   return normalizeEditionId(config?.edicaoId);
 }
 
