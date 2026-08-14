@@ -911,27 +911,49 @@
 }
 
 .financeiro-config-summary>div {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   min-width: 0;
-  padding: 1rem 1.2rem;
-  border: 1px solid rgba(216, 217, 218, 0.25);
-  border-radius: 14px;
-  background: rgba(216, 217, 218, 0.12);
+  padding: 1.15rem 1.25rem 1.1rem;
+  color: var(--cieps-ink);
+  border: 1px solid var(--cieps-line);
+  border-radius: var(--cieps-radius);
+  background: var(--cieps-surface);
+  box-shadow: var(--cieps-shadow-soft);
+}
+
+.financeiro-config-summary>div::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--cieps-red);
+}
+
+.financeiro-config-summary>div:nth-child(2)::before {
+  background: var(--cieps-yellow);
+}
+
+.financeiro-config-summary>div:nth-child(3)::before {
+  background: var(--cieps-blue);
 }
 
 .financeiro-config-summary strong:not(.financeiro-mode-badge) {
+  color: var(--cieps-ink);
+  font-size: 1rem;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .financeiro-config-summary-label {
-  color: var(--cinza);
+  color: var(--cieps-ink-soft);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.76;
 }
 
 .financeiro-mode-badge {
@@ -946,16 +968,16 @@
 }
 
 .financeiro-mode-badge--automatico {
-  color: #d9fbe5;
-  background: rgba(40, 167, 69, 0.22);
-  border: 1px solid rgba(40, 167, 69, 0.5);
+  color: #185c31;
+  background: #e5f5e9;
+  border: 1px solid #72b987;
 }
 
 .financeiro-mode-badge--manual,
 .financeiro-mode-badge--legado {
-  color: var(--cinza);
-  background: rgba(216, 217, 218, 0.12);
-  border: 1px solid rgba(216, 217, 218, 0.3);
+  color: var(--cieps-ink);
+  background: var(--cieps-surface-muted);
+  border: 1px solid var(--cieps-line-strong);
 }
 
 .financeiro-section-heading-row,
@@ -969,8 +991,52 @@
 
 .financeiro-section-description {
   margin: -0.5rem 0 0;
-  color: var(--cinza);
-  opacity: 0.78;
+  color: var(--cieps-ink-soft);
+  line-height: 1.55;
+}
+
+.financeiro-automatic-section {
+  position: relative;
+  color: var(--cieps-ink);
+  background:
+    linear-gradient(90deg, var(--cieps-red), var(--cieps-yellow), var(--cieps-blue)) top / 100% 4px no-repeat,
+    var(--cieps-surface);
+  border-color: var(--cieps-line);
+  border-radius: var(--cieps-radius);
+  box-shadow: var(--cieps-shadow);
+}
+
+.financeiro-automatic-section .financeiro-section-title {
+  justify-content: flex-start;
+  margin-bottom: 0.55rem;
+  color: var(--cieps-ink);
+  font-family: var(--cieps-font-display);
+  text-align: left;
+}
+
+.financeiro-automatic-section .financeiro-section-title svg {
+  color: var(--cieps-red);
+}
+
+.financeiro-automatic-section .financeiro-warning {
+  color: #684510;
+  background: #fff7e6;
+  border-color: rgba(239, 159, 39, 0.55);
+  border-left: 4px solid var(--cieps-yellow);
+  border-radius: var(--cieps-radius);
+}
+
+.financeiro-automatic-section .financeiro-input {
+  color: var(--cieps-ink);
+  background: var(--cieps-surface);
+  border-color: var(--cieps-line-strong);
+  border-radius: var(--cieps-radius);
+}
+
+.financeiro-automatic-section .financeiro-input:focus {
+  background: #fff;
+  border-color: var(--cieps-blue);
+  box-shadow: 0 0 0 3px rgba(24, 95, 165, 0.14);
 }
 
 .financeiro-lots-grid {
@@ -983,20 +1049,32 @@
 .financeiro-lot-card {
   min-width: 0;
   padding: 1.35rem;
-  border: 1px solid rgba(216, 217, 218, 0.25);
-  border-radius: 18px;
-  background: rgba(216, 217, 218, 0.09);
-  box-shadow: 0 8px 24px rgba(27, 48, 95, 0.12);
+  color: var(--cieps-ink);
+  border: 1px solid var(--cieps-line-strong);
+  border-top: 4px solid var(--cieps-red);
+  border-radius: var(--cieps-radius);
+  background: var(--cieps-surface);
+  box-shadow: var(--cieps-shadow-soft);
+}
+
+.financeiro-lot-card:nth-child(3n + 2) {
+  border-top-color: var(--cieps-yellow);
+}
+
+.financeiro-lot-card:nth-child(3n) {
+  border-top-color: var(--cieps-blue);
 }
 
 .financeiro-lot-header h3 {
   margin: 0.3rem 0 0;
-  color: var(--cinza);
-  font-size: 1.15rem;
+  color: var(--cieps-ink);
+  font-family: var(--cieps-font-display);
+  font-size: 1.25rem;
+  line-height: 1.25;
 }
 
 .financeiro-lot-code {
-  color: var(--carmin);
+  color: var(--cieps-red);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1016,18 +1094,19 @@
   flex-direction: column;
   gap: 0.3rem;
   padding: 0.85rem;
-  border-radius: 12px;
-  background: rgba(216, 217, 218, 0.08);
+  border: 1px solid var(--cieps-line);
+  border-radius: var(--cieps-radius);
+  background: var(--cieps-surface-muted);
 }
 
 .financeiro-lot-details-grid span,
 .financeiro-lot-installment-summary span {
-  color: var(--cinza);
-  opacity: 0.78;
+  color: var(--cieps-ink-soft);
 }
 
 .financeiro-lot-details-grid strong {
-  color: var(--cinza);
+  color: var(--cieps-ink);
+  font-size: 1rem;
 }
 
 .financeiro-lot-installment-summary,
@@ -1037,13 +1116,14 @@
   gap: 0.6rem;
   margin-top: 1.2rem;
   padding-top: 1rem;
-  border-top: 1px solid rgba(216, 217, 218, 0.18);
+  border-top: 1px solid var(--cieps-line);
 }
 
 .financeiro-lot-installment-summary h4,
 .financeiro-lot-installments h4 {
   margin: 0;
-  color: var(--cinza);
+  color: var(--cieps-ink);
+  font-family: var(--cieps-font-display);
 }
 
 .financeiro-lot-edit-form {
@@ -1062,15 +1142,16 @@
   align-items: end;
   gap: 0.75rem;
   padding: 0.85rem;
-  border-radius: 12px;
-  background: rgba(216, 217, 218, 0.08);
+  border: 1px solid var(--cieps-line);
+  border-radius: var(--cieps-radius);
+  background: var(--cieps-surface-muted);
 }
 
 .financeiro-lot-installment-row label {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  color: var(--cinza);
+  color: var(--cieps-ink-soft);
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -1086,15 +1167,23 @@
   gap: 0.75rem;
   margin-bottom: 1.25rem;
   padding: 1rem;
-  color: #fff1c2;
-  border: 1px solid rgba(255, 193, 7, 0.45);
-  border-radius: 12px;
-  background: rgba(255, 193, 7, 0.11);
+  color: #684510;
+  border: 1px solid rgba(239, 159, 39, 0.55);
+  border-left: 4px solid var(--cieps-yellow);
+  border-radius: var(--cieps-radius);
+  background: #fff7e6;
   line-height: 1.5;
+}
+
+.financeiro-legacy-warning span {
+  color: #4d3008 !important;
+  -webkit-text-fill-color: #4d3008 !important;
+  opacity: 1;
 }
 
 .financeiro-legacy-warning svg {
   flex: 0 0 auto;
+  color: #9a5d00;
 }
 
 @media (max-width: 900px) {
