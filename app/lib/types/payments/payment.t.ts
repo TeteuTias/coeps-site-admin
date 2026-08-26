@@ -19,6 +19,29 @@ export interface ILoteAutomatico {
     precos: IPrecosLote
 }
 
+export interface IOcupacaoLoteAutomatico {
+    codigo: number,
+    limiteVagas: number,
+    ocupadasEfetivas: number,
+    restantes: number
+}
+
+export interface IAutomaticLotOccupancy {
+    configId: string,
+    edicaoId: string,
+    calculadoEm: string,
+    confirmadas: {
+        legadas: number,
+        modernas: number,
+        total: number
+    },
+    reservasAtivas: number,
+    ocupadasEfetivas: number,
+    capacidadeTotal: number,
+    excedente: number,
+    lotes: IOcupacaoLoteAutomatico[]
+}
+
 export interface IPaymentConfig {
     "_id": string & { readonly __brand: 'ObjectId' },
     "edicaoId"?: string,

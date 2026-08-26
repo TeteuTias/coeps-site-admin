@@ -264,46 +264,50 @@ export default function PaymentCodesPage() {
   );
 
   const metricCards = useMemo(
-    () => [
-      { label: "Códigos ativos", value: metrics.ativos, icon: Tag },
-      { label: "Vendas brutas", value: metrics.vendasBrutas, icon: Link2 },
-      { label: "Confirmadas sem risco", value: metrics.vendasConfirmadas, icon: CheckCircle2 },
-      {
-        label: "Compras em revisão financeira",
-        value: metrics.revisoesFinanceiras,
-        icon: TriangleAlert,
-      },
-      {
-        label: "Atribuições sem sessão",
-        value: metrics.atribuicoesSemSessao,
-        icon: ShieldAlert,
-      },
-      {
-        label: "Sessões sem atribuição",
-        value: metrics.sessoesSemAtribuicao,
-        icon: ShieldAlert,
-      },
-      {
-        label: "Valor bruto confirmado",
-        value: moneyFromCents(metrics.valorBrutoConfirmadoCentavos),
-        icon: BadgePercent,
-      },
-      {
-        label: "Estornos concluídos (DONE)",
-        value: moneyFromCents(metrics.valorEstornadoDoneCentavos),
-        icon: CircleX,
-      },
-      {
-        label: "Valor em risco",
-        value: moneyFromCents(metrics.valorEmRiscoCentavos),
-        icon: ShieldAlert,
-      },
-      {
-        label: "Valor líquido após DONE",
-        value: moneyFromCents(metrics.valorLiquidoCentavos),
-        icon: CheckCircle2,
-      },
-    ],
+    () => ({
+      operational: [
+        { label: "Códigos ativos", value: metrics.ativos, icon: Tag },
+        { label: "Vendas brutas", value: metrics.vendasBrutas, icon: Link2 },
+        { label: "Confirmadas sem risco", value: metrics.vendasConfirmadas, icon: CheckCircle2 },
+        {
+          label: "Compras em revisão financeira",
+          value: metrics.revisoesFinanceiras,
+          icon: TriangleAlert,
+        },
+        {
+          label: "Atribuições sem sessão",
+          value: metrics.atribuicoesSemSessao,
+          icon: ShieldAlert,
+        },
+        {
+          label: "Sessões sem atribuição",
+          value: metrics.sessoesSemAtribuicao,
+          icon: ShieldAlert,
+        },
+      ],
+      financial: [
+        {
+          label: "Valor bruto confirmado",
+          value: moneyFromCents(metrics.valorBrutoConfirmadoCentavos),
+          icon: BadgePercent,
+        },
+        {
+          label: "Estornos concluídos (DONE)",
+          value: moneyFromCents(metrics.valorEstornadoDoneCentavos),
+          icon: CircleX,
+        },
+        {
+          label: "Valor em risco",
+          value: moneyFromCents(metrics.valorEmRiscoCentavos),
+          icon: ShieldAlert,
+        },
+        {
+          label: "Valor líquido após DONE",
+          value: moneyFromCents(metrics.valorLiquidoCentavos),
+          icon: CheckCircle2,
+        },
+      ],
+    }),
     [metrics],
   );
 
@@ -590,14 +594,32 @@ export default function PaymentCodesPage() {
           </div>
         )}
 
-        <section className="codigos-metrics" aria-label="Resumo dos códigos">
-          {metricCards.map(({ label, value, icon: Icon }) => (
-            <article key={label}>
-              <Icon size={22} />
-              <strong>{value}</strong>
-              <span>{label}</span>
-            </article>
-          ))}
+        <section className="codigos-metrics-summary" aria-label="Resumo dos códigos e valores">
+          <div className="codigos-metrics-group">
+            <h2 className="codigos-metrics-title">Indicadores de vendas</h2>
+            <div className="codigos-metrics codigos-metrics--counts">
+              {metricCards.operational.map(({ label, value, icon: Icon }) => (
+                <article className="codigos-metric codigos-metric--count" key={label}>
+                  <Icon size={22} />
+                  <strong>{value}</strong>
+                  <span>{label}</span>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="codigos-metrics-group">
+            <h2 className="codigos-metrics-title">Valores financeiros</h2>
+            <div className="codigos-metrics codigos-metrics--currency">
+              {metricCards.financial.map(({ label, value, icon: Icon }) => (
+                <article className="codigos-metric codigos-metric--currency" key={label}>
+                  <Icon size={22} />
+                  <strong>{value}</strong>
+                  <span>{label}</span>
+                </article>
+              ))}
+            </div>
+          </div>
         </section>
 
         <section className="codigos-ledger-panel" aria-labelledby="ledger-heading">
