@@ -55,6 +55,7 @@ interface CodeItem {
   createdAt: string | null;
   updatedAt: string | null;
   metrics: CodeMetrics;
+  perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA"
 }
 
 interface CodesResponse {
@@ -343,6 +344,7 @@ export default function PaymentCodesPage() {
           body: JSON.stringify({
             edicaoId: editionId,
             percentualDesconto: Number(discountPercentage),
+            isOrganizer
           }),
         },
       );
@@ -684,7 +686,7 @@ export default function PaymentCodesPage() {
               <span>%</span>
             </div>
             {/* Switch Button para Organizador */}
-            <div className="codigos-switch-container">
+            <div className="codigos-switch-container pb-5">
               <label className="codigos-switch">
                 <input
                   type="checkbox"
@@ -734,6 +736,19 @@ export default function PaymentCodesPage() {
               onChange={(event) => setTrackingEmail(event.target.value)}
               maxLength={254}
             />
+            <div className="codigos-switch-container pb-5">
+              <label className="codigos-switch">
+                <input
+                  type="checkbox"
+                  checked={isOrganizer}
+                  onChange={(e) => setIsOrganizer(e.target.checked)}
+                />
+                <span className="codigos-switch-slider" />
+              </label>
+              <span className="codigos-switch-label">
+                {isOrganizer ? "É organizador" : "Não é organizador"}
+              </span>
+            </div>
             <button
               className="codigos-button codigos-button--primary"
               type="submit"
@@ -813,6 +828,7 @@ export default function PaymentCodesPage() {
                     <th>Código</th>
                     <th>Configuração</th>
                     <th>Status</th>
+                    <th>Utilizador</th>
                     <th>Vendas brutas</th>
                     <th>Confirmadas sem risco</th>
                     <th>Pendentes</th>
@@ -871,6 +887,11 @@ export default function PaymentCodesPage() {
                           <span className={`codigos-status codigos-status--${item.status.toLowerCase()}`}>
                             {item.status}
                           </span>
+                        </td>
+                        <td className="">
+                          <strong>
+                            {item.perfilUtilizador || "NÃO DEFINIDO"}
+                          </strong>
                         </td>
                         <td>{item.metrics.confirmadasBrutas}</td>
                         <td>{item.metrics.confirmadas}</td>

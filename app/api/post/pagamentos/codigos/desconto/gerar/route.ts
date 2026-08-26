@@ -14,6 +14,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const edicaoId = normalizeEditionId(body.edicaoId);
+    const isOrganizer = body.isOrganizer === "true";
     if (!edicaoId) {
       return Response.json(
         {
@@ -48,17 +49,22 @@ export async function POST(request: Request) {
       );
     }
 
-    return Response.json(
-      { error: "internal_server_error", message: "ADJIFAOSIDJFAOSIDFOIJ" },
-      { status: 500 },
-    );
 
     const code = await createUniqueCodeDocument(db, {
       edicaoId,
       tipo: "DESCONTO",
       percentualDesconto,
+      perfilUtilizador: isOrganizer ? "ORGANIZADOR" : "CONGRESSISTA",
       createdBy: authorization.identity.userId,
     });
+    //
+    console.log("-1-1-1-1-04912-3049 1-20394-12039 4-2394 -0")
+    console.log(body)
+    return Response.json(
+      { error: "internal_server_error", message: "ADJIFAOSIDJFAOSIDFOIJ" },
+      { status: 500 },
+    );
+    //
 
     return Response.json(
       {
