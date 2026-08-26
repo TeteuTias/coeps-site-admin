@@ -1,17 +1,32 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useCallback, useEffect, useState, useMemo } from "react"
 import LoadingModal from "../components/LoadingModal"
-import { ILoteAutomatico, IPaymentConfig } from "../lib/types/payments/payment.t"
+import { IAutomaticLotOccupancy, ILoteAutomatico, IPaymentConfig } from "../lib/types/payments/payment.t"
 import { IUser } from "../lib/types/user/user.t"
 import { useRouter } from "next/navigation"
 import './style.css'
-import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX, Tag } from 'lucide-react'
+import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX, Tag, RefreshCw } from 'lucide-react'
 
 type IParcelamento = IPaymentConfig["parcelamentos"][0];
 
 const formatCurrency = (value: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+const formatCount = (value: number) => new Intl.NumberFormat("pt-BR").format(value);
+
+const formatRemainingPlaces = (value: number) =>
+    value === 1 ? "Resta 1 vaga" : `Restam ${formatCount(value)} vagas`;
+
+const formatOccupancyTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    }).format(date);
+};
 
 const hasValidAutomaticStructure = (lots: ILoteAutomatico[] | undefined) => {
     if (!Array.isArray(lots) || lots.length === 0) return false;
@@ -62,6 +77,9 @@ export default function Page() {
     const [isEditingParcelamentos, setIsEditingParcelamentos] = useState(false);
     const [editingLotCode, setEditingLotCode] = useState<number | null>(null);
     const [editableLot, setEditableLot] = useState<ILoteAutomatico | null>(null);
+    const [lotOccupancy, setLotOccupancy] = useState<IAutomaticLotOccupancy | null>(null);
+    const [lotOccupancyLoading, setLotOccupancyLoading] = useState(false);
+    const [lotOccupancyError, setLotOccupancyError] = useState<string | null>(null);
     const [editableInfo, setEditableInfo] = useState({
         nome: '',
         edicaoId: '',
@@ -71,6 +89,37 @@ export default function Page() {
         valorPix: 0
     });
     const allPaymentTypes: IPaymentConfig["pagamentosAceitos"] = ["PIX", "BOLETO", "CREDIT_CARD", "DEBIT_CARD"]
+
+    const loadLotOccupancy = useCallback(async (configId: string) => {
+        setLotOccupancyLoading(true);
+        setLotOccupancyError(null);
+
+        try {
+            const response = await fetch(
+                `/api/get/pagamentos/ocupacaoLotes?configId=${encodeURIComponent(configId)}`,
+                { cache: "no-store" },
+            );
+            const payload = await response.json().catch(() => ({})) as Partial<IAutomaticLotOccupancy> & {
+                message?: string;
+            };
+            if (!response.ok) {
+                throw new Error(payload.message ?? "Não foi possível atualizar a ocupação dos lotes.");
+            }
+            if (payload.configId !== configId || !Array.isArray(payload.lotes)) {
+                throw new Error("A ocupação recebida não corresponde à configuração carregada.");
+            }
+
+            setLotOccupancy(payload as IAutomaticLotOccupancy);
+        } catch (error) {
+            setLotOccupancyError(
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível atualizar a ocupação dos lotes.",
+            );
+        } finally {
+            setLotOccupancyLoading(false);
+        }
+    }, []);
 
     const handleStartLotEdit = (lot: ILoteAutomatico) => {
         setEditingLotCode(lot.codigo);
@@ -178,6 +227,7 @@ export default function Page() {
                 };
             });
             handleCancelLotEdit();
+            await loadLotOccupancy(paymentData._id);
             alert("Lote automático atualizado com sucesso!");
         } catch (error) {
             alert(error instanceof Error ? error.message : "Não foi possível salvar o lote.");
@@ -283,6 +333,9 @@ export default function Page() {
                 valorDebito: fetchedData.valorDebito,
                 valorPix: fetchedData.valorPix
             })
+            if (fetchedData.modo === "automatico") {
+                void loadLotOccupancy(fetchedData._id)
+            }
             setLoading(false)
         }
 
@@ -297,7 +350,7 @@ export default function Page() {
 
         fetchData()
         fetchDataPayedUsers()
-    }, [])
+    }, [loadLotOccupancy])
 
     const handleInfoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -335,6 +388,9 @@ export default function Page() {
 
             const updatedData = await response.json();
             setPaymentData(prev => prev ? ({ ...prev, ...updatedData.data }) : prev);
+            if (paymentData?.modo === "automatico" && paymentData._id) {
+                void loadLotOccupancy(paymentData._id);
+            }
             setLoading(false)
 
         } catch (error) {
@@ -533,9 +589,23 @@ export default function Page() {
                                     Cada lote tem preços próprios. Salvar um card altera somente aquele lote.
                                 </p>
                             </div>
-                            <span className="financeiro-mode-badge financeiro-mode-badge--automatico">
-                                Configuração automática
-                            </span>
+                            <div className="financeiro-lot-section-actions">
+                                <span className="financeiro-mode-badge financeiro-mode-badge--automatico">
+                                    Configuração automática
+                                </span>
+                                <button
+                                    type="button"
+                                    className="financeiro-btn financeiro-btn-primary financeiro-lot-refresh-button"
+                                    onClick={() => void loadLotOccupancy(paymentData._id)}
+                                    disabled={lotOccupancyLoading}
+                                >
+                                    <RefreshCw
+                                        size={17}
+                                        className={lotOccupancyLoading ? "financeiro-refresh-icon--spinning" : undefined}
+                                    />
+                                    {lotOccupancyLoading ? "Atualizando" : "Atualizar números"}
+                                </button>
+                            </div>
                         </div>
 
                         <div className="financeiro-warning">
@@ -544,6 +614,50 @@ export default function Page() {
                                 Sessões de pagamento já criadas mantêm o lote e os valores originais. As alterações abaixo valem apenas para novas sessões.
                             </span>
                         </div>
+
+                        {lotOccupancy && (
+                            <div className="financeiro-lot-occupancy-summary" role="status" aria-live="polite">
+                                <div>
+                                    <strong>{formatCount(lotOccupancy.confirmadas.total)}</strong>
+                                    <span>Vendas confirmadas</span>
+                                </div>
+                                <div>
+                                    <strong>{formatCount(lotOccupancy.reservasAtivas)}</strong>
+                                    <span>Em pagamento / reservadas</span>
+                                </div>
+                                <div>
+                                    <strong>{formatCount(lotOccupancy.ocupadasEfetivas)}</strong>
+                                    <span>Vagas ocupadas no checkout</span>
+                                </div>
+                                <small>
+                                    Atualizado às {formatOccupancyTime(lotOccupancy.calculadoEm) ?? "—"}
+                                </small>
+                            </div>
+                        )}
+
+                        {lotOccupancyLoading && !lotOccupancy && (
+                            <div className="financeiro-lot-occupancy-state" role="status">
+                                <RefreshCw size={18} className="financeiro-refresh-icon--spinning" />
+                                Calculando vendas e vagas disponíveis…
+                            </div>
+                        )}
+
+                        {lotOccupancyError && (
+                            <div className="financeiro-lot-occupancy-state financeiro-lot-occupancy-state--error" role="alert">
+                                <AlertTriangle size={18} />
+                                <span>
+                                    {lotOccupancyError}
+                                    {lotOccupancy ? " Os últimos números calculados permanecem visíveis." : ""}
+                                </span>
+                            </div>
+                        )}
+
+                        {lotOccupancy && lotOccupancy.excedente > 0 && (
+                            <div className="financeiro-lot-occupancy-state financeiro-lot-occupancy-state--warning" role="alert">
+                                <AlertTriangle size={18} />
+                                A ocupação excede a capacidade configurada em {formatCount(lotOccupancy.excedente)} vagas.
+                            </div>
+                        )}
 
                         {!automaticStructureValid ? (
                             <div className="admin-state admin-state--error" role="alert">
@@ -557,6 +671,9 @@ export default function Page() {
                             <div className="financeiro-lots-grid">
                                 {automaticLots!.map((lot) => {
                                     const isEditing = editingLotCode === lot.codigo && editableLot;
+                                    const lotAvailability = lotOccupancy?.lotes.find(
+                                        (item) => item.codigo === lot.codigo && item.limiteVagas === lot.limiteVagas,
+                                    );
                                     return (
                                         <article key={lot.codigo} className="financeiro-lot-card">
                                             <div className="financeiro-lot-header">
@@ -694,7 +811,15 @@ export default function Page() {
                                             ) : (
                                                 <>
                                                     <div className="financeiro-lot-details-grid">
-                                                        <div><span>Limite</span><strong>{lot.limiteVagas} vagas</strong></div>
+                                                        <div>
+                                                            <span>Limite</span>
+                                                            <strong>{formatCount(lot.limiteVagas)} vagas</strong>
+                                                            <small className={lotAvailability ? "financeiro-lot-remaining" : "financeiro-lot-remaining financeiro-lot-remaining--unavailable"}>
+                                                                {lotAvailability
+                                                                    ? formatRemainingPlaces(lotAvailability.restantes)
+                                                                    : lotOccupancyLoading ? "Calculando disponibilidade…" : "Disponibilidade indisponível"}
+                                                            </small>
+                                                        </div>
                                                         <div><span>PIX</span><strong>{formatCurrency(lot.precos.valorPix)}</strong></div>
                                                         <div><span>Boleto</span><strong>{formatCurrency(lot.precos.valorBoleto)}</strong></div>
                                                         <div><span>Débito</span><strong>{formatCurrency(lot.precos.valorDebito)}</strong></div>
