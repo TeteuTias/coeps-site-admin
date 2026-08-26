@@ -269,6 +269,12 @@
   box-shadow: 0 2px 8px rgba(27, 48, 95, 0.1);
 }
 
+.financeiro-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
 .financeiro-btn-primary {
   background: rgba(216, 217, 218, 0.18);
   color: var(--azul);
@@ -989,6 +995,34 @@
   gap: 1rem;
 }
 
+.financeiro-lot-section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.financeiro-lot-refresh-button {
+  min-height: 38px;
+  padding: 0.55rem 0.8rem;
+  color: var(--cieps-blue);
+  background: var(--cieps-surface-muted);
+  border: 1px solid var(--cieps-line-strong);
+  border-radius: var(--cieps-radius);
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.financeiro-lot-refresh-button:hover:not(:disabled) {
+  color: var(--cieps-paper);
+  background: var(--cieps-blue);
+  border-color: var(--cieps-blue);
+}
+
+.financeiro-refresh-icon--spinning {
+  animation: financeiro-spin 0.8s linear infinite;
+}
+
 .financeiro-section-description {
   margin: -0.5rem 0 0;
   color: var(--cieps-ink-soft);
@@ -1024,6 +1058,93 @@
   border-color: rgba(239, 159, 39, 0.55);
   border-left: 4px solid var(--cieps-yellow);
   border-radius: var(--cieps-radius);
+}
+
+.financeiro-lot-occupancy-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  color: var(--cieps-ink);
+  background: var(--cieps-surface-muted);
+  border: 1px solid var(--cieps-line);
+  border-radius: var(--cieps-radius);
+}
+
+.financeiro-lot-occupancy-summary>div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--cieps-surface);
+  border-left: 3px solid var(--cieps-red);
+  border-radius: 5px;
+}
+
+.financeiro-lot-occupancy-summary>div:nth-child(2) {
+  border-left-color: var(--cieps-yellow);
+}
+
+.financeiro-lot-occupancy-summary>div:nth-child(3) {
+  border-left-color: var(--cieps-blue);
+}
+
+.financeiro-lot-occupancy-summary strong {
+  color: var(--cieps-ink);
+  font-family: var(--cieps-font-display);
+  font-size: 1.55rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.financeiro-lot-occupancy-summary span {
+  color: var(--cieps-ink-soft);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.financeiro-lot-occupancy-summary>small {
+  grid-column: 1 / -1;
+  color: var(--cieps-ink-soft);
+  font-size: 0.74rem;
+  text-align: right;
+}
+
+.financeiro-lot-occupancy-state {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.85rem;
+  color: var(--cieps-ink-soft);
+  background: var(--cieps-surface-muted);
+  border: 1px dashed var(--cieps-line-strong);
+  border-radius: var(--cieps-radius);
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.financeiro-lot-occupancy-state svg {
+  flex: 0 0 auto;
+}
+
+.financeiro-lot-occupancy-state--error {
+  color: #70201f;
+  background: #fbefec;
+  border-style: solid;
+  border-color: rgba(163, 45, 45, 0.3);
+}
+
+.financeiro-lot-occupancy-state--warning {
+  color: #684510;
+  background: #fff7e6;
+  border-style: solid;
+  border-color: rgba(239, 159, 39, 0.55);
 }
 
 .financeiro-automatic-section .financeiro-input {
@@ -1107,6 +1228,25 @@
 .financeiro-lot-details-grid strong {
   color: var(--cieps-ink);
   font-size: 1rem;
+}
+
+.financeiro-lot-details-grid .financeiro-lot-remaining {
+  width: fit-content;
+  margin-top: 0.2rem;
+  padding: 0.22rem 0.48rem;
+  color: #185c31;
+  background: #e5f5e9;
+  border: 1px solid rgba(40, 126, 72, 0.25);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.financeiro-lot-details-grid .financeiro-lot-remaining--unavailable {
+  color: #6f470d;
+  background: #fff7e6;
+  border-color: rgba(174, 111, 15, 0.28);
 }
 
 .financeiro-lot-installment-summary,
@@ -1207,6 +1347,20 @@
   .financeiro-lot-subheading {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .financeiro-lot-section-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .financeiro-lot-refresh-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .financeiro-lot-occupancy-summary {
+    grid-template-columns: 1fr;
   }
 
   .financeiro-lot-details-grid,
