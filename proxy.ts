@@ -64,7 +64,7 @@ export async function proxy(req: NextRequest) {
   if (pathname === "/not-allowed") {
     return authResponse;
   }
-
+  console.log(session)
   const userId = session.user.sub.replace(/^auth0\|/, "");
   let canUserAccess = false;  
   try {
