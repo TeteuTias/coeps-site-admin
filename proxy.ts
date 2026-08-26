@@ -45,6 +45,7 @@ export async function proxy(req: NextRequest) {
   let session;
   try {
     session = await auth0.getSession(req);
+    console.log(session)
   } catch {
     return routeType === "api"
       ? jsonError(401, "authentication_error", "Não foi possível validar a sessão.")
@@ -64,7 +65,7 @@ export async function proxy(req: NextRequest) {
   if (pathname === "/not-allowed") {
     return authResponse;
   }
-
+  console.log(session)
   const userId = session.user.sub.replace(/^auth0\|/, "");
   let canUserAccess = false;  
   try {
