@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { ObjectId } from "mongodb";
 import {
   buildAutomaticLotOccupancy,
@@ -164,4 +165,17 @@ test("consulta os mesmos grupos e estados usados pelo checkout", async () => {
       ],
     },
   );
+});
+
+test("a rota de leitura não adiciona uma segunda allowlist financeira", async () => {
+  const routeSource = await readFile(
+    new URL(
+      "../../../api/get/pagamentos/ocupacaoLotes/route.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+
+  assert.match(routeSource, /withApiAuthRequired/);
+  assert.doesNotMatch(routeSource, /requireFinanceAdmin/);
 });

@@ -1,6 +1,6 @@
+import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from "@/app/lib/mongodb";
 import { getAutomaticLotOccupancy } from "@/app/lib/payments/automatic-lot-occupancy";
-import { requireFinanceAdmin } from "@/app/lib/payments/finance-admin";
 import {
   assertLoadedActiveConfig,
   PaymentConfigError,
@@ -8,10 +8,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  const authorization = await requireFinanceAdmin(request);
-  if (!authorization.authorized) return authorization.response;
-
+export const GET = withApiAuthRequired(async function GET(request: Request) {
   try {
     const configId = new URL(request.url).searchParams.get("configId") ?? "";
     const { db } = await connectToDatabase();
@@ -38,4 +35,4 @@ export async function GET(request: Request) {
       { status: 500 },
     );
   }
-}
+});
