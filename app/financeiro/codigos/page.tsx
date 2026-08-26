@@ -375,6 +375,7 @@ export default function PaymentCodesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             edicaoId: editionId,
+            isOrganizer,
             responsavel: {
               nome: trackingName,
               ...(trackingEmail.trim() ? { email: trackingEmail } : {}),
