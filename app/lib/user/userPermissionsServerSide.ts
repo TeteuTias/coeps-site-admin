@@ -38,8 +38,7 @@ const permittedRoutesApi: { [key: string]: string[] } = {
 
 // Objeto para permissões de páginas (rotas visíveis no navegador)
 const permittedRoutes: { [key: string]: string[] } = {
-    /*
-    "6913b3853ed0130b1f422acc": [ // ID da conta de apoio
+    "6a87991a310d49dafb8d113b": [  // ID da conta de apoio
         "/",
         "/presenca",
         "/presenca/:path",
@@ -50,19 +49,18 @@ const permittedRoutes: { [key: string]: string[] } = {
         "/usuarios/informacoes/:path",
         "/gerarListaMinicurso/:path"
     ],
-    */
-    "68f77d798b5a848b5c9e5e04": [ // ID da conta Certificados
+    "6a8799158b3fe756dd02f487": [ // ID da conta Certificados OK
         "/",
         "/presenca",
         "/presenca/gerarListaMinicursoPresenca/:minicurso",
         "/presenca/gerarListaPalestraPresenca/:paletra"
     ],
-    "68f18c51d3440d3001fc4ddc": [ // ID da conta Científica
+    "6a87990e9d8d0385e0a77083": [ // ID da conta Científica OK
         '/',
         '/trabalhos', // Acesso a rotas específicas e dinâmicas
         '/usuarios/informacoes/:id',
     ],
-    "67098341f7397b370e9cb8ba": [ // id do admin
+    "6a8799078ecd649be9bdb061": [ // id do admin OK
         "*"
     ]
 };
