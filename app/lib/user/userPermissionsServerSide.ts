@@ -1,6 +1,6 @@
 import { pathToRegexp } from "path-to-regexp";
 
-const DEFAULT_FINANCE_ADMIN_ID = "67098341f7397b370e9cb8ba";
+const DEFAULT_FINANCE_ADMIN_ID = "6a8799078ecd649be9bdb061";
 
 function financeAdminIds() {
     const configured = (process.env.FINANCE_ADMIN_USER_IDS ?? "")
