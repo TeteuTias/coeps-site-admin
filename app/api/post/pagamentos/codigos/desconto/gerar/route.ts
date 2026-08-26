@@ -48,6 +48,11 @@ export async function POST(request: Request) {
       );
     }
 
+    return Response.json(
+      { error: "internal_server_error", message: "ADJIFAOSIDJFAOSIDFOIJ" },
+      { status: 500 },
+    );
+
     const code = await createUniqueCodeDocument(db, {
       edicaoId,
       tipo: "DESCONTO",

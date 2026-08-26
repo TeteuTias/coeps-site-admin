@@ -187,6 +187,7 @@ function formatAge(seconds: number | null) {
 }
 
 export default function PaymentCodesPage() {
+  const [isOrganizer, setIsOrganizer] = useState(false);
   const [items, setItems] = useState<CodeItem[]>([]);
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
   const [ledger, setLedger] = useState(EMPTY_LEDGER);
@@ -335,7 +336,7 @@ export default function PaymentCodesPage() {
 
     try {
       const data = await requestJson<{ message: string; code: { codigo: string } }>(
-        "/api/post/pagamentos/codigos/desconto/gerar",
+        "/api/post/pagamentos/codigos/desconto/gerar", // FAZENDO AQUI
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -667,6 +668,7 @@ export default function PaymentCodesPage() {
                 <p>Uso único em todo o congresso. O código é gerado pelo servidor.</p>
               </div>
             </div>
+
             <label htmlFor="discountPercentage">Percentual de desconto</label>
             <div className="codigos-percentage-input">
               <input
@@ -681,6 +683,20 @@ export default function PaymentCodesPage() {
               />
               <span>%</span>
             </div>
+            {/* Switch Button para Organizador */}
+            <div className="codigos-switch-container">
+              <label className="codigos-switch">
+                <input
+                  type="checkbox"
+                  checked={isOrganizer}
+                  onChange={(e) => setIsOrganizer(e.target.checked)}
+                />
+                <span className="codigos-switch-slider" />
+              </label>
+              <span className="codigos-switch-label">
+                {isOrganizer ? "É organizador" : "Não é organizador"}
+              </span>
+            </div>
             <button
               className="codigos-button codigos-button--primary"
               type="submit"
@@ -689,6 +705,8 @@ export default function PaymentCodesPage() {
               {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
               Gerar desconto
             </button>
+
+
           </form>
 
           <form className="codigos-panel" onSubmit={createTracking}>
