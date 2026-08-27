@@ -197,6 +197,7 @@ export async function GET(request: Request) {
         { edicaoId },
         {
           projection: {
+            perfilUtilizador: 1,
             codigo: 1,
             codigoNormalizado: 1,
             edicaoId: 1,
@@ -509,6 +510,7 @@ export async function GET(request: Request) {
       return {
         id: code._id?.toHexString() ?? null,
         edicaoId,
+        perfilUtilizador: code.perfilUtilizador || "Não definido",
         codigo: code.codigo,
         codigoNormalizado: code.codigoNormalizado,
         tipo: code.tipo,

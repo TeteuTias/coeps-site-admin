@@ -41,6 +41,7 @@ export interface PaymentCodeDocument {
   reserva?: PaymentCodeReservation;
   usedAt?: Date;
   usedPurchaseId?: ObjectId | string;
+  perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA";
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;

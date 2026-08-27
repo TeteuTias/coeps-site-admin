@@ -156,6 +156,7 @@ export async function createUniqueCodeDocument(
     tipo: PaymentCodeType;
     percentualDesconto?: number;
     responsavel?: PaymentCodeResponsible;
+    perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA";
     createdBy: string;
   },
 ) {
@@ -174,6 +175,7 @@ export async function createUniqueCodeDocument(
       codigo,
       codigoNormalizado,
       tipo: input.tipo,
+      perfilUtilizador: input.perfilUtilizador,
       status: "ATIVO",
       createdAt: now,
       updatedAt: now,

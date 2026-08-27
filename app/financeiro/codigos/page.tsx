@@ -55,6 +55,7 @@ interface CodeItem {
   createdAt: string | null;
   updatedAt: string | null;
   metrics: CodeMetrics;
+  perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA"
 }
 
 interface CodesResponse {
@@ -187,6 +188,7 @@ function formatAge(seconds: number | null) {
 }
 
 export default function PaymentCodesPage() {
+  const [isOrganizer, setIsOrganizer] = useState(false);
   const [items, setItems] = useState<CodeItem[]>([]);
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
   const [ledger, setLedger] = useState(EMPTY_LEDGER);
@@ -335,13 +337,14 @@ export default function PaymentCodesPage() {
 
     try {
       const data = await requestJson<{ message: string; code: { codigo: string } }>(
-        "/api/post/pagamentos/codigos/desconto/gerar",
+        "/api/post/pagamentos/codigos/desconto/gerar", // FAZENDO AQUI
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             edicaoId: editionId,
             percentualDesconto: Number(discountPercentage),
+            isOrganizer
           }),
         },
       );
@@ -372,6 +375,7 @@ export default function PaymentCodesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             edicaoId: editionId,
+            isOrganizer,
             responsavel: {
               nome: trackingName,
               ...(trackingEmail.trim() ? { email: trackingEmail } : {}),
@@ -667,6 +671,7 @@ export default function PaymentCodesPage() {
                 <p>Uso único em todo o congresso. O código é gerado pelo servidor.</p>
               </div>
             </div>
+
             <label htmlFor="discountPercentage">Percentual de desconto</label>
             <div className="codigos-percentage-input">
               <input
@@ -681,6 +686,20 @@ export default function PaymentCodesPage() {
               />
               <span>%</span>
             </div>
+            {/* Switch Button para Organizador */}
+            <div className="codigos-switch-container pb-5">
+              <label className="codigos-switch">
+                <input
+                  type="checkbox"
+                  checked={isOrganizer}
+                  onChange={(e) => setIsOrganizer(e.target.checked)}
+                />
+                <span className="codigos-switch-slider" />
+              </label>
+              <span className="codigos-switch-label">
+                {isOrganizer ? "É organizador" : "Não é organizador"}
+              </span>
+            </div>
             <button
               className="codigos-button codigos-button--primary"
               type="submit"
@@ -689,6 +708,8 @@ export default function PaymentCodesPage() {
               {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
               Gerar desconto
             </button>
+
+
           </form>
 
           <form className="codigos-panel" onSubmit={createTracking}>
@@ -716,6 +737,19 @@ export default function PaymentCodesPage() {
               onChange={(event) => setTrackingEmail(event.target.value)}
               maxLength={254}
             />
+            <div className="codigos-switch-container pb-5">
+              <label className="codigos-switch">
+                <input
+                  type="checkbox"
+                  checked={isOrganizer}
+                  onChange={(e) => setIsOrganizer(e.target.checked)}
+                />
+                <span className="codigos-switch-slider" />
+              </label>
+              <span className="codigos-switch-label">
+                {isOrganizer ? "É organizador" : "Não é organizador"}
+              </span>
+            </div>
             <button
               className="codigos-button codigos-button--primary"
               type="submit"
@@ -795,6 +829,7 @@ export default function PaymentCodesPage() {
                     <th>Código</th>
                     <th>Configuração</th>
                     <th>Status</th>
+                    <th>Utilizador</th>
                     <th>Vendas brutas</th>
                     <th>Confirmadas sem risco</th>
                     <th>Pendentes</th>
@@ -853,6 +888,11 @@ export default function PaymentCodesPage() {
                           <span className={`codigos-status codigos-status--${item.status.toLowerCase()}`}>
                             {item.status}
                           </span>
+                        </td>
+                        <td className="">
+                          <strong>
+                            {item.perfilUtilizador || "NÃO DEFINIDO"}
+                          </strong>
                         </td>
                         <td>{item.metrics.confirmadasBrutas}</td>
                         <td>{item.metrics.confirmadas}</td>

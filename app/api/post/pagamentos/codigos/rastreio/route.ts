@@ -14,6 +14,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const edicaoId = normalizeEditionId(body.edicaoId);
+    const isOrganizer = body.isOrganizer === "true" || body.isOrganizer === true;
     if (!edicaoId) {
       return Response.json(
         {
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
       edicaoId,
       tipo: "RASTREIO",
       responsavel,
+      perfilUtilizador: isOrganizer ? "ORGANIZADOR" : "CONGRESSISTA",
       createdBy: authorization.identity.userId,
     });
 
