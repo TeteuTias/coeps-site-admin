@@ -7,6 +7,18 @@ import { useRouter } from "next/navigation"
 import './style.css'
 import QrCodeUserSearch from "../components/QrCodeUserSearch"
 
+const parseUserCreationDate = (value: unknown) => {
+    if (typeof value !== "string" || value.trim() === "") return null
+
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+}
+
+const formatUserCreationDate = (value: unknown) => {
+    const date = parseUserCreationDate(value)
+    return date ? date.toLocaleDateString("pt-BR") : "Data não informada"
+}
+
 export default function Page() {
     const [loading, setLoading] = useState<boolean>(true)
     const [dataUsers, setDataUsers] = useState<IUser[]>([])
@@ -53,7 +65,8 @@ export default function Page() {
 
     const filteredUsers = dataUsers.filter(user => {
         const term = searchTerm.toLowerCase()
-        const creationDate = new Date(user.informacoes_usuario.data_criacao).toISOString().split('T')[0]
+        const parsedCreationDate = parseUserCreationDate(user.informacoes_usuario.data_criacao)
+        const creationDate = parsedCreationDate?.toISOString().split('T')[0] ?? null
 
         const searchMatch = term === "" ||
             user?._id?.toLowerCase()?.includes(term) ||
@@ -63,8 +76,8 @@ export default function Page() {
 
         const statusMatch = selectedStatus === "" || user.pagamento.situacao === parseInt(selectedStatus, 10)
         const paymentTypeMatch = selectedPaymentType === "" || user.pagamento.tipo_pagamento === selectedPaymentType
-        const startDateMatch = startDate === "" || creationDate >= startDate
-        const endDateMatch = endDate === "" || creationDate <= endDate
+        const startDateMatch = startDate === "" || (creationDate !== null && creationDate >= startDate)
+        const endDateMatch = endDate === "" || (creationDate !== null && creationDate <= endDate)
 
         return searchMatch && statusMatch && paymentTypeMatch && startDateMatch && endDateMatch
     })
@@ -240,7 +253,7 @@ export default function Page() {
                                             <CalendarDays className="h-4 w-4" />
                                             <span className="usuarios-info-label">Criação:</span>
                                             <span className="usuarios-info-value">
-                                                {new Date(user.informacoes_usuario.data_criacao).toLocaleDateString()}
+                                                {formatUserCreationDate(user.informacoes_usuario.data_criacao)}
                                             </span>
                                         </div>
                                     </div>
