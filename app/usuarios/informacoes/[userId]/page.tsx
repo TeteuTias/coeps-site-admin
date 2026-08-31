@@ -1,7 +1,10 @@
 "use client"
 import { IPayment } from "@/app/lib/types/payments/payment.t"
 import type { AdminModernPayment, AdminUserPaymentsResponse } from "@/app/lib/types/payments/payment-admin.t"
-import { IUser } from "@/app/lib/types/user/user.t"
+import {
+    type AdminUserDetails,
+    parseAdminUserDetailsHttpResponse,
+} from "@/app/lib/users/admin-user-contract"
 import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight } from "lucide-react";
 import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
 import { useCallback, useEffect, useState, FormEvent, ChangeEvent } from "react"
@@ -69,13 +72,14 @@ const getPaymentStatusIconAndColor = (status?: string) => {
 
 export default function Page() {
     const { userId } = useParams<{ userId: string }>()
-    const [user, setUser] = useState<IUser | null>(null)
+    const [user, setUser] = useState<AdminUserDetails | null>(null)
+    const [loadError, setLoadError] = useState<string | null>(null)
     const [formData, setFormData] = useState({
         id_api: '',
         nome: '',
         email: '',
         numero_telefone: '',
-        situacao: 0,
+        situacao: "" as number | "",
         situacao_animacao: false,
         isPos_registration: false,
         tipo_pagamento: '' // Campo adicionado ao estado
@@ -90,32 +94,56 @@ export default function Page() {
     const router = useRouter()
 
     const fetchData = useCallback(async () => {
+        setLoadError(null)
         try {
             const responseCourses = await fetch(`/api/get/minicursosDeUsuario/${userId}`)
             if (!responseCourses.ok) throw new Error("Erro ao carregar informações de minicursos")
-            const courses: { data: ICourse[] } = await responseCourses.json()
-            setCourses(courses.data)
+            const courses: unknown = await responseCourses.json().catch(() => null)
+            if (
+                typeof courses !== "object" || courses === null ||
+                !("data" in courses) || !Array.isArray(courses.data)
+            ) {
+                throw new Error("As informações de minicursos estão em formato inválido.")
+            }
+            setCourses(courses.data as ICourse[])
             const response = await fetch(`/api/get/usuarioPorId/${userId}`)
-            if (!response.ok) throw new Error("Usuário não encontrado");
-            const userData: { data: IUser } = await response.json()
-            setUser(userData.data)
+            const userPayload: unknown = await response.json().catch(() => null)
+            const userData = parseAdminUserDetailsHttpResponse(response.ok, userPayload)
+            if (!userData) {
+                const message = typeof userPayload === "object" && userPayload !== null &&
+                    "message" in userPayload && typeof userPayload.message === "string"
+                    ? userPayload.message
+                    : response.ok
+                        ? "Os dados do usuário estão em formato inválido."
+                        : "Usuário não encontrado."
+                throw new Error(message)
+            }
+            setUser(userData)
             // Popula o estado do formulário com todos os dados, incluindo o novo campo
             setFormData({
-                id_api: userData.data.id_api || "",
-                nome: userData.data.informacoes_usuario.nome || '',
-                email: userData.data.informacoes_usuario.email || '',
-                numero_telefone: userData.data.informacoes_usuario.numero_telefone || '',
-                situacao: userData.data.pagamento.situacao,
-                situacao_animacao: userData.data.pagamento.situacao_animacao,
-                tipo_pagamento: userData.data.pagamento.tipo_pagamento || '',
-                isPos_registration: userData.data.isPos_registration,
+                id_api: userData.id_api || "",
+                nome: userData.informacoes_usuario.nome || '',
+                email: userData.informacoes_usuario.email || '',
+                numero_telefone: userData.informacoes_usuario.numero_telefone || '',
+                situacao: userData.pagamento.situacao ?? "",
+                situacao_animacao: userData.pagamento.situacao_animacao,
+                tipo_pagamento: userData.pagamento.tipo_pagamento || '',
+                isPos_registration: userData.isPos_registration,
             });
 
             try {
                 setModernPaymentsError(null)
                 const modernResponse = await fetch(`/api/get/pagamentos/usuario/${userId}`)
                 if (modernResponse.ok) {
-                    const modernData = await modernResponse.json() as AdminUserPaymentsResponse
+                    const modernData = await modernResponse.json() as Partial<AdminUserPaymentsResponse>
+                    if (
+                        !Array.isArray(modernData.payments) ||
+                        typeof modernData.issueCounts !== "object" || modernData.issueCounts === null ||
+                        typeof modernData.issueCounts.reviewRequired !== "number" ||
+                        typeof modernData.issueCounts.failed !== "number"
+                    ) {
+                        throw new Error("Resposta de pagamentos modernos inválida.")
+                    }
                     setModernPayments(modernData.payments)
                     setModernPaymentIssues(modernData.issueCounts)
                     setCanViewModernPayments(true)
@@ -135,6 +163,7 @@ export default function Page() {
         } catch (error) {
             console.error("Falha ao buscar usuário:", error)
             setUser(null)
+            setLoadError(error instanceof Error ? error.message : "Não foi possível carregar o usuário.")
         } finally {
             setIsLoading(false)
         }
@@ -160,10 +189,15 @@ export default function Page() {
         setIsSaving(true);
         try {
 
+            const { situacao, ...fields } = formData
             const response = await fetch(`/api/put/usuario/atualizarUsuario/`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...formData, userId })
+                body: JSON.stringify({
+                    ...fields,
+                    ...(situacao === "" ? {} : { situacao }),
+                    userId,
+                })
             });
 
             if (!response.ok) throw new Error("Falha ao salvar os dados.");
@@ -193,8 +227,8 @@ export default function Page() {
         return (
             <div className="admin-state admin-state--error" role="alert">
                 <span className="admin-state__mark">!</span>
-                <h1>Usuário não encontrado</h1>
-                <p>Volte para a lista de congressistas e selecione outro cadastro.</p>
+                <h1>Não foi possível carregar o usuário</h1>
+                <p>{loadError ?? "Volte para a lista de congressistas e selecione outro cadastro."}</p>
                 <Link href="/usuarios/" className="admin-state__action">Voltar para congressistas</Link>
             </div>
         )
@@ -218,6 +252,12 @@ export default function Page() {
                 <p className="main-subtitle">
                     Revise dados cadastrais, pagamento, inscrições e documentos associados.
                 </p>
+                {user.cadastroPendente && (
+                    <div className="financeiro-warning" role="note">
+                        <AlertCircle className="h-5 w-5" />
+                        <span>Cadastro pendente: alguns dados pessoais ainda não foram informados.</span>
+                    </div>
+                )}
                 <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-gray-200">
                         <div className="flex items-start gap-4">
@@ -257,6 +297,7 @@ export default function Page() {
                         <div>
                             <label htmlFor="situacao" className="block text-sm font-medium text-gray-700">Situação do Pagamento</label>
                             <select id="situacao" name="situacao" value={formData.situacao} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+                                <option value="" disabled>Status não informado</option>
                                 <option value="1">Pago</option>
                                 <option value="2">Pagamento Pendente</option>
                                 <option value="0">Não Pago</option>

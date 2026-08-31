@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:admin-users": "node --experimental-strip-types --test \"app/lib/users/__tests__/*.test.ts\"",
     "test:payments-admin": "node --experimental-strip-types --test \"app/lib/payments/__tests__/*.test.ts\""
   },
   "dependencies": {

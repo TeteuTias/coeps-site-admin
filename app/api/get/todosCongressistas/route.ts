@@ -1,5 +1,9 @@
 import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '@/app/lib/mongodb';
+import {
+    ADMIN_USER_SUMMARY_PROJECTION,
+    normalizeAdminUserList,
+} from '@/app/lib/users/admin-user-contract';
 import { NextResponse } from 'next/server';
 //
 //
@@ -19,12 +23,18 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
 
         const response = await db.collection(colecao).find(
             {},
-
+            { projection: ADMIN_USER_SUMMARY_PROJECTION },
         ).toArray()
 
-
+        const users = normalizeAdminUserList(response)
+        if (!users) {
+            return NextResponse.json(
+                { error: "invalid_user_data", message: "Os dados de usuários estão em formato inválido." },
+                { status: 500 },
+            )
+        }
         return NextResponse.json({
-            "data": [...response],
+            "data": users,
         }, { status: 200 });
 
     }

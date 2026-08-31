@@ -1,7 +1,10 @@
 import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '@/app/lib/mongodb';
+import {
+    ADMIN_USER_SUMMARY_PROJECTION,
+    normalizeAdminUserList,
+} from '@/app/lib/users/admin-user-contract';
 import { NextResponse } from 'next/server';
-import { ObjectId } from 'mongodb';
 //
 //
 // 
@@ -21,10 +24,19 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
         const result = await db.collection(colecao).find(
             {
                 "pagamento.situacao": 1
-            }
+            },
+            { projection: ADMIN_USER_SUMMARY_PROJECTION },
         ).toArray()
 
-        return NextResponse.json([...result], { status: 200 });
+        const users = normalizeAdminUserList(result)
+        if (!users) {
+            return NextResponse.json(
+                { error: "invalid_user_data", message: "Os dados de pagantes estão em formato inválido." },
+                { status: 500 },
+            )
+        }
+
+        return NextResponse.json({ data: users }, { status: 200 });
         // result[0] => IPaymentConfig
 
     }
