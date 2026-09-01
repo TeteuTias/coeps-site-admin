@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState, useMemo } from "react"
 import LoadingModal from "../components/LoadingModal"
 import { IAutomaticLotOccupancy, ILoteAutomatico, IPaymentConfig } from "../lib/types/payments/payment.t"
-import { IUser } from "../lib/types/user/user.t"
+import { parseAdminPaymentConfigHttpResponse } from "../lib/payments/payment-config-contract"
+import {
+    type AdminUserSummary,
+    displayUserField,
+    displayUserName,
+    filterAdminUsers,
+    parseAdminUserListHttpResponse,
+} from "../lib/users/admin-user-contract"
 import { useRouter } from "next/navigation"
 import './style.css'
 import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX, Tag, RefreshCw } from 'lucide-react'
@@ -28,26 +35,32 @@ const formatOccupancyTime = (value: string) => {
     }).format(date);
 };
 
-const hasValidAutomaticStructure = (lots: ILoteAutomatico[] | undefined) => {
+const hasValidAutomaticStructure = (lots: unknown): lots is ILoteAutomatico[] => {
     if (!Array.isArray(lots) || lots.length === 0) return false;
     const lotCodes = new Set<number>();
 
-    return lots.every((lot) => {
+    return lots.every((candidate) => {
+        if (typeof candidate !== "object" || candidate === null) return false;
+        const lot = candidate as Partial<ILoteAutomatico>;
+        const lotCode = lot.codigo;
+        const capacity = lot.limiteVagas;
+        const prices = lot.precos;
         if (
-            !Number.isInteger(lot.codigo) || lot.codigo < 0 || lotCodes.has(lot.codigo) ||
+            typeof lotCode !== "number" || !Number.isInteger(lotCode) || lotCode < 0 || lotCodes.has(lotCode) ||
             typeof lot.nome !== "string" || !lot.nome.trim() ||
-            !Number.isInteger(lot.limiteVagas) || lot.limiteVagas <= 0 ||
-            !lot.precos ||
-            ![lot.precos.valorAVista, lot.precos.valorBoleto, lot.precos.valorDebito, lot.precos.valorPix]
+            typeof capacity !== "number" || !Number.isInteger(capacity) || capacity <= 0 ||
+            typeof prices !== "object" || prices === null ||
+            ![prices.valorAVista, prices.valorBoleto, prices.valorDebito, prices.valorPix]
                 .every((value) => typeof value === "number" && Number.isFinite(value) && value >= 0) ||
-            !Array.isArray(lot.precos.parcelamentos)
+            !Array.isArray(prices.parcelamentos)
         ) {
             return false;
         }
 
-        lotCodes.add(lot.codigo);
+        lotCodes.add(lotCode);
         const installmentCodes = new Set<number>();
-        return lot.precos.parcelamentos.every((installment) => {
+        return prices.parcelamentos.every((installment) => {
+            if (typeof installment !== "object" || installment === null) return false;
             if (
                 !Number.isInteger(installment.codigo) || installment.codigo < 0 ||
                 installmentCodes.has(installment.codigo) ||
@@ -71,7 +84,10 @@ export default function Page() {
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
     const [paymentData, setPaymentData] = useState<IPaymentConfig | null>(null)
-    const [payedUsers, setPayedUsers] = useState<IUser[]>([])
+    const [paymentDataError, setPaymentDataError] = useState<string | null>(null)
+    const [payedUsers, setPayedUsers] = useState<AdminUserSummary[]>([])
+    const [payedUsersLoading, setPayedUsersLoading] = useState(false)
+    const [payedUsersError, setPayedUsersError] = useState<string | null>(null)
     const [editableParcelamentos, setEditableParcelamentos] = useState<IParcelamento[]>([]);
     const [isEditingInfo, setIsEditingInfo] = useState(false);
     const [isEditingParcelamentos, setIsEditingParcelamentos] = useState(false);
@@ -120,6 +136,77 @@ export default function Page() {
             setLotOccupancyLoading(false);
         }
     }, []);
+
+    const loadPaymentConfig = useCallback(async () => {
+        setPaymentDataError(null)
+        try {
+            const response = await fetch("/api/get/pagamentos/configuracaoPagamento", { cache: "no-store" })
+            const payload: unknown = await response.json().catch(() => null)
+            const config = parseAdminPaymentConfigHttpResponse(response.ok, payload)
+            if (!config) {
+                const message = typeof payload === "object" && payload !== null &&
+                    "message" in payload && typeof payload.message === "string"
+                    ? payload.message
+                    : response.ok
+                        ? "A configuração financeira recebida está em formato inválido."
+                        : "Não foi possível carregar a configuração financeira."
+                throw new Error(message)
+            }
+
+            setPaymentData(config)
+            setEditableInfo({
+                nome: config.nome,
+                edicaoId: config.edicaoId ?? '',
+                valorAVista: config.valorAVista,
+                valorBoleto: config.valorBoleto,
+                valorDebito: config.valorDebito,
+                valorPix: config.valorPix,
+            })
+            if (config.modo === "automatico") {
+                void loadLotOccupancy(config._id)
+            }
+        } catch (error) {
+            setPaymentDataError(
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível carregar a configuração financeira.",
+            )
+        }
+    }, [loadLotOccupancy])
+
+    const loadPayedUsers = useCallback(async () => {
+        setPayedUsersLoading(true)
+        setPayedUsersError(null)
+        try {
+            const response = await fetch("/api/get/pagamentos/listaInscritos/", { cache: "no-store" })
+            const payload: unknown = await response.json().catch(() => null)
+            const users = parseAdminUserListHttpResponse(response.ok, payload)
+            if (!users) {
+                const message = typeof payload === "object" && payload !== null &&
+                    "message" in payload && typeof payload.message === "string"
+                    ? payload.message
+                    : response.ok
+                        ? "A lista de pagantes recebida está em formato inválido."
+                        : "Não foi possível carregar a lista de pagantes."
+                throw new Error(message)
+            }
+            setPayedUsers(users)
+        } catch (error) {
+            setPayedUsersError(
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível carregar a lista de pagantes.",
+            )
+        } finally {
+            setPayedUsersLoading(false)
+        }
+    }, [])
+
+    const reloadPageData = useCallback(async () => {
+        setLoading(true)
+        await Promise.all([loadPaymentConfig(), loadPayedUsers()])
+        setLoading(false)
+    }, [loadPaymentConfig, loadPayedUsers])
 
     const handleStartLotEdit = (lot: ILoteAutomatico) => {
         setEditingLotCode(lot.codigo);
@@ -211,21 +298,16 @@ export default function Page() {
                     },
                 }),
             });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.message ?? "Falha ao salvar o lote.");
+            const result: unknown = await response.json().catch(() => null);
+            if (!response.ok) {
+                const message = typeof result === "object" && result !== null &&
+                    "message" in result && typeof result.message === "string"
+                    ? result.message
+                    : "Falha ao salvar o lote."
+                throw new Error(message);
+            }
 
-            setPaymentData((current) => {
-                const lots = current?.configuracaoLotesAutomaticos?.lotes;
-                if (!current || !lots) return current;
-                return {
-                    ...current,
-                    configuracaoLotesAutomaticos: {
-                        lotes: lots.map((lot) =>
-                            lot.codigo === editingLotCode ? result.data.lote : lot
-                        ),
-                    },
-                };
-            });
+            await loadPaymentConfig();
             handleCancelLotEdit();
             await loadLotOccupancy(paymentData._id);
             alert("Lote automático atualizado com sucesso!");
@@ -273,23 +355,13 @@ export default function Page() {
         setEditableParcelamentos(updatedParcelamentos);
     };
 
-    const filteredUsers = payedUsers.filter(user => {
-        const term = searchTerm.toLowerCase()
-        const creationDate = new Date(user.informacoes_usuario.data_criacao).toISOString().split('T')[0]
-
-        const searchMatch = term === "" ||
-            user?._id?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.email?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.nome.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.numero_telefone?.includes(term)
-
-        const statusMatch = selectedStatus === "" || user.pagamento.situacao === parseInt(selectedStatus, 10)
-        const paymentTypeMatch = selectedPaymentType === "" || user.pagamento.tipo_pagamento === selectedPaymentType
-        const startDateMatch = startDate === "" || creationDate >= startDate
-        const endDateMatch = endDate === "" || creationDate <= endDate
-
-        return searchMatch && statusMatch && paymentTypeMatch && startDateMatch && endDateMatch
-    })
+    const filteredUsers = useMemo(() => filterAdminUsers(payedUsers, {
+        searchTerm,
+        selectedStatus,
+        selectedPaymentType,
+        startDate,
+        endDate,
+    }), [payedUsers, searchTerm, selectedStatus, selectedPaymentType, startDate, endDate])
 
     const handleSaveParcelamentos = async () => {
         try {
@@ -318,39 +390,8 @@ export default function Page() {
     const router = useRouter()
 
     useEffect(() => {
-        const fetchData = async () => {
-            const data = await fetch("/api/get/pagamentos/configuracaoPagamento")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            const fetchedData = await data.json()
-            setPaymentData(fetchedData)
-            setEditableInfo({
-                nome: fetchedData.nome,
-                edicaoId: fetchedData.edicaoId ?? '',
-                valorAVista: fetchedData.valorAVista,
-                valorBoleto: fetchedData.valorBoleto,
-                valorDebito: fetchedData.valorDebito,
-                valorPix: fetchedData.valorPix
-            })
-            if (fetchedData.modo === "automatico") {
-                void loadLotOccupancy(fetchedData._id)
-            }
-            setLoading(false)
-        }
-
-        const fetchDataPayedUsers = async () => {
-            const data = await fetch("/api/get/pagamentos/listaInscritos/")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            setPayedUsers(await data.json())
-            setLoading(false)
-        }
-
-        fetchData()
-        fetchDataPayedUsers()
-    }, [loadLotOccupancy])
+        void reloadPageData()
+    }, [reloadPageData])
 
     const handleInfoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -386,8 +427,7 @@ export default function Page() {
                 return;
             };
 
-            const updatedData = await response.json();
-            setPaymentData(prev => prev ? ({ ...prev, ...updatedData.data }) : prev);
+            await loadPaymentConfig();
             if (paymentData?.modo === "automatico" && paymentData._id) {
                 void loadLotOccupancy(paymentData._id);
             }
@@ -441,42 +481,18 @@ export default function Page() {
             return
         }
 
-        const fetchData = async () => {
-            const data = await fetch("/api/get/pagamentos/configuracaoPagamento")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            const fetchedData = await data.json()
-            setPaymentData(fetchedData)
-            setEditableInfo({
-                nome: fetchedData.nome,
-                edicaoId: fetchedData.edicaoId ?? '',
-                valorAVista: fetchedData.valorAVista,
-                valorBoleto: fetchedData.valorBoleto,
-                valorDebito: fetchedData.valorDebito,
-                valorPix: fetchedData.valorPix
-            })
-            setLoading(false)
-        }
-
-        const fetchDataPayedUsers = async () => {
-            const data = await fetch("/api/get/pagamentos/listaInscritos/")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            setPayedUsers(await data.json())
-            setLoading(false)
-        }
-
-        await fetchData()
-        await fetchDataPayedUsers()
+        await Promise.all([loadPaymentConfig(), loadPayedUsers()])
         setLoading(false)
         alert("Pagamentos aceitos alterados com sucesso!")
     }
 
     const paymentTypes = useMemo(() => {
         if (!payedUsers.length) return []
-        const types = new Set(payedUsers.map(user => user.pagamento.tipo_pagamento).filter(Boolean))
+        const types = new Set(
+            payedUsers
+                .map(user => user.pagamento.tipo_pagamento)
+                .filter((type): type is string => Boolean(type)),
+        )
         return Array.from(types)
     }, [payedUsers])
 
@@ -494,7 +510,10 @@ export default function Page() {
             <div className="admin-state admin-state--error" role="alert">
                 <span className="admin-state__mark">!</span>
                 <h1>Não foi possível carregar o financeiro</h1>
-                <p>Atualize a página ou tente novamente em alguns instantes.</p>
+                <p>{paymentDataError ?? "Atualize a página ou tente novamente em alguns instantes."}</p>
+                <button type="button" className="financeiro-btn financeiro-btn-primary" onClick={() => void reloadPageData()}>
+                    Tentar novamente
+                </button>
             </div>
         );
     }
@@ -1193,6 +1212,31 @@ export default function Page() {
                         </div>
                     </div>
 
+                    {payedUsersError && (
+                        <div className="financeiro-lot-occupancy-state financeiro-lot-occupancy-state--error" role="alert">
+                            <AlertTriangle size={18} />
+                            <span>
+                                {payedUsersError}
+                                {payedUsers.length > 0 ? " A última lista válida permanece visível." : ""}
+                            </span>
+                            <button
+                                type="button"
+                                className="financeiro-btn financeiro-btn-secondary"
+                                onClick={() => void loadPayedUsers()}
+                                disabled={payedUsersLoading}
+                            >
+                                Tentar novamente
+                            </button>
+                        </div>
+                    )}
+
+                    {payedUsersLoading && (
+                        <div className="financeiro-lot-occupancy-state" role="status">
+                            <RefreshCw size={18} className="financeiro-refresh-icon--spinning" />
+                            Atualizando lista de pagantes…
+                        </div>
+                    )}
+
                     <div className="usuarios-filtros">
                         <div className="usuarios-filtros-grid">
                             <div className="usuarios-filtro-busca">
@@ -1265,23 +1309,29 @@ export default function Page() {
                                 <div className="financeiro-user-info">
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">Nome:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.nome}</span>
+                                        <span className="financeiro-user-value">{displayUserName(user)}</span>
                                     </div>
+                                    {user.cadastroPendente && (
+                                        <div className="financeiro-user-item">
+                                            <span className="financeiro-user-label">Cadastro:</span>
+                                            <span className="financeiro-user-value">Cadastro pendente</span>
+                                        </div>
+                                    )}
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">Email:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.email}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.informacoes_usuario.email)}</span>
                                     </div>
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">Telefone:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.numero_telefone}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.informacoes_usuario.numero_telefone)}</span>
                                     </div>
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">CPF:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.cpf}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.informacoes_usuario.cpf)}</span>
                                     </div>
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">ID Asaas:</span>
-                                        <span className="financeiro-user-value">{user.id_api}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.id_api)}</span>
                                     </div>
                                 </div>
                                 <div className="financeiro-user-actions">

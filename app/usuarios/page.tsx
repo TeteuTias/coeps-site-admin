@@ -1,27 +1,29 @@
 "use client"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import LoadingModal from "../components/LoadingModal"
-import { IUser } from "../lib/types/user/user.t"
+import {
+    type AdminUserSummary,
+    adminDateToIso,
+    displayUserField,
+    displayUserName,
+    filterAdminUsers,
+    parseAdminUserListHttpResponse,
+} from "../lib/users/admin-user-contract"
 import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import './style.css'
 import QrCodeUserSearch from "../components/QrCodeUserSearch"
 
-const parseUserCreationDate = (value: unknown) => {
-    if (typeof value !== "string" || value.trim() === "") return null
-
-    const date = new Date(value)
-    return Number.isNaN(date.getTime()) ? null : date
-}
-
-const formatUserCreationDate = (value: unknown) => {
-    const date = parseUserCreationDate(value)
+const formatUserCreationDate = (value: string | null) => {
+    const iso = adminDateToIso(value)
+    const date = iso ? new Date(iso) : null
     return date ? date.toLocaleDateString("pt-BR") : "Data não informada"
 }
 
 export default function Page() {
     const [loading, setLoading] = useState<boolean>(true)
-    const [dataUsers, setDataUsers] = useState<IUser[]>([])
+    const [error, setError] = useState<string | null>(null)
+    const [dataUsers, setDataUsers] = useState<AdminUserSummary[]>([])
     const router = useRouter()
 
     const [searchTerm, setSearchTerm] = useState<string>("")
@@ -30,20 +32,41 @@ export default function Page() {
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
 
-    const hydrate = async () => {
-        const response = await fetch(`/api/get/todosCongressistas/`)
-        const dataUsers: { data: IUser[] } = await response.json()
-        setDataUsers(dataUsers.data)
-        setLoading(false)
-    }
+    const hydrate = useCallback(async () => {
+        setLoading(true)
+        setError(null)
+        try {
+            const response = await fetch(`/api/get/todosCongressistas/`, { cache: "no-store" })
+            const payload: unknown = await response.json().catch(() => null)
+            const users = parseAdminUserListHttpResponse(response.ok, payload)
+            if (!users) {
+                const message = typeof payload === "object" && payload !== null &&
+                    "message" in payload && typeof payload.message === "string"
+                    ? payload.message
+                    : response.ok
+                        ? "A lista de congressistas recebida está em formato inválido."
+                        : "Não foi possível carregar os congressistas."
+                throw new Error(message)
+            }
+            setDataUsers(users)
+        } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "Não foi possível carregar os congressistas.")
+        } finally {
+            setLoading(false)
+        }
+    }, [])
 
     useEffect(() => {
-        hydrate()
-    }, [])
+        void hydrate()
+    }, [hydrate])
 
     const paymentTypes = useMemo(() => {
         if (!dataUsers.length) return []
-        const types = new Set(dataUsers.map(user => user.pagamento.tipo_pagamento).filter(Boolean))
+        const types = new Set(
+            dataUsers
+                .map(user => user.pagamento.tipo_pagamento)
+                .filter((type): type is string => Boolean(type)),
+        )
         return Array.from(types)
     }, [dataUsers])
 
@@ -55,32 +78,22 @@ export default function Page() {
         setEndDate("")
     }
 
-    const getSituacaoBadge = (situacao: number) => {
+    const getSituacaoBadge = (situacao: AdminUserSummary["pagamento"]["situacao"]) => {
         switch (situacao) {
             case 0: return <span className="usuarios-badge usuarios-badge-error"><BadgeX className="mr-1.5 h-4 w-4" />Não Inscrito</span>
+            case 1: return <span className="usuarios-badge usuarios-badge-success"><BadgeCheck className="mr-1.5 h-4 w-4" />Inscrito</span>
             case 2: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Pagamento em Aberto</span>
-            default: return <span className="usuarios-badge usuarios-badge-success"><BadgeCheck className="mr-1.5 h-4 w-4" />Inscrito</span>
+            default: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Status não informado</span>
         }
     }
 
-    const filteredUsers = dataUsers.filter(user => {
-        const term = searchTerm.toLowerCase()
-        const parsedCreationDate = parseUserCreationDate(user.informacoes_usuario.data_criacao)
-        const creationDate = parsedCreationDate?.toISOString().split('T')[0] ?? null
-
-        const searchMatch = term === "" ||
-            user?._id?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.email?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.nome.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.numero_telefone?.includes(term)
-
-        const statusMatch = selectedStatus === "" || user.pagamento.situacao === parseInt(selectedStatus, 10)
-        const paymentTypeMatch = selectedPaymentType === "" || user.pagamento.tipo_pagamento === selectedPaymentType
-        const startDateMatch = startDate === "" || (creationDate !== null && creationDate >= startDate)
-        const endDateMatch = endDate === "" || (creationDate !== null && creationDate <= endDate)
-
-        return searchMatch && statusMatch && paymentTypeMatch && startDateMatch && endDateMatch
-    })
+    const filteredUsers = useMemo(() => filterAdminUsers(dataUsers, {
+        searchTerm,
+        selectedStatus,
+        selectedPaymentType,
+        startDate,
+        endDate,
+    }), [dataUsers, searchTerm, selectedStatus, selectedPaymentType, startDate, endDate])
 
     // Estatísticas
     const totalUsers = dataUsers.length
@@ -95,6 +108,19 @@ export default function Page() {
                 <span className="usuarios-loading-text">Carregando congressistas...</span>
             </div>
         );
+    }
+
+    if (error) {
+        return (
+            <div className="admin-state admin-state--error" role="alert">
+                <span className="admin-state__mark">!</span>
+                <h1>Não foi possível carregar os congressistas</h1>
+                <p>{error}</p>
+                <button type="button" className="usuarios-btn usuarios-btn-primary" onClick={() => void hydrate()}>
+                    Tentar novamente
+                </button>
+            </div>
+        )
     }
 
     return (
@@ -228,13 +254,18 @@ export default function Page() {
                                             <User className="h-6 w-6" />
                                         </div>
                                         <div className="usuarios-user-info">
-                                            <h3 className="usuarios-user-name" title={user.informacoes_usuario.nome}>
-                                                {user.informacoes_usuario.nome}
+                                            <h3 className="usuarios-user-name" title={displayUserName(user)}>
+                                                {displayUserName(user)}
                                             </h3>
-                                            <p className="usuarios-user-email" title={user.informacoes_usuario.email}>
+                                            <p className="usuarios-user-email" title={displayUserField(user.informacoes_usuario.email)}>
                                                 <Mail className="h-4 w-4" />
-                                                {user.informacoes_usuario.email}
+                                                {displayUserField(user.informacoes_usuario.email)}
                                             </p>
+                                            {user.cadastroPendente && (
+                                                <span className="usuarios-badge usuarios-badge-warning">
+                                                    <BadgeAlert className="mr-1.5 h-4 w-4" />Cadastro pendente
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
@@ -247,7 +278,7 @@ export default function Page() {
                                         <div className="usuarios-info-item">
                                             <Phone className="h-4 w-4" />
                                             <span className="usuarios-info-label">Telefone:</span>
-                                            <span className="usuarios-info-value">{user.informacoes_usuario.numero_telefone}</span>
+                                            <span className="usuarios-info-value">{displayUserField(user.informacoes_usuario.numero_telefone)}</span>
                                         </div>
                                         <div className="usuarios-info-item">
                                             <CalendarDays className="h-4 w-4" />

@@ -1,5 +1,14 @@
 'use client'
-import { IUser } from '@/app/lib/types/user/user.t';
+import {
+    type AdminUserDetails,
+    type AdminUserSummary,
+    adminUserInitial,
+    displayUserField,
+    displayUserName,
+    parseAdminUserDetailsPayload,
+    parseAdminUserListPayload,
+} from '@/app/lib/users/admin-user-contract';
+import { parseDataObjectPayload } from '@/app/lib/api-data-contract';
 import { Dispatch, SetStateAction, useEffect, useState } from 'react';
 import { Html5Qrcode, CameraDevice, Html5QrcodeCameraScanConfig } from 'html5-qrcode';
 import LoadingModal from '@/app/components/LoadingModal';
@@ -12,16 +21,20 @@ import * as XLSX from 'xlsx';
 import { useUser } from '@/app/lib/auth0-client';
 import { useParams } from 'next/navigation';
 
-interface Usuario {
-    _id: string,
-    informacoes_usuario: {
-        cpf: string;
-        data_criacao: string;
-        email: string;
-        nome: string;
-        numero_telefone: string;
-        titulo_honorario: string;
-    };
+const parseLecturePayload = (value: unknown): ILecture | null => {
+    const lecture = parseDataObjectPayload(value)
+    if (
+        !lecture ||
+        typeof lecture._id !== "string" ||
+        typeof lecture.name !== "string" ||
+        !Array.isArray(lecture.attendanceListInit) ||
+        !lecture.attendanceListInit.every((id) => typeof id === "string") ||
+        !Array.isArray(lecture.attendanceListEnd) ||
+        !lecture.attendanceListEnd.every((id) => typeof id === "string")
+    ) {
+        return null
+    }
+    return lecture as unknown as ILecture
 }
 
 const MyComponent = () => {
@@ -29,9 +42,9 @@ const MyComponent = () => {
     const user = useUser()
     const [data, setData] = useState<string[]>([]);
     const [listType, setListType] = useState<"init" | "end">("init")
-    const [allUsers, setAllUsers] = useState<IUser[]>([])
+    const [allUsers, setAllUsers] = useState<AdminUserSummary[]>([])
     const [errorBolean, setErrorBolean] = useState<boolean>(false);
-    const [data2, setData2] = useState<Usuario[]>([]);
+    const [data2, setData2] = useState<AdminUserSummary[]>([]);
     const [dataPresentes, setDataPresente] = useState<{
         "init": string[],
         "end": string[],
@@ -73,17 +86,20 @@ const MyComponent = () => {
                     throw new Error("Erro ao buscar dados de participantes ou lista de presença");
                 }
 
-                const courseResult: { data: ILecture } = await courseResponse.json()
-                const allUsersResult: { data: IUser[] } = await allUsersResponse.json()
+                const courseResult: unknown = await courseResponse.json().catch(() => null)
+                const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
+                const lecture = parseLecturePayload(courseResult)
+                const normalizedUsers = parseAdminUserListPayload(allUsersResult)
+                if (!lecture || !normalizedUsers) throw new Error("Dados da palestra ou congressistas inválidos")
 
-                setCourseData(courseResult.data)
-                setAllUsers(allUsersResult.data)
+                setCourseData(lecture)
+                setAllUsers(normalizedUsers)
                 setDataPresente({
-                    init: courseResult.data.attendanceListInit,
-                    end: courseResult.data.attendanceListEnd
+                    init: lecture.attendanceListInit,
+                    end: lecture.attendanceListEnd
                 })
 
-                return allUsersResult.data.map((u) => `${u._id}`)
+                return normalizedUsers.map((u) => `${u._id}`)
             };
 
             const fetchUserInfo = async (userIds: string[]) => {
@@ -99,8 +115,10 @@ const MyComponent = () => {
                     throw new Error("Erro na resposta da API de informações de usuários");
                 }
 
-                const result: { data: Usuario[] } = await response.json();
-                setData2(result.data);
+                const result: unknown = await response.json().catch(() => null);
+                const normalizedUsers = parseAdminUserListPayload(result)
+                if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
+                setData2(normalizedUsers);
             };
 
             const participantIds = await fetchParticipantAndAttendanceData();
@@ -127,15 +145,18 @@ const MyComponent = () => {
                         throw new Error("Erro ao buscar dados de participantes ou lista de presença");
                     }
 
-                    const courseResult: { data: ILecture } = await courseResponse.json()
-                    const allUsersResult: { data: IUser[] } = await allUsersResponse.json()
-                    setCourseData(courseResult.data)
-                    setAllUsers(allUsersResult.data)
+                    const courseResult: unknown = await courseResponse.json().catch(() => null)
+                    const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
+                    const lecture = parseLecturePayload(courseResult)
+                    const normalizedUsers = parseAdminUserListPayload(allUsersResult)
+                    if (!lecture || !normalizedUsers) throw new Error("Dados da palestra ou congressistas inválidos")
+                    setCourseData(lecture)
+                    setAllUsers(normalizedUsers)
                     setDataPresente({
-                        init: courseResult.data.attendanceListInit,
-                        end: courseResult.data.attendanceListEnd
+                        init: lecture.attendanceListInit,
+                        end: lecture.attendanceListEnd
                     })
-                    return allUsersResult.data.map((u) => `${u._id}`)
+                    return normalizedUsers.map((u) => `${u._id}`)
                 };
 
                 const fetchUserInfo = async (userIds: string[]) => {
@@ -151,8 +172,10 @@ const MyComponent = () => {
                         throw new Error("Erro na resposta da API de informações de usuários");
                     }
 
-                    const result: { data: Usuario[] } = await response.json();
-                    setData2(result.data);
+                    const result: unknown = await response.json().catch(() => null);
+                    const normalizedUsers = parseAdminUserListPayload(result)
+                    if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
+                    setData2(normalizedUsers);
                 };
 
                 const participantIds = await fetchParticipantAndAttendanceData();
@@ -296,9 +319,9 @@ const MyComponent = () => {
                         {data2.map((item, index) => (
                             <tr key={item._id} className="presenca-lista-row">
                                 <td className="presenca-lista-nome">
-                                    <span>{index + 1}. {item.informacoes_usuario.nome.toLocaleUpperCase()}</span>
+                                    <span>{index + 1}. {displayUserName(item).toLocaleUpperCase("pt-BR")}</span>
                                 </td>
-                                <td className="presenca-lista-email">{item.informacoes_usuario.email}</td>
+                                <td className="presenca-lista-email">{displayUserField(item.informacoes_usuario.email)}</td>
                                 <td className="presenca-lista-status">
                                     <span className={`presenca-lista-status-badge ${dataPresentes[listType].includes(item._id) ? 'presente' : 'ausente'}`}>
                                         {dataPresentes[listType].includes(`${item._id}`) ? "PRESENTE" : "AUSENTE"}
@@ -581,13 +604,22 @@ const QRCodeScanner: React.FC<{ listType: "end" | "init", courseData: ILecture, 
 
 const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void> }> = ({ hydrateData, courseData, qrCodeResult, closeModal, listType }) => {
     const [isLoading, setIsLoading] = useState<boolean>(true)
-    const [user, setUser] = useState<IUser | null>(null)
+    const [user, setUser] = useState<AdminUserDetails | null>(null)
+    const [loadError, setLoadError] = useState<string | null>(null)
     useEffect(() => {
         const fetchUser = async () => {
-            const userFetch = await fetch(`/api/get/usuarioPorId/${qrCodeResult}`)
-            const user: { data: IUser } = await userFetch.json()
-            setUser(user.data)
-            setIsLoading(false)
+            try {
+                const userFetch = await fetch(`/api/get/usuarioPorId/${qrCodeResult}`)
+                const payload: unknown = await userFetch.json().catch(() => null)
+                if (!userFetch.ok) throw new Error("Usuário não encontrado")
+                const normalizedUser = parseAdminUserDetailsPayload(payload)
+                if (!normalizedUser) throw new Error("Dados do usuário inválidos")
+                setUser(normalizedUser)
+            } catch (error) {
+                setLoadError(error instanceof Error ? error.message : "Não foi possível carregar o usuário")
+            } finally {
+                setIsLoading(false)
+            }
         }
         fetchUser()
     }, [qrCodeResult])
@@ -630,10 +662,10 @@ const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture,
                         <section className="attendance-modal-section">
                             <span className="attendance-modal-label">Informações gerais</span>
                             <dl className="attendance-user-details">
-                                <div><dt>Nome</dt><dd>{user?.informacoes_usuario?.nome}</dd></div>
-                                <div><dt>CPF</dt><dd>{user?.informacoes_usuario?.cpf}</dd></div>
-                                <div><dt>E-mail</dt><dd>{user?.informacoes_usuario?.email}</dd></div>
-                                <div><dt>Telefone</dt><dd>{user?.informacoes_usuario?.numero_telefone}</dd></div>
+                                <div><dt>Nome</dt><dd>{user ? displayUserName(user) : "Não informado"}</dd></div>
+                                <div><dt>CPF</dt><dd>{displayUserField(user?.informacoes_usuario.cpf ?? null)}</dd></div>
+                                <div><dt>E-mail</dt><dd>{displayUserField(user?.informacoes_usuario.email ?? null)}</dd></div>
+                                <div><dt>Telefone</dt><dd>{displayUserField(user?.informacoes_usuario.numero_telefone ?? null)}</dd></div>
                             </dl>
                         </section>
                         <section className="attendance-modal-section">
@@ -644,24 +676,32 @@ const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture,
                                         Atenção: esse congressista não realizou o pagamento do congresso.
                                     </p>
                                 )}
+                                {loadError && (
+                                    <p className="attendance-feedback attendance-feedback-warning">{loadError}</p>
+                                )}
+                                {user?.cadastroPendente && (
+                                    <p className="attendance-feedback attendance-feedback-warning">
+                                        Cadastro pendente: alguns dados pessoais ainda não foram informados.
+                                    </p>
+                                )}
                                 {listType === "init" && courseData.attendanceListInit?.includes(user?._id || "") && (
                                     <p className="attendance-feedback attendance-feedback-positive">Presença de início já registrada.</p>
                                 )}
-                                {listType === "init" && !courseData.attendanceListInit?.includes(user?._id || "") && (
+                                {user && listType === "init" && !courseData.attendanceListInit?.includes(user._id) && (
                                     <p className="attendance-feedback attendance-feedback-neutral">Presença de início ainda não registrada.</p>
                                 )}
                                 {listType === "end" && courseData.attendanceListEnd?.includes(user?._id || "") && (
                                     <p className="attendance-feedback attendance-feedback-positive">Presença de fim já registrada.</p>
                                 )}
-                                {listType === "end" && !courseData.attendanceListEnd?.includes(user?._id || "") && (
+                                {user && listType === "end" && !courseData.attendanceListEnd?.includes(user._id) && (
                                     <p className="attendance-feedback attendance-feedback-neutral">Presença de fim ainda não registrada.</p>
                                 )}
                             </div>
                         </section>
                     </div>
                     <footer className="attendance-modal-actions">
-                        {((listType === "init" && !courseData.attendanceListInit?.includes(user?._id || "")) ||
-                            (listType === "end" && !courseData.attendanceListEnd?.includes(user?._id || ""))) && (
+                        {user && ((listType === "init" && !courseData.attendanceListInit?.includes(user._id)) ||
+                            (listType === "end" && !courseData.attendanceListEnd?.includes(user._id))) && (
                                 <button
                                     type="button"
                                     onClick={
@@ -695,8 +735,8 @@ const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture,
                                     Dar Presença · {listType === "init" ? "Início" : "Fim"}
                                 </button>
                             )}
-                        {((listType === "init" && courseData.attendanceListInit?.includes(user?._id || "")) ||
-                            (listType === "end" && courseData.attendanceListEnd?.includes(user?._id || ""))) && (
+                        {user && ((listType === "init" && courseData.attendanceListInit?.includes(user._id)) ||
+                            (listType === "end" && courseData.attendanceListEnd?.includes(user._id))) && (
                                 <button
                                     type="button"
                                     onClick={
@@ -745,7 +785,7 @@ interface AllUsersModalProps {
     isOpen: boolean;
     onClose: () => void;
     onUserSelect: (user: string) => Promise<void>; // Função para lidar com a seleção
-    usersData: IUser[];
+    usersData: AdminUserSummary[];
     setListType: Dispatch<SetStateAction<"init" | "end">>,
     listType: "init" | "end"
 }
@@ -838,14 +878,17 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
                                     <div className="all-users-modal-user-content">
                                         <div className="all-users-modal-user-avatar">
                                             <span className="all-users-modal-avatar-text">
-                                                {user.informacoes_usuario.nome.charAt(0)}
+                                                {adminUserInitial(user)}
                                             </span>
                                         </div>
                                         <div className="all-users-modal-user-info">
                                             <p className="all-users-modal-user-name">
-                                                {user.informacoes_usuario.titulo_honorario} {user.informacoes_usuario.nome}
+                                                {user.informacoes_usuario.titulo_honorario} {displayUserName(user)}
                                             </p>
-                                            <p className="all-users-modal-user-email">{user.informacoes_usuario.email}</p>
+                                            <p className="all-users-modal-user-email">{displayUserField(user.informacoes_usuario.email)}</p>
+                                            {user.cadastroPendente && (
+                                                <p className="all-users-modal-payment-status">Cadastro pendente</p>
+                                            )}
                                             {user.pagamento.situacao != 1 && (
                                                 <p className="all-users-modal-payment-status">Não inscrito no congresso</p>
                                             )}
@@ -871,16 +914,16 @@ function ExportButton({
 }: {
     inscritos: string[];
     presentes: { init: string[]; end: string[] };
-    todosUsuarios: Usuario[];
+    todosUsuarios: AdminUserSummary[];
 }) {
     const getDataFromIds = (ids: string[]) =>
         ids
             .map((usuarioId: string) => todosUsuarios.find(u => u._id === usuarioId))
-            .filter((usuario): usuario is Usuario => usuario !== undefined)
+            .filter((usuario): usuario is AdminUserSummary => usuario !== undefined)
             .map(usuario => ({
-                NOME: usuario.informacoes_usuario.nome,
-                CPF: usuario.informacoes_usuario.cpf,
-                EMAIL: usuario.informacoes_usuario.email,
+                NOME: displayUserName(usuario),
+                CPF: displayUserField(usuario.informacoes_usuario.cpf),
+                EMAIL: displayUserField(usuario.informacoes_usuario.email),
             }));
 
     const handleDownload = () => {

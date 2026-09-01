@@ -1,27 +1,40 @@
 'use client'
 import Link from 'next/link';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import './style.css';
 import { Users, ClipboardList, UserPlus, UserMinus, CheckCircle, Loader2 } from 'lucide-react';
 import { ICourse, ILecture } from '../lib/types/events/event.t';
+import { parseDataArrayPayload } from '../lib/api-data-contract';
 
-interface DataStructure {
-  data: ICourse[];
+const isRecord = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+)
+
+const isCourseSummary = (value: unknown): value is ICourse => {
+  if (!isRecord(value)) return false
+  return (
+    typeof value._id === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.type === 'string' &&
+    typeof value.maxParticipants === 'number' &&
+    Number.isFinite(value.maxParticipants) &&
+    Array.isArray(value.participants) &&
+    value.participants.every((id) => typeof id === 'string')
+  )
 }
 
-interface Usuario {
-  _id: string,
-  name: string,
-  description: string,
-  participants: string[],
-  maxParticipants: number,
+const isLectureSummary = (value: unknown): value is ILecture => {
+  if (!isRecord(value)) return false
+  return (
+    typeof value._id === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.type === 'string'
+  )
 }
 
 const MyComponent = () => {
   const [dataLecture, setDataLecture] = useState<ILecture[]>([])
-  const [data, setData] = useState<DataStructure>({
-    data: [],
-  });
+  const [courses, setCourses] = useState<ICourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -36,10 +49,17 @@ const MyComponent = () => {
         if (!response.ok || !response2.ok) {
           throw new Error('Erro na resposta da rede');
         }
-        const result2: { data: ILecture[] } = await response2.json()
-        const result = await response.json();
-        setDataLecture(result2.data)
-        setData(result);
+        const [coursePayload, lecturePayload]: unknown[] = await Promise.all([
+          response.json().catch(() => null),
+          response2.json().catch(() => null),
+        ])
+        const parsedCourses = parseDataArrayPayload(coursePayload, isCourseSummary)
+        const parsedLectures = parseDataArrayPayload(lecturePayload, isLectureSummary)
+        if (!parsedCourses || !parsedLectures) {
+          throw new Error('As listas de atividades estão em formato inválido')
+        }
+        setDataLecture(parsedLectures)
+        setCourses(parsedCourses);
       } catch (error) {
         setError("OCORREU ALGO ERRADO. RECARREGUE");
       } finally {
@@ -87,12 +107,12 @@ const MyComponent = () => {
       <div className="presenca-estatisticas">
         <div className="presenca-estatistica-card">
           <ClipboardList size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
-          <span className="presenca-estatistica-valor">{data.data.length}</span>
+          <span className="presenca-estatistica-valor">{courses.length}</span>
           <span className="presenca-estatistica-label">Total de Minicursos</span>
         </div>
         <div className="presenca-estatistica-card">
           <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--carmin)' }} />
-          <span className="presenca-estatistica-valor">{data.data.reduce((acc, cur) => acc + cur.participants.length, 0)}</span>
+          <span className="presenca-estatistica-valor">{courses.reduce((acc, cur) => acc + cur.participants.length, 0)}</span>
           <span className="presenca-estatistica-label">Total de Inscritos</span>
         </div>
       </div>
@@ -106,7 +126,7 @@ const MyComponent = () => {
         />
       </div>
       <div className="presenca-lista">
-        {data.data.filter(filterMinicurso).map((value, idx) => (
+        {courses.filter(filterMinicurso).map((value, idx) => (
           <div className="presenca-card fadeInUp" style={{ animationDelay: `${0.1 * idx}s` }} key={value._id}>
             <div className="presenca-card-estatistica w-fit">{value.type}</div>
             <div className="presenca-card-header">
