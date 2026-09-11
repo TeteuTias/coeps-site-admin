@@ -1,4 +1,9 @@
 import type { IPayment } from "../types/payments/payment.t"
+import {
+    type AdminRemoteParticipation,
+    buildAdminRemoteParticipation,
+    normalizeAdminRemoteParticipation,
+} from "./admin-remote-work.ts"
 
 type UnknownRecord = Record<string, unknown>
 
@@ -39,6 +44,7 @@ export interface AdminUserSummary {
     cadastroPendente: boolean
     informacoes_usuario: AdminUserProfile
     pagamento: AdminUserPaymentSummary
+    participacao: AdminRemoteParticipation
 }
 
 export interface AdminUserDetails extends Omit<AdminUserSummary, "pagamento"> {
@@ -51,6 +57,7 @@ export interface AdminUserFilters {
     searchTerm?: string
     selectedStatus?: string
     selectedPaymentType?: string
+    selectedParticipationMode?: string
     startDate?: string
     endDate?: string
 }
@@ -163,6 +170,9 @@ function normalizeBaseUser(value: unknown): AdminUserSummary | null {
             situacao_animacao: rawPayment?.situacao_animacao === true,
             tipo_pagamento: stringOrNull(rawPayment?.tipo_pagamento),
         },
+        participacao: user.participacao === undefined
+            ? buildAdminRemoteParticipation(user, null)
+            : normalizeAdminRemoteParticipation(user.participacao),
     }
 }
 
@@ -250,6 +260,7 @@ export function filterAdminUsers(
     const term = filters.searchTerm?.trim().toLocaleLowerCase("pt-BR") ?? ""
     const selectedStatus = filters.selectedStatus ?? ""
     const selectedPaymentType = filters.selectedPaymentType ?? ""
+    const selectedParticipationMode = filters.selectedParticipationMode ?? ""
     const startDate = filters.startDate ?? ""
     const endDate = filters.endDate ?? ""
 
@@ -267,12 +278,14 @@ export function filterAdminUsers(
             user.pagamento.situacao === Number.parseInt(selectedStatus, 10)
         const paymentTypeMatch = selectedPaymentType === "" ||
             user.pagamento.tipo_pagamento === selectedPaymentType
+        const participationModeMatch = selectedParticipationMode === "" ||
+            user.participacao.mode === selectedParticipationMode
         const creationDate = adminUserCreationDay(user.informacoes_usuario.data_criacao)
         const startDateMatch = startDate === "" ||
             (creationDate !== null && creationDate >= startDate)
         const endDateMatch = endDate === "" ||
             (creationDate !== null && creationDate <= endDate)
 
-        return searchMatch && statusMatch && paymentTypeMatch && startDateMatch && endDateMatch
+        return searchMatch && statusMatch && paymentTypeMatch && participationModeMatch && startDateMatch && endDateMatch
     })
 }

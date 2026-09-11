@@ -204,6 +204,28 @@ test("preserva parcelamento sanitizado e calcula refund acumulado sem zerar a ve
   assert.equal(payment.financialRisk, true);
 });
 
+test("distingue inscrição regular de acesso remoto e preserva o vínculo", () => {
+  const response = buildAdminUserPaymentsResponse(
+    [{
+      compraId: "remote-purchase",
+      type: "remote-work-access",
+      remoteAccessId: "remote-access-1",
+      status: "CONFIRMADA",
+    }],
+    [{ _id: "remote-purchase", type: "remote-work-access" }],
+    [],
+  );
+  assert.equal(response.payments[0]?.productType, "remote-work-access");
+  assert.equal(response.payments[0]?.remoteAccessId, "remote-access-1");
+
+  const legacy = buildAdminUserPaymentsResponse(
+    [{ compraId: "legacy-ticket", status: "CONFIRMADA" }],
+    [{ _id: "legacy-ticket" }],
+    [],
+  );
+  assert.equal(legacy.payments[0]?.productType, "ticket");
+});
+
 test("resume backlog, idade mais antiga e lease do worker", () => {
   const now = new Date("2026-08-08T12:00:00.000Z");
   const summary = buildLedgerBacklogSummary(

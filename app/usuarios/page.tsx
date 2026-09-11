@@ -9,7 +9,8 @@ import {
     filterAdminUsers,
     parseAdminUserListHttpResponse,
 } from "../lib/users/admin-user-contract"
-import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2 } from "lucide-react"
+import { participationModeLabel } from "../lib/users/admin-remote-work"
+import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import './style.css'
 import QrCodeUserSearch from "../components/QrCodeUserSearch"
@@ -29,6 +30,7 @@ export default function Page() {
     const [searchTerm, setSearchTerm] = useState<string>("")
     const [selectedStatus, setSelectedStatus] = useState<string>("")
     const [selectedPaymentType, setSelectedPaymentType] = useState<string>("")
+    const [selectedParticipationMode, setSelectedParticipationMode] = useState<string>("")
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
 
@@ -74,6 +76,7 @@ export default function Page() {
         setSearchTerm("")
         setSelectedStatus("")
         setSelectedPaymentType("")
+        setSelectedParticipationMode("")
         setStartDate("")
         setEndDate("")
     }
@@ -91,15 +94,17 @@ export default function Page() {
         searchTerm,
         selectedStatus,
         selectedPaymentType,
+        selectedParticipationMode,
         startDate,
         endDate,
-    }), [dataUsers, searchTerm, selectedStatus, selectedPaymentType, startDate, endDate])
+    }), [dataUsers, searchTerm, selectedStatus, selectedPaymentType, selectedParticipationMode, startDate, endDate])
 
     // Estatísticas
     const totalUsers = dataUsers.length
     const inscritos = dataUsers.filter(user => user.pagamento.situacao === 1).length
     const naoInscritos = dataUsers.filter(user => user.pagamento.situacao === 0).length
     const pagamentoAberto = dataUsers.filter(user => user.pagamento.situacao === 2).length
+    const participantesRemotos = dataUsers.filter(user => ["REMOTE", "BOTH"].includes(user.participacao.mode)).length
 
     if (loading) {
         return (
@@ -154,6 +159,11 @@ export default function Page() {
                         <span className="usuarios-estatistica-valor">{pagamentoAberto}</span>
                         <span className="usuarios-estatistica-label">Pagamento Aberto</span>
                     </div>
+                    <div className="usuarios-estatistica-card">
+                        <Laptop size={32} style={{ marginBottom: '0.3rem', color: '#2563EB' }} />
+                        <span className="usuarios-estatistica-valor">{participantesRemotos}</span>
+                        <span className="usuarios-estatistica-label">Acesso Remoto</span>
+                    </div>
                 </div>
 
                 {/* Filtros */}
@@ -186,6 +196,22 @@ export default function Page() {
                                 <option value="1">Inscrito</option>
                                 <option value="0">Não Inscrito</option>
                                 <option value="2">Pagamento em Aberto</option>
+                            </select>
+                        </div>
+
+                        <div className="usuarios-filtro-select">
+                            <label htmlFor="participationMode" className="usuarios-label">Modalidade de Participação</label>
+                            <select
+                                id="participationMode"
+                                value={selectedParticipationMode}
+                                onChange={e => setSelectedParticipationMode(e.target.value)}
+                                className="usuarios-select"
+                            >
+                                <option value="">Todas as Modalidades</option>
+                                <option value="REGULAR">Regular</option>
+                                <option value="REMOTE">Somente remoto</option>
+                                <option value="BOTH">Regular + remoto</option>
+                                <option value="NONE">Sem acesso</option>
                             </select>
                         </div>
 
@@ -308,6 +334,45 @@ export default function Page() {
                                         </div>
                                     </div>
 
+                                    <div className="usuarios-card-payment">
+                                        <h4 className="usuarios-payment-title">
+                                            <Laptop className="h-5 w-5" />
+                                            Participação em Trabalhos
+                                        </h4>
+                                        <div className="usuarios-payment-info">
+                                            <div className="usuarios-payment-item">
+                                                <span className="usuarios-payment-label">Modalidade:</span>
+                                                <span className="usuarios-payment-type">{participationModeLabel(user.participacao.mode)}</span>
+                                            </div>
+                                            <div className="usuarios-info-item">
+                                                <MapPin className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Cidade/UF:</span>
+                                                <span className="usuarios-info-value">
+                                                    {user.participacao.municipalityName && user.participacao.uf
+                                                        ? `${user.participacao.municipalityName}/${user.participacao.uf}`
+                                                        : "Não informado"}
+                                                </span>
+                                            </div>
+                                            <div className="usuarios-info-item">
+                                                <FileCheck2 className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Comprovante:</span>
+                                                <span className="usuarios-info-value">
+                                                    {user.participacao.proof
+                                                        ? `${user.participacao.reviewStatus ?? "PENDING"} · ${formatUserCreationDate(user.participacao.proof.uploadedAt)}`
+                                                        : "Não enviado"}
+                                                </span>
+                                            </div>
+                                            <div className="usuarios-payment-item">
+                                                <span className="usuarios-payment-label">Financeiro:</span>
+                                                <span className="usuarios-payment-type">{user.participacao.status ?? "SEM ACESSO"}</span>
+                                            </div>
+                                            <div className="usuarios-payment-item">
+                                                <span className="usuarios-payment-label">Trabalhos remotos:</span>
+                                                <span className="usuarios-payment-type">{user.participacao.remoteWorkCount}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div className="usuarios-card-actions">
                                         <button
                                             className="usuarios-btn usuarios-btn-primary"
@@ -326,7 +391,7 @@ export default function Page() {
                 {/* Estado vazio */}
                 {filteredUsers.length === 0 && (
                     <div className="usuarios-empty">
-                        {searchTerm || selectedStatus || selectedPaymentType || startDate || endDate ? (
+                        {searchTerm || selectedStatus || selectedPaymentType || selectedParticipationMode || startDate || endDate ? (
                             <>
                                 <SearchX className="usuarios-empty-icon" />
                                 <h3 className="usuarios-empty-title">Nenhum resultado encontrado</h3>

@@ -432,6 +432,10 @@ export function buildAdminUserPaymentsResponse(
     const method =
       stringOrNull(assignmentPayment?.metodo) ?? stringOrNull(session?.metodoPagamento);
     const amounts = selectedAmounts(assignment, session, method, installmentPlan);
+    const productType: AdminModernPayment["productType"] =
+      fieldFrom(assignment, session, "type") === "remote-work-access"
+        ? "remote-work-access"
+        : "ticket";
     const refundsSnapshot =
       sanitizeRefundsSnapshot(assignment?.refundsSnapshot) ??
       sanitizeRefundsSnapshot(session?.refundsSnapshot);
@@ -442,6 +446,8 @@ export function buildAdminUserPaymentsResponse(
       : Math.max(amounts.final - Math.min(refundDone, amounts.final), 0);
     return {
       compraId,
+      productType,
+      remoteAccessId: stringOrNull(fieldFrom(assignment, session, "remoteAccessId")),
       edicaoId: stringOrNull(assignment?.edicaoId) ?? stringOrNull(session?.edicaoId),
       attributionStatus: stringOrNull(assignment?.status),
       sessionStatus: stringOrNull(session?.status),

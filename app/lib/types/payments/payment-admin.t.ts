@@ -55,6 +55,8 @@ export interface AdminInstallmentPlan {
 
 export interface AdminModernPayment {
   compraId: string;
+  productType: "ticket" | "remote-work-access";
+  remoteAccessId: string | null;
   edicaoId: string | null;
   attributionStatus: string | null;
   sessionStatus: string | null;

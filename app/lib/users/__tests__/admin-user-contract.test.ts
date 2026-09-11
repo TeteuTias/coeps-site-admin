@@ -148,7 +148,7 @@ test("filtros toleram campos nulos e preservam sem data apenas sem intervalo", (
     const partial = normalizeAdminUserSummary({
         _id: "66bbc8c2db29318201acc2a2",
         informacoes_usuario: {},
-        pagamento: { situacao: 1 },
+        pagamento: { situacao: 0 },
     })
     assert.ok(full && partial)
 
@@ -162,4 +162,8 @@ test("filtros toleram campos nulos e preservam sem data apenas sem intervalo", (
         [full._id],
     )
     assert.equal(filterAdminUsers([partial], { searchTerm: "inexistente" }).length, 0)
+    assert.deepEqual(
+        filterAdminUsers([full, partial], { selectedParticipationMode: "REGULAR" }).map((user) => user._id),
+        [full._id],
+    )
 })
