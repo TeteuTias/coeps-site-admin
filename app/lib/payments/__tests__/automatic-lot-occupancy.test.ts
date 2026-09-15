@@ -90,9 +90,9 @@ test("preserva a ordem configurada dos lotes", () => {
   assert.deepEqual(occupancy.lotes.map((lot) => lot.restantes), [126, 100]);
 });
 
-test("consulta os mesmos grupos e estados usados pelo checkout", async () => {
+test("consulta os mesmos grupos e exclui somente perfil explicitamente organizador", async () => {
   const now = new Date("2026-08-26T12:00:00.000Z");
-  const calls: Array<{ collection: string; filter: unknown }> = [];
+  const calls: Array<{ collection: string; filter?: unknown; pipeline?: unknown[] }> = [];
   const counts: Record<string, number> = {
     usuarios: 1,
     "pagamentos.atribuicoes": 3,
@@ -104,6 +104,14 @@ test("consulta os mesmos grupos e estados usados pelo checkout", async () => {
         async countDocuments(filter: unknown) {
           calls.push({ collection: name, filter });
           return counts[name];
+        },
+        aggregate(pipeline: unknown[]) {
+          calls.push({ collection: name, pipeline });
+          return {
+            async toArray() {
+              return [{ total: counts[name] }];
+            },
+          };
         },
       };
     },
@@ -142,12 +150,16 @@ test("consulta os mesmos grupos e estados usados pelo checkout", async () => {
     },
   );
   assert.deepEqual(
-    calls.find((call) => call.collection === "pagamentos.atribuicoes")?.filter,
-    { edicaoId: "CIEPS-2026", status: "CONFIRMADA" },
+    calls.find((call) => call.collection === "pagamentos.atribuicoes")?.pipeline?.[0],
+    { $match: { edicaoId: "CIEPS-2026", status: "CONFIRMADA" } },
   );
   assert.deepEqual(
-    calls.find((call) => call.collection === "pagamentos.sessoes")?.filter,
-    {
+    calls.find((call) => call.collection === "pagamentos.atribuicoes")?.pipeline?.at(-2),
+    { $match: { perfilUtilizadorResolvido: { $ne: "ORGANIZADOR" } } },
+  );
+  assert.deepEqual(
+    calls.find((call) => call.collection === "pagamentos.sessoes")?.pipeline?.[0],
+    { $match: {
       type: "ticket",
       edicaoId: "CIEPS-2026",
       $or: [
@@ -162,6 +174,6 @@ test("consulta os mesmos grupos e estados usados pelo checkout", async () => {
           },
         },
       ],
-    },
+    } },
   );
 });

@@ -13,6 +13,11 @@ export const PAYMENT_ATTRIBUTION_STATUSES = [
 
 export type PaymentCodeType = (typeof PAYMENT_CODE_TYPES)[number];
 export type PaymentCodeStatus = (typeof PAYMENT_CODE_STATUSES)[number];
+export type PaymentUserProfile = "ORGANIZADOR" | "CONGRESSISTA";
+export type PaymentPriceOrigin =
+  | "LOTE"
+  | "DESCONTO_PERCENTUAL"
+  | "ORGANIZADOR_CONFIGURADO";
 export type PaymentAttributionStatus =
   (typeof PAYMENT_ATTRIBUTION_STATUSES)[number];
 
@@ -41,7 +46,7 @@ export interface PaymentCodeDocument {
   reserva?: PaymentCodeReservation;
   usedAt?: Date;
   usedPurchaseId?: ObjectId | string;
-  perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA";
+  perfilUtilizador?: PaymentUserProfile;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -54,6 +59,7 @@ export interface PaymentCodeSnapshot {
   tipo?: PaymentCodeType;
   percentualDesconto?: number;
   responsavel?: PaymentCodeResponsible;
+  perfilUtilizador?: PaymentUserProfile;
 }
 
 export interface SelectedPaymentAmountsInCents {
@@ -82,6 +88,8 @@ export interface PaymentAttributionDocument {
   usuarioId: ObjectId | string;
   codigoDesconto?: PaymentCodeSnapshot;
   codigoRastreio?: PaymentCodeSnapshot;
+  perfilUtilizador?: PaymentUserProfile;
+  origemPreco?: PaymentPriceOrigin;
   valoresCentavos: PaymentAmountsInCents;
   valorSelecionadoCentavos?: SelectedPaymentAmountsInCents;
   pagamento?: {
@@ -136,6 +144,7 @@ export interface PaymentCodeListItem {
   tipo: PaymentCodeType;
   percentualDesconto?: number;
   responsavel?: PaymentCodeResponsible;
+  perfilUtilizador?: PaymentUserProfile;
   status: PaymentCodeStatus | "CONSUMIDO";
   historico: boolean;
   createdAt: string | null;

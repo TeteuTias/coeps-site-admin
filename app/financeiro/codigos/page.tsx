@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ConfirmationModal from "@/app/components/ConfirmationModal";
+import { buildPaymentCodesCsv } from "@/app/lib/payments/payment-codes-csv";
 import type { AdminPaymentLedgerBacklog } from "@/app/lib/types/payments/payment-admin.t";
 import {
   ArrowLeft,
@@ -10,7 +11,9 @@ import {
   Ban,
   CheckCircle2,
   CircleX,
+  ChevronDown,
   Clipboard,
+  Download,
   History,
   Link2,
   Loader2,
@@ -55,12 +58,18 @@ interface CodeItem {
   createdAt: string | null;
   updatedAt: string | null;
   metrics: CodeMetrics;
-  perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA"
+  perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA";
 }
+
+type CreatedCodeItem = Pick<
+  CodeItem,
+  "id" | "edicaoId" | "codigo" | "codigoNormalizado" | "tipo" | "percentualDesconto" | "perfilUtilizador" | "status" | "createdAt"
+>;
 
 interface CodesResponse {
   activeEditionId: string | null;
   edicaoId: string | null;
+  organizerPriceCents: number | null;
   items: CodeItem[];
   metrics: {
     totalCodigos: number;
@@ -188,14 +197,14 @@ function formatAge(seconds: number | null) {
 }
 
 export default function PaymentCodesPage() {
-  const [isOrganizer, setIsOrganizer] = useState(false);
+  const [activeTab, setActiveTab] = useState<CodeType>("DESCONTO");
   const [items, setItems] = useState<CodeItem[]>([]);
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
   const [ledger, setLedger] = useState(EMPTY_LEDGER);
   const [activeEditionId, setActiveEditionId] = useState<string | null>(null);
+  const [organizerPriceCents, setOrganizerPriceCents] = useState<number | null>(null);
   const [editionInput, setEditionInput] = useState("");
   const [editionId, setEditionId] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -210,10 +219,13 @@ export default function PaymentCodesPage() {
   const [hasLoadedCodes, setHasLoadedCodes] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [createdCodes, setCreatedCodes] = useState<CreatedCodeItem[]>([]);
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [codePendingDeletion, setCodePendingDeletion] = useState<CodeItem | null>(null);
 
   const [discountPercentage, setDiscountPercentage] = useState("10");
+  const [discountQuantity, setDiscountQuantity] = useState("1");
+  const [discountProfile, setDiscountProfile] = useState<"ORGANIZADOR" | "CONGRESSISTA">("CONGRESSISTA");
   const [trackingName, setTrackingName] = useState("");
   const [trackingEmail, setTrackingEmail] = useState("");
 
@@ -228,7 +240,7 @@ export default function PaymentCodesPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: "25" });
       if (editionId) params.set("edicaoId", editionId);
-      if (typeFilter) params.set("tipo", typeFilter);
+      params.set("tipo", activeTab);
       if (statusFilter) params.set("status", statusFilter);
       if (search) params.set("search", search);
 
@@ -241,6 +253,7 @@ export default function PaymentCodesPage() {
       setLedger(data.ledger);
       setPagination(data.pagination);
       setActiveEditionId(data.activeEditionId);
+      setOrganizerPriceCents(data.organizerPriceCents);
       setHasLoadedCodes(true);
 
       if (!editionId && data.edicaoId) {
@@ -255,7 +268,7 @@ export default function PaymentCodesPage() {
     } finally {
       setLoading(false);
     }
-  }, [editionId, page, search, statusFilter, typeFilter]);
+  }, [activeTab, editionId, page, search, statusFilter]);
 
   useEffect(() => {
     void loadCodes();
@@ -319,7 +332,7 @@ export default function PaymentCodesPage() {
     if (!normalized) return;
     setEditionId(normalized);
     setPage(1);
-    setCreatedCode(null);
+    setCreatedCodes([]);
     setCleanupPreview(null);
   }
 
@@ -333,22 +346,25 @@ export default function PaymentCodesPage() {
     event.preventDefault();
     setMutating(true);
     setMessage(null);
-    setCreatedCode(null);
+    setCreatedCodes([]);
 
     try {
-      const data = await requestJson<{ message: string; code: { codigo: string } }>(
-        "/api/post/pagamentos/codigos/desconto/gerar", // FAZENDO AQUI
+      const data = await requestJson<{ message: string; codes: CreatedCodeItem[]; code?: CreatedCodeItem }>(
+        "/api/post/pagamentos/codigos/desconto/gerar",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             edicaoId: editionId,
-            percentualDesconto: Number(discountPercentage),
-            isOrganizer
+            quantidade: Number(discountQuantity),
+            perfilUtilizador: discountProfile,
+            ...(discountProfile === "CONGRESSISTA"
+              ? { percentualDesconto: Number(discountPercentage) }
+              : {}),
           }),
         },
       );
-      setCreatedCode(data.code.codigo);
+      setCreatedCodes(data.codes ?? (data.code ? [data.code] : []));
       await loadCodes();
       setMessage({ type: "success", text: data.message });
     } catch (error) {
@@ -365,17 +381,16 @@ export default function PaymentCodesPage() {
     event.preventDefault();
     setMutating(true);
     setMessage(null);
-    setCreatedCode(null);
+    setCreatedCodes([]);
 
     try {
-      const data = await requestJson<{ message: string; code: { codigo: string } }>(
+      const data = await requestJson<{ message: string; code: CreatedCodeItem }>(
         "/api/post/pagamentos/codigos/rastreio",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             edicaoId: editionId,
-            isOrganizer,
             responsavel: {
               nome: trackingName,
               ...(trackingEmail.trim() ? { email: trackingEmail } : {}),
@@ -385,7 +400,7 @@ export default function PaymentCodesPage() {
       );
       setTrackingName("");
       setTrackingEmail("");
-      setCreatedCode(data.code.codigo);
+      setCreatedCodes([data.code]);
       await loadCodes();
       setMessage({ type: "success", text: data.message });
     } catch (error) {
@@ -514,6 +529,27 @@ export default function PaymentCodesPage() {
     }
   }
 
+  async function copyCreatedCodes() {
+    try {
+      await navigator.clipboard.writeText(createdCodes.map((item) => item.codigo).join("\n"));
+      setMessage({ type: "success", text: `${createdCodes.length} código(s) copiado(s).` });
+    } catch {
+      setMessage({ type: "error", text: "Não foi possível copiar o lote." });
+    }
+  }
+
+  function downloadCreatedCodesCsv() {
+    const csv = buildPaymentCodesCsv(createdCodes);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `codigos-${editionId || "cieps"}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="codigos-page">
       <div className="codigos-shell">
@@ -548,15 +584,27 @@ export default function PaymentCodesPage() {
           </div>
         )}
 
-        {createdCode && (
-          <section className="codigos-created" aria-live="polite">
-            <div>
-              <strong>Novo código</strong>
-              <code>{createdCode}</code>
+        {createdCodes.length > 0 && (
+          <section className="codigos-created codigos-created-batch" aria-live="polite">
+            <div className="codigos-created-heading">
+              <div>
+                <strong>{createdCodes.length === 1 ? "Novo código" : "Novo lote de códigos"}</strong>
+                <span>{createdCodes.length} código(s) pronto(s) para distribuição</span>
+              </div>
+              <div className="codigos-created-actions">
+                <button type="button" onClick={() => void copyCreatedCodes()}>
+                  <Clipboard size={17} /> Copiar todos
+                </button>
+                <button type="button" onClick={downloadCreatedCodesCsv}>
+                  <Download size={17} /> Baixar CSV
+                </button>
+              </div>
             </div>
-            <button type="button" onClick={() => void copyCode(createdCode)}>
-              <Clipboard size={17} /> Copiar
-            </button>
+            <div className="codigos-created-list">
+              {createdCodes.map((item) => (
+                <code key={item.codigoNormalizado}>{item.codigo}</code>
+              ))}
+            </div>
           </section>
         )}
 
@@ -662,109 +710,143 @@ export default function PaymentCodesPage() {
           </dl>
         </section>
 
-        <section className="codigos-create-grid">
-          <form className="codigos-panel" onSubmit={createDiscount}>
-            <div className="codigos-panel-title">
-              <BadgePercent size={22} />
-              <div>
-                <h2>Novo desconto</h2>
-                <p>Uso único em todo o congresso. O código é gerado pelo servidor.</p>
-              </div>
-            </div>
-
-            <label htmlFor="discountPercentage">Percentual de desconto</label>
-            <div className="codigos-percentage-input">
-              <input
-                id="discountPercentage"
-                type="number"
-                min="1"
-                max="99"
-                step="1"
-                value={discountPercentage}
-                onChange={(event) => setDiscountPercentage(event.target.value)}
-                required
-              />
-              <span>%</span>
-            </div>
-            {/* Switch Button para Organizador */}
-            <div className="codigos-switch-container pb-5">
-              <label className="codigos-switch">
-                <input
-                  type="checkbox"
-                  checked={isOrganizer}
-                  onChange={(e) => setIsOrganizer(e.target.checked)}
-                />
-                <span className="codigos-switch-slider" />
-              </label>
-              <span className="codigos-switch-label">
-                {isOrganizer ? "É organizador" : "Não é organizador"}
-              </span>
-            </div>
+        <section className="codigos-workspace">
+          <div className="codigos-tabs" role="tablist" aria-label="Tipo de código">
             <button
-              className="codigos-button codigos-button--primary"
-              type="submit"
-              disabled={!isActiveEdition || mutating}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "DESCONTO"}
+              className={activeTab === "DESCONTO" ? "is-active" : ""}
+              onClick={() => { setActiveTab("DESCONTO"); setPage(1); setExpandedCode(null); }}
             >
-              {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-              Gerar desconto
+              <BadgePercent size={18} /> Descontos <span>{metrics.descontos}</span>
             </button>
-
-
-          </form>
-
-          <form className="codigos-panel" onSubmit={createTracking}>
-            <div className="codigos-panel-title">
-              <UserRound size={22} />
-              <div>
-                <h2>Novo rastreio</h2>
-                <p>Reutilizável e sem alteração no valor da inscrição.</p>
-              </div>
-            </div>
-            <label htmlFor="trackingName">Pessoa responsável</label>
-            <input
-              id="trackingName"
-              value={trackingName}
-              onChange={(event) => setTrackingName(event.target.value)}
-              minLength={2}
-              maxLength={120}
-              required
-            />
-            <label htmlFor="trackingEmail">E-mail (opcional)</label>
-            <input
-              id="trackingEmail"
-              type="email"
-              value={trackingEmail}
-              onChange={(event) => setTrackingEmail(event.target.value)}
-              maxLength={254}
-            />
-            <div className="codigos-switch-container pb-5">
-              <label className="codigos-switch">
-                <input
-                  type="checkbox"
-                  checked={isOrganizer}
-                  onChange={(e) => setIsOrganizer(e.target.checked)}
-                />
-                <span className="codigos-switch-slider" />
-              </label>
-              <span className="codigos-switch-label">
-                {isOrganizer ? "É organizador" : "Não é organizador"}
-              </span>
-            </div>
             <button
-              className="codigos-button codigos-button--primary"
-              type="submit"
-              disabled={!isActiveEdition || mutating}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "RASTREIO"}
+              className={activeTab === "RASTREIO" ? "is-active" : ""}
+              onClick={() => { setActiveTab("RASTREIO"); setPage(1); setExpandedCode(null); }}
             >
-              {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-              Gerar rastreio
+              <UserRound size={18} /> Rastreios <span>{metrics.rastreios}</span>
             </button>
-          </form>
+          </div>
+
+          {activeTab === "DESCONTO" ? (
+            <form className="codigos-panel codigos-create-form" onSubmit={createDiscount}>
+              <div className="codigos-panel-title">
+                <BadgePercent size={22} />
+                <div>
+                  <h2>Gerar descontos</h2>
+                  <p>Cada código é individual, aleatório e de uso único.</p>
+                </div>
+              </div>
+              <div className="codigos-form-grid">
+                <label>
+                  Perfil do participante
+                  <select
+                    value={discountProfile}
+                    onChange={(event) => setDiscountProfile(event.target.value as "ORGANIZADOR" | "CONGRESSISTA")}
+                  >
+                    <option value="CONGRESSISTA">Congressista</option>
+                    <option value="ORGANIZADOR">Organizador</option>
+                  </select>
+                </label>
+                <label>
+                  Quantidade
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    step="1"
+                    value={discountQuantity}
+                    onChange={(event) => setDiscountQuantity(event.target.value)}
+                    required
+                  />
+                </label>
+                {discountProfile === "CONGRESSISTA" ? (
+                  <label>
+                    Percentual de desconto
+                    <div className="codigos-percentage-input">
+                      <input
+                        id="discountPercentage"
+                        type="number"
+                        min="1"
+                        max="99"
+                        step="1"
+                        value={discountPercentage}
+                        onChange={(event) => setDiscountPercentage(event.target.value)}
+                        required
+                      />
+                      <span>%</span>
+                    </div>
+                  </label>
+                ) : (
+                  <div className={`codigos-organizer-price ${organizerPriceCents ? "is-ready" : "is-missing"}`}>
+                    <span>Preço fixo de organizador</span>
+                    <strong>{organizerPriceCents ? moneyFromCents(organizerPriceCents) : "Não configurado"}</strong>
+                    <small>Não ocupa vagas dos lotes.</small>
+                  </div>
+                )}
+              </div>
+              <button
+                className="codigos-button codigos-button--primary"
+                type="submit"
+                disabled={!isActiveEdition || mutating || (discountProfile === "ORGANIZADOR" && !organizerPriceCents)}
+              >
+                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
+                Gerar {Number(discountQuantity) > 1 ? `${discountQuantity} descontos` : "desconto"}
+              </button>
+            </form>
+          ) : (
+            <form className="codigos-panel codigos-create-form" onSubmit={createTracking}>
+              <div className="codigos-panel-title">
+                <UserRound size={22} />
+                <div>
+                  <h2>Novo rastreio</h2>
+                  <p>Reutilizável, legível e sem alteração no preço ou no perfil.</p>
+                </div>
+              </div>
+              <div className="codigos-form-grid codigos-form-grid--tracking">
+                <label>
+                  Pessoa responsável
+                  <input
+                    id="trackingName"
+                    value={trackingName}
+                    onChange={(event) => setTrackingName(event.target.value)}
+                    minLength={2}
+                    maxLength={120}
+                    placeholder="Ana Lívia"
+                    required
+                  />
+                </label>
+                <label>
+                  E-mail (opcional)
+                  <input
+                    id="trackingEmail"
+                    type="email"
+                    value={trackingEmail}
+                    onChange={(event) => setTrackingEmail(event.target.value)}
+                    maxLength={254}
+                  />
+                </label>
+                <div className="codigos-tracking-example">
+                  <span>Formato gerado</span>
+                  <code>AnaLivia-CIEPS2026</code>
+                </div>
+              </div>
+              <button className="codigos-button codigos-button--primary" type="submit" disabled={!isActiveEdition || mutating}>
+                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
+                Gerar rastreio
+              </button>
+            </form>
+          )}
         </section>
 
         <section className="codigos-panel codigos-list-panel">
           <div className="codigos-list-heading">
             <div>
-              <h2>Códigos da edição {editionId || "—"}</h2>
+              <h2>{activeTab === "DESCONTO" ? "Descontos" : "Rastreios"} da edição {editionId || "—"}</h2>
               <p>{pagination.total} resultado(s) para os filtros aplicados.</p>
             </div>
             <form onSubmit={applySearch} className="codigos-search-form">
@@ -772,27 +854,13 @@ export default function PaymentCodesPage() {
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Código ou responsável"
+                placeholder={activeTab === "DESCONTO" ? "Buscar código" : "Código, nome ou e-mail"}
               />
               <button type="submit">Buscar</button>
             </form>
           </div>
 
           <div className="codigos-filters">
-            <label>
-              Tipo
-              <select
-                value={typeFilter}
-                onChange={(event) => {
-                  setTypeFilter(event.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">Todos</option>
-                <option value="DESCONTO">Desconto</option>
-                <option value="RASTREIO">Rastreio</option>
-              </select>
-            </label>
             <label>
               Status
               <select
@@ -827,18 +895,9 @@ export default function PaymentCodesPage() {
                 <thead>
                   <tr>
                     <th>Código</th>
-                    <th>Configuração</th>
+                    <th>{activeTab === "DESCONTO" ? "Benefício" : "Responsável"}</th>
                     <th>Status</th>
-                    <th>Utilizador</th>
-                    <th>Vendas brutas</th>
-                    <th>Confirmadas sem risco</th>
-                    <th>Pendentes</th>
-                    <th>Estornadas</th>
-                    <th>Canceladas/expiradas</th>
-                    <th>Revisão financeira</th>
-                    <th>Valor bruto</th>
-                    <th>Refund DONE</th>
-                    <th>Valor em risco</th>
+                    <th>Atividade</th>
                     <th>Valor líquido</th>
                     <th>Ações</th>
                   </tr>
@@ -860,9 +919,12 @@ export default function PaymentCodesPage() {
                       (item.tipo !== "RASTREIO" || item.status === "INATIVO") &&
                       Boolean(item.id);
 
+                    const itemKey = `${item.tipo}-${item.codigoNormalizado}`;
+                    const isExpanded = expandedCode === itemKey;
                     return (
-                      <tr key={`${item.tipo}-${item.codigoNormalizado}`}>
-                        <td>
+                      <Fragment key={itemKey}>
+                      <tr>
+                        <td data-label="Código">
                           <div className="codigos-code-cell">
                             <code>{item.codigo}</code>
                             <button
@@ -875,37 +937,43 @@ export default function PaymentCodesPage() {
                           </div>
                           <small>Criado em {formatDate(item.createdAt)}</small>
                         </td>
-                        <td>
-                          <strong>{item.tipo === "DESCONTO" ? "Desconto" : "Rastreio"}</strong>
+                        <td data-label={activeTab === "DESCONTO" ? "Benefício" : "Responsável"}>
+                          <strong>
+                            {item.tipo === "DESCONTO"
+                              ? item.perfilUtilizador === "ORGANIZADOR"
+                                ? "Organizador"
+                                : `${item.percentualDesconto ?? "—"}% de desconto`
+                              : item.responsavel?.nome ?? "Responsável não informado"}
+                          </strong>
                           <small>
                             {item.tipo === "DESCONTO"
-                              ? `${item.percentualDesconto ?? "—"}%`
-                              : item.responsavel?.nome ?? "Responsável não informado"}
+                              ? item.perfilUtilizador === "ORGANIZADOR"
+                                ? organizerPriceCents ? moneyFromCents(organizerPriceCents) : "Preço da edição indisponível"
+                                : "Congressista"
+                              : item.responsavel?.email ?? "Sem e-mail"}
                           </small>
-                          {item.responsavel?.email && <small>{item.responsavel.email}</small>}
                         </td>
-                        <td>
+                        <td data-label="Status">
                           <span className={`codigos-status codigos-status--${item.status.toLowerCase()}`}>
                             {item.status}
                           </span>
                         </td>
-                        <td className="">
-                          <strong>
-                            {item.perfilUtilizador || "NÃO DEFINIDO"}
-                          </strong>
+                        <td data-label="Atividade">
+                          <strong>{item.metrics.confirmadas} confirmada(s)</strong>
+                          <small>{item.metrics.pendentes} pendente(s) · {item.metrics.emRevisaoFinanceira} em revisão</small>
                         </td>
-                        <td>{item.metrics.confirmadasBrutas}</td>
-                        <td>{item.metrics.confirmadas}</td>
-                        <td>{item.metrics.pendentes}</td>
-                        <td>{item.metrics.estornadas}</td>
-                        <td>{item.metrics.canceladasOuExpiradas}</td>
-                        <td>{item.metrics.emRevisaoFinanceira}</td>
-                        <td>{moneyFromCents(item.metrics.valorBrutoConfirmadoCentavos)}</td>
-                        <td>{moneyFromCents(item.metrics.valorEstornadoDoneCentavos)}</td>
-                        <td>{moneyFromCents(item.metrics.valorEmRiscoCentavos)}</td>
-                        <td>{moneyFromCents(item.metrics.valorLiquidoCentavos)}</td>
-                        <td>
+                        <td data-label="Valor líquido"><strong>{moneyFromCents(item.metrics.valorLiquidoCentavos)}</strong></td>
+                        <td data-label="Ações">
                           <div className="codigos-actions">
+                            <button
+                              type="button"
+                              aria-expanded={isExpanded}
+                              aria-label={`${isExpanded ? "Ocultar" : "Mostrar"} detalhes de ${item.codigo}`}
+                              title="Ver indicadores detalhados"
+                              onClick={() => setExpandedCode(isExpanded ? null : itemKey)}
+                            >
+                              <ChevronDown className={isExpanded ? "is-expanded" : ""} size={16} />
+                            </button>
                             <button
                               type="button"
                               aria-label={
@@ -942,6 +1010,21 @@ export default function PaymentCodesPage() {
                           </div>
                         </td>
                       </tr>
+                      {isExpanded && (
+                        <tr className="codigos-detail-row">
+                          <td colSpan={6}>
+                            <dl className="codigos-detail-grid">
+                              <div><dt>Vendas brutas</dt><dd>{item.metrics.confirmadasBrutas}</dd></div>
+                              <div><dt>Estornadas</dt><dd>{item.metrics.estornadas}</dd></div>
+                              <div><dt>Canceladas/expiradas</dt><dd>{item.metrics.canceladasOuExpiradas}</dd></div>
+                              <div><dt>Valor bruto</dt><dd>{moneyFromCents(item.metrics.valorBrutoConfirmadoCentavos)}</dd></div>
+                              <div><dt>Refund DONE</dt><dd>{moneyFromCents(item.metrics.valorEstornadoDoneCentavos)}</dd></div>
+                              <div><dt>Valor em risco</dt><dd>{moneyFromCents(item.metrics.valorEmRiscoCentavos)}</dd></div>
+                            </dl>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>

@@ -96,13 +96,15 @@ export default function Page() {
     const [lotOccupancy, setLotOccupancy] = useState<IAutomaticLotOccupancy | null>(null);
     const [lotOccupancyLoading, setLotOccupancyLoading] = useState(false);
     const [lotOccupancyError, setLotOccupancyError] = useState<string | null>(null);
+    const [organizerPriceSaving, setOrganizerPriceSaving] = useState(false);
     const [editableInfo, setEditableInfo] = useState({
         nome: '',
         edicaoId: '',
         valorAVista: 0,
         valorBoleto: 0,
         valorDebito: 0,
-        valorPix: 0
+        valorPix: 0,
+        valorOrganizador: 0,
     });
     const allPaymentTypes: IPaymentConfig["pagamentosAceitos"] = ["PIX", "BOLETO", "CREDIT_CARD", "DEBIT_CARD"]
 
@@ -161,6 +163,7 @@ export default function Page() {
                 valorBoleto: config.valorBoleto,
                 valorDebito: config.valorDebito,
                 valorPix: config.valorPix,
+                valorOrganizador: (config.configuracaoOrganizador?.valorFinalCentavos ?? 0) / 100,
             })
             if (config.modo === "automatico") {
                 void loadLotOccupancy(config._id)
@@ -395,7 +398,7 @@ export default function Page() {
 
     const handleInfoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        const numericFields = ["valorAVista", "valorBoleto", "valorDebito", "valorPix"];
+        const numericFields = ["valorAVista", "valorBoleto", "valorDebito", "valorPix", "valorOrganizador"];
         setEditableInfo(prev => ({
             ...prev,
             [name]: numericFields.includes(name) ? parseFloat(value) || 0 : value
@@ -418,7 +421,17 @@ export default function Page() {
             const response = await fetch('/api/put/pagamentos/configuracaoGeralPagamento', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...editableInfo, _id: paymentData?._id }),
+                body: JSON.stringify({
+                    ...editableInfo,
+                    _id: paymentData?._id,
+                    ...(editableInfo.valorOrganizador > 0
+                        ? {
+                            configuracaoOrganizador: {
+                                valorFinalCentavos: Math.round(editableInfo.valorOrganizador * 100),
+                            },
+                        }
+                        : {}),
+                }),
             });
 
             if (!response.ok) {
@@ -449,10 +462,40 @@ export default function Page() {
                 valorAVista: paymentData.valorAVista,
                 valorBoleto: paymentData.valorBoleto,
                 valorDebito: paymentData.valorDebito,
-                valorPix: paymentData.valorPix
+                valorPix: paymentData.valorPix,
+                valorOrganizador: (paymentData.configuracaoOrganizador?.valorFinalCentavos ?? 0) / 100,
             });
         }
         setIsEditingInfo(false);
+    };
+
+    const handleSaveOrganizerPrice = async () => {
+        if (!paymentData || editableInfo.valorOrganizador <= 0) {
+            alert("Informe um preço de organizador maior que zero.");
+            return;
+        }
+        try {
+            setOrganizerPriceSaving(true);
+            const response = await fetch('/api/put/pagamentos/configuracaoGeralPagamento', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...editableInfo,
+                    _id: paymentData._id,
+                    configuracaoOrganizador: {
+                        valorFinalCentavos: Math.round(editableInfo.valorOrganizador * 100),
+                    },
+                }),
+            });
+            const payload = await response.json().catch(() => ({})) as { message?: string };
+            if (!response.ok) throw new Error(payload.message ?? "Não foi possível salvar o preço.");
+            await loadPaymentConfig();
+            alert("Preço de organizador salvo com sucesso.");
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Não foi possível salvar o preço.");
+        } finally {
+            setOrganizerPriceSaving(false);
+        }
     };
 
     const handleAddParcelamento = () => {
@@ -594,6 +637,49 @@ export default function Page() {
                         <Tag size={18} />
                         Gerenciar códigos
                     </button>
+                </div>
+
+                <div className="financeiro-section financeiro-organizer-price-section">
+                    <div className="financeiro-section-heading-row">
+                        <div>
+                            <h2 className="financeiro-section-title">
+                                <UserCheck size={24} />
+                                Preço reservado para organizadores
+                            </h2>
+                            <p className="financeiro-section-description">
+                                Total fixo aplicado em qualquer meio de pagamento quando um desconto individual estiver marcado como organizador. Essas inscrições não ocupam vagas dos lotes.
+                            </p>
+                        </div>
+                        <span className="financeiro-mode-badge financeiro-mode-badge--automatico">
+                            Por edição
+                        </span>
+                    </div>
+                    <div className="financeiro-organizer-price-form">
+                        <div className="financeiro-form-group">
+                            <label htmlFor="valorOrganizador" className="financeiro-label">
+                                Valor final (R$)
+                            </label>
+                            <input
+                                id="valorOrganizador"
+                                name="valorOrganizador"
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={editableInfo.valorOrganizador}
+                                onChange={handleInfoInputChange}
+                                className="financeiro-input"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            className="financeiro-btn financeiro-btn-primary"
+                            onClick={() => void handleSaveOrganizerPrice()}
+                            disabled={organizerPriceSaving || editableInfo.valorOrganizador <= 0}
+                        >
+                            <Save size={18} />
+                            {organizerPriceSaving ? "Salvando" : "Salvar preço"}
+                        </button>
+                    </div>
                 </div>
 
                 {paymentData.modo === "automatico" && (

@@ -20,6 +20,10 @@ function nonNegativeNumber(value: unknown): number | null {
         : null
 }
 
+function positiveInteger(value: unknown): number | null {
+    return Number.isInteger(value) && (value as number) > 0 ? value as number : null
+}
+
 function parseInstallments(value: unknown): IParcelamento[] | null {
     if (!Array.isArray(value)) return null
 
@@ -83,6 +87,11 @@ export function parseAdminPaymentConfigPayload(value: unknown): IPaymentConfig |
     const modo = payload.modo === "automatico" || payload.modo === "manual"
         ? payload.modo
         : undefined
+    const rawOrganizerConfig = asRecord(payload.configuracaoOrganizador)
+    const organizerPriceCents = rawOrganizerConfig
+        ? positiveInteger(rawOrganizerConfig.valorFinalCentavos)
+        : null
+    if (rawOrganizerConfig && organizerPriceCents === null) return null
 
     return {
         _id: payload._id.trim() as IPaymentConfig["_id"],
@@ -105,6 +114,9 @@ export function parseAdminPaymentConfigPayload(value: unknown): IPaymentConfig |
         pagamentosAceitos,
         modo,
         configuracaoLotesAutomaticos: automaticLots ? { lotes: automaticLots } : undefined,
+        configuracaoOrganizador: organizerPriceCents
+            ? { valorFinalCentavos: organizerPriceCents }
+            : undefined,
     }
 }
 
