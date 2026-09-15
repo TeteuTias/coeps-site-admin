@@ -19,11 +19,15 @@ const VALID_CONFIG = {
 }
 
 test("aceita configuração financeira válida e normaliza campos opcionais", () => {
-    const config = parseAdminPaymentConfigPayload(VALID_CONFIG)
+    const config = parseAdminPaymentConfigPayload({
+        ...VALID_CONFIG,
+        configuracaoOrganizador: { valorFinalCentavos: 25_000 },
+    })
     assert.ok(config)
     assert.equal(config.nome, "Lote CIEPS")
     assert.deepEqual(config.pagamentosAceitos, ["PIX", "CREDIT_CARD"])
     assert.equal(config.dataInit, "")
+    assert.equal(config.configuracaoOrganizador?.valorFinalCentavos, 25_000)
 })
 
 test("rejeita corpo de erro e envelopes com arrays ou números inválidos", () => {
@@ -32,6 +36,10 @@ test("rejeita corpo de erro e envelopes com arrays ou números inválidos", () =
     assert.equal(parseAdminPaymentConfigPayload({ ...VALID_CONFIG, parcelamentos: {} }), null)
     assert.equal(parseAdminPaymentConfigPayload({ ...VALID_CONFIG, pagamentosAceitos: "PIX" }), null)
     assert.equal(parseAdminPaymentConfigPayload({ ...VALID_CONFIG, valorPix: "85" }), null)
+    assert.equal(parseAdminPaymentConfigPayload({
+        ...VALID_CONFIG,
+        configuracaoOrganizador: { valorFinalCentavos: 0 },
+    }), null)
     assert.equal(parseAdminPaymentConfigPayload({
         ...VALID_CONFIG,
         parcelamentos: [{ codigo: 1, totalParcelas: 2, valorCadaParcela: undefined }],

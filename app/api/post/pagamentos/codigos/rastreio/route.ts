@@ -1,7 +1,7 @@
 import { connectToDatabase } from "@/app/lib/mongodb";
 import { requireFinanceAdmin } from "@/app/lib/payments/finance-admin";
 import {
-  createUniqueCodeDocument,
+  createReadableTrackingCodeDocument,
   getActiveEditionId,
   normalizeEditionId,
   parseResponsible,
@@ -14,7 +14,6 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const edicaoId = normalizeEditionId(body.edicaoId);
-    const isOrganizer = body.isOrganizer === "true" || body.isOrganizer === true;
     if (!edicaoId) {
       return Response.json(
         {
@@ -49,11 +48,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const code = await createUniqueCodeDocument(db, {
+    const code = await createReadableTrackingCodeDocument(db, {
       edicaoId,
-      tipo: "RASTREIO",
       responsavel,
-      perfilUtilizador: isOrganizer ? "ORGANIZADOR" : "CONGRESSISTA",
       createdBy: authorization.identity.userId,
     });
 

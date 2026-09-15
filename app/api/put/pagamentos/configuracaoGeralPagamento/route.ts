@@ -23,6 +23,12 @@ export async function PUT(request: Request) {
     const nome = typeof body.nome === "string" ? body.nome.trim() : "";
     const explicitEdition = body.edicaoId !== undefined;
     const edicaoId = explicitEdition ? normalizeEditionId(body.edicaoId) : null;
+    const organizerConfig =
+      typeof body.configuracaoOrganizador === "object" &&
+      body.configuracaoOrganizador !== null
+        ? body.configuracaoOrganizador as Record<string, unknown>
+        : null;
+    const organizerPriceCents = organizerConfig?.valorFinalCentavos;
 
     if (!ObjectId.isValid(id)) {
       return Response.json(
@@ -39,6 +45,18 @@ export async function PUT(request: Request) {
     if (explicitEdition && !edicaoId) {
       return Response.json(
         { error: "invalid_edition", message: "O identificador da edição é inválido." },
+        { status: 400 },
+      );
+    }
+    if (
+      organizerConfig &&
+      (!Number.isInteger(organizerPriceCents) || Number(organizerPriceCents) <= 0)
+    ) {
+      return Response.json(
+        {
+          error: "invalid_organizer_price",
+          message: "O preço de organizador deve ser um valor positivo em centavos.",
+        },
         { status: 400 },
       );
     }
@@ -75,6 +93,13 @@ export async function PUT(request: Request) {
       ...amounts,
       updatedAt,
       updatedBy: authorization.identity.userId,
+      ...(organizerConfig
+        ? {
+            configuracaoOrganizador: {
+              valorFinalCentavos: Number(organizerPriceCents),
+            },
+          }
+        : {}),
     };
 
     if (explicitEdition && edicaoId) {
@@ -130,6 +155,9 @@ export async function PUT(request: Request) {
         edicaoId: explicitEdition ? edicaoId : currentConfig.edicaoId,
         ativo: explicitEdition ? true : currentConfig.ativo,
         pagantesLegados: editionChanged ? 0 : currentConfig.pagantesLegados,
+        configuracaoOrganizador: organizerConfig
+          ? { valorFinalCentavos: Number(organizerPriceCents) }
+          : currentConfig.configuracaoOrganizador,
       },
     });
   } catch (error) {

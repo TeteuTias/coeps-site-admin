@@ -10,13 +10,13 @@ import {
   PAYMENT_RECOGNIZED_SALE_EXPRESSION,
 } from "@/app/lib/payments/admin-payment-read-model";
 import {
-  getActiveEditionId,
   isPaymentCodeStatus,
   isPaymentCodeType,
   normalizeEditionId,
   PAYMENT_ATTRIBUTIONS_COLLECTION,
   PAYMENT_CODES_COLLECTION,
 } from "@/app/lib/payments/payment-code-repository";
+import { getActivePaymentConfig } from "@/app/lib/payments/payment-config-repository";
 import type {
   PaymentCodeDocument,
   PaymentCodeListItem,
@@ -37,6 +37,7 @@ interface LedgerSummary {
   codigoId?: unknown;
   percentualDesconto?: number;
   responsavel?: PaymentCodeResponsible;
+  perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA";
   confirmadas: number;
   confirmadasBrutas: number;
   pendentes: number;
@@ -160,12 +161,21 @@ export async function GET(request: Request) {
       );
     }
 
-    const activeEditionId = await getActiveEditionId(db);
+    const activeConfig = await getActivePaymentConfig(db);
+    const activeEditionId = normalizeEditionId(activeConfig?.edicaoId);
+    const configuredOrganizerPriceCents = Number.isInteger(
+      activeConfig?.configuracaoOrganizador?.valorFinalCentavos,
+    )
+      ? Number(activeConfig?.configuracaoOrganizador?.valorFinalCentavos)
+      : null;
     const edicaoId = requestedEdition ?? activeEditionId;
+    const organizerPriceCents =
+      edicaoId && edicaoId === activeEditionId ? configuredOrganizerPriceCents : null;
     if (!edicaoId) {
       return Response.json({
         activeEditionId: null,
         edicaoId: null,
+        organizerPriceCents,
         items: [],
         metrics: {
           totalCodigos: 0,
@@ -256,6 +266,9 @@ export async function GET(request: Request) {
                         codigoNormalizado: "$codigoDesconto.codigoNormalizado",
                         codigoId: "$codigoDesconto.codigoId",
                         percentualDesconto: "$codigoDesconto.percentualDesconto",
+                        perfilUtilizador: {
+                          $ifNull: ["$perfilUtilizador", "$codigoDesconto.perfilUtilizador"],
+                        },
                       },
                     ],
                     [],
@@ -297,6 +310,7 @@ export async function GET(request: Request) {
             codigoId: { $first: "$codigos.codigoId" },
             percentualDesconto: { $first: "$codigos.percentualDesconto" },
             responsavel: { $first: "$codigos.responsavel" },
+            perfilUtilizador: { $first: "$codigos.perfilUtilizador" },
             confirmadas: {
               $sum: {
                 $cond: [
@@ -510,7 +524,14 @@ export async function GET(request: Request) {
       return {
         id: code._id?.toHexString() ?? null,
         edicaoId,
-        perfilUtilizador: code.perfilUtilizador || "Não definido",
+        ...(code.tipo === "DESCONTO"
+          ? {
+              perfilUtilizador:
+                code.perfilUtilizador === "ORGANIZADOR"
+                  ? "ORGANIZADOR"
+                  : "CONGRESSISTA",
+            }
+          : {}),
         codigo: code.codigo,
         codigoNormalizado: code.codigoNormalizado,
         tipo: code.tipo,
@@ -533,6 +554,14 @@ export async function GET(request: Request) {
         tipo: summary._id.tipo,
         percentualDesconto: summary.percentualDesconto,
         responsavel: summary.responsavel,
+        ...(summary._id.tipo === "DESCONTO"
+          ? {
+              perfilUtilizador:
+                summary.perfilUtilizador === "ORGANIZADOR"
+                  ? "ORGANIZADOR"
+                  : "CONGRESSISTA",
+            }
+          : {}),
         status: "CONSUMIDO",
         historico: true,
         createdAt: dateToIso(summary.createdAt),
@@ -612,6 +641,7 @@ export async function GET(request: Request) {
     return Response.json({
       activeEditionId,
       edicaoId,
+      organizerPriceCents,
       items: filteredItems.slice(start, start + limit),
       metrics,
       ledger,

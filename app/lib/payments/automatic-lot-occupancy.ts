@@ -65,6 +65,57 @@ function safeCount(value: number) {
   return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
+async function countCapacityRelevantDocuments(
+  db: Db,
+  collectionName: string,
+  match: Record<string, unknown>,
+) {
+  const rows = await db.collection(collectionName).aggregate([
+    { $match: match },
+    {
+      $lookup: {
+        from: "pagamentos.codigos",
+        let: {
+          edicaoId: "$edicaoId",
+          codigoNormalizado: "$codigoDesconto.codigoNormalizado",
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$edicaoId", "$$edicaoId"] },
+                  { $eq: ["$codigoNormalizado", "$$codigoNormalizado"] },
+                ],
+              },
+            },
+          },
+          { $project: { perfilUtilizador: 1 } },
+        ],
+        as: "dadosDoCodigo",
+      },
+    },
+    {
+      $set: {
+        perfilUtilizadorResolvido: {
+          $ifNull: [
+            "$perfilUtilizador",
+            {
+              $ifNull: [
+                "$codigoDesconto.perfilUtilizador",
+                { $arrayElemAt: ["$dadosDoCodigo.perfilUtilizador", 0] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { $match: { perfilUtilizadorResolvido: { $ne: "ORGANIZADOR" } } },
+    { $count: "total" },
+  ]).toArray();
+  return Number(rows[0]?.total ?? 0);
+}
+
 export function buildAutomaticLotOccupancy(
   configId: string,
   edicaoId: string,
@@ -137,26 +188,31 @@ export async function getAutomaticLotOccupancy(
         "pagamento.compraId": { $exists: false },
         "pagamento.tipo_pagamento": { $not: /^organizador$/i },
       }),
-      db.collection("pagamentos.atribuicoes").countDocuments({
-        edicaoId,
-        status: "CONFIRMADA",
-      }),
-      db.collection("pagamentos.sessoes").countDocuments({
-        type: "ticket",
-        edicaoId,
-        $or: [
-          { status: "OPEN", expiresAt: { $gt: now } },
-          {
-            status: {
-              $in: [
-                "CREATING_PAYMENT",
-                "PAYMENT_PENDING",
-                "PAYMENT_REVIEW_REQUIRED",
-              ],
+      countCapacityRelevantDocuments(
+        db,
+        "pagamentos.atribuicoes",
+        { edicaoId, status: "CONFIRMADA" },
+      ),
+      countCapacityRelevantDocuments(
+        db,
+        "pagamentos.sessoes",
+        {
+          type: "ticket",
+          edicaoId,
+          $or: [
+            { status: "OPEN", expiresAt: { $gt: now } },
+            {
+              status: {
+                $in: [
+                  "CREATING_PAYMENT",
+                  "PAYMENT_PENDING",
+                  "PAYMENT_REVIEW_REQUIRED",
+                ],
+              },
             },
-          },
-        ],
-      }),
+          ],
+        },
+      ),
     ]);
 
   return buildAutomaticLotOccupancy(
