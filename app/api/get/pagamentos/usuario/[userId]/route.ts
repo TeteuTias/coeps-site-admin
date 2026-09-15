@@ -80,6 +80,8 @@ export async function GET(
     const db = untypedDb as Db;
     const owner = new ObjectId(userId);
     const sharedProjection = {
+      type: 1,
+      remoteAccessId: 1,
       edicaoId: 1,
       status: 1,
       gatewayState: 1,

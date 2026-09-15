@@ -3,6 +3,7 @@ import { connectToDatabase } from '../../../../lib/mongodb'
 import { NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { normalizeAdminUserDetails } from '@/app/lib/users/admin-user-contract';
+import { loadAdminRemoteParticipation } from '@/app/lib/users/admin-remote-work-server';
 //
 //
 // Exemplo de return:
@@ -42,7 +43,8 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
             )
         }
 
-        const user = normalizeAdminUserDetails(response)
+        const participacao = await loadAdminRemoteParticipation(db, response, new ObjectId(miniCursoId))
+        const user = normalizeAdminUserDetails({ ...response, participacao })
         if (!user) {
             return NextResponse.json(
                 { error: "invalid_user_data", message: "Os dados do usuário estão em formato inválido." },

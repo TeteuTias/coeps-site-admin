@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.5.1",
+    "@aws-sdk/client-s3": "^3.1130.0",
     "@types/xlsx": "^0.0.35",
     "@vercel/blob": "^2.3.0",
     "dompurify": "^3.2.6",

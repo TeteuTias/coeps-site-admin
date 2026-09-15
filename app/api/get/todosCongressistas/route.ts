@@ -5,6 +5,8 @@ import {
     normalizeAdminUserList,
 } from '@/app/lib/users/admin-user-contract';
 import { NextResponse } from 'next/server';
+import type { Db } from 'mongodb';
+import { loadAdminRemoteParticipationMap } from '@/app/lib/users/admin-remote-work-server';
 //
 //
 // Exemplo de return:
@@ -17,7 +19,8 @@ export const dynamic = 'force-dynamic'
 export const GET = withApiAuthRequired(async function GET(request, { params }) {
     try {
 
-        const { db } = await connectToDatabase();
+        const { db: untypedDb } = await connectToDatabase();
+        const db = untypedDb as Db
         const colecao = 'usuarios'
 
 
@@ -26,7 +29,11 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
             { projection: ADMIN_USER_SUMMARY_PROJECTION },
         ).toArray()
 
-        const users = normalizeAdminUserList(response)
+        const participationByUser = await loadAdminRemoteParticipationMap(db, response)
+        const users = normalizeAdminUserList(response.map(user => ({
+            ...user,
+            participacao: participationByUser.get(String(user._id)),
+        })))
         if (!users) {
             return NextResponse.json(
                 { error: "invalid_user_data", message: "Os dados de usuários estão em formato inválido." },

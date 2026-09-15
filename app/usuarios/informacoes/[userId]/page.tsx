@@ -5,7 +5,11 @@ import {
     type AdminUserDetails,
     parseAdminUserDetailsHttpResponse,
 } from "@/app/lib/users/admin-user-contract"
-import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight } from "lucide-react";
+import {
+    type AdminRemoteParticipation,
+    participationModeLabel,
+} from "@/app/lib/users/admin-remote-work"
+import { ArrowLeft, Save, CheckCircle, AlertCircle, XCircle, Clock, Bookmark, FileText, Tag, Hash, Calendar, MapPin, Users, ListChecks, ArrowRight, Laptop, Download, ExternalLink, ShieldCheck, ShieldAlert } from "lucide-react";
 import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide";
 import { useCallback, useEffect, useState, FormEvent, ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
@@ -91,6 +95,7 @@ export default function Page() {
     const [modernPaymentsError, setModernPaymentsError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingRemoteReview, setIsSavingRemoteReview] = useState(false)
     const router = useRouter()
 
     const fetchData = useCallback(async () => {
@@ -210,6 +215,30 @@ export default function Page() {
             alert("Ocorreu um erro ao salvar. Tente novamente.");
         } finally {
             setIsSaving(false);
+        }
+    }
+
+    const handleRemoteReview = async (status: "APPROVED" | "INCONSISTENT") => {
+        if (
+            status === "INCONSISTENT" &&
+            !window.confirm("Marcar o comprovante como inconsistente bloqueará novas submissões remotas e sinalizará os trabalhos vinculados para revisão. Continuar?")
+        ) return
+
+        setIsSavingRemoteReview(true)
+        try {
+            const response = await fetch(`/api/put/usuarios/${userId}/participacao-remota`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status }),
+            })
+            const payload = await response.json().catch(() => null) as { message?: string } | null
+            if (!response.ok) throw new Error(payload?.message || "Não foi possível registrar a auditoria.")
+            await fetchData()
+            alert(status === "APPROVED" ? "Comprovante aprovado." : "Comprovante marcado como inconsistente.")
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Não foi possível registrar a auditoria.")
+        } finally {
+            setIsSavingRemoteReview(false)
         }
     }
 
@@ -344,6 +373,12 @@ export default function Page() {
                     </div>
                 </form>
             </div>
+            <RemoteParticipationPanel
+                participation={user.participacao}
+                userId={user._id}
+                isSaving={isSavingRemoteReview}
+                onReview={handleRemoteReview}
+            />
             <div className="w-full text-center font-bold text-2xl text-white">
                 <h1>MINICURSOS INSCRITOS</h1>
             </div>
@@ -400,6 +435,132 @@ export default function Page() {
                 }
             </div>
         </div >
+    )
+}
+
+const RemoteParticipationPanel: React.FC<{
+    participation: AdminRemoteParticipation
+    userId: string
+    isSaving: boolean
+    onReview: (status: "APPROVED" | "INCONSISTENT") => Promise<void>
+}> = ({ participation, userId, isSaving, onReview }) => {
+    const proofUrl = participation.proof
+        ? `/api/get/usuarios/${encodeURIComponent(userId)}/comprovante-remoto/${encodeURIComponent(participation.proof.id)}`
+        : null
+    const statusTone = participation.status === "ACTIVE"
+        ? "bg-green-100 text-green-800"
+        : participation.status === "REVIEW_REQUIRED" || participation.reviewStatus === "INCONSISTENT"
+            ? "bg-red-100 text-red-800"
+            : "bg-amber-100 text-amber-800"
+
+    return (
+        <section className="w-full max-w-4xl mx-auto rounded-lg border border-gray-200 bg-white p-6 shadow-sm" aria-labelledby="remote-participation-heading">
+            <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <div className="flex items-center gap-2">
+                        <Laptop className="h-6 w-6 text-indigo-700" />
+                        <h2 id="remote-participation-heading" className="text-xl font-bold text-gray-900">Participação remota de trabalhos</h2>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600">Acesso, comprovante privado e trabalhos vinculados na edição atual.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">
+                        {participationModeLabel(participation.mode)}
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusTone}`}>
+                        {participation.status ?? "SEM ACESSO REMOTO"}
+                    </span>
+                </div>
+            </div>
+
+            {!participation.accessId ? (
+                <p className="py-6 text-center text-sm font-semibold text-gray-600">Este usuário não possui solicitação de apresentação remota na edição atual.</p>
+            ) : (
+                <>
+                    <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                        <div><dt className="font-semibold text-gray-500">Edição</dt><dd>{participation.editionId ?? "Não informada"}</dd></div>
+                        <div><dt className="font-semibold text-gray-500">Cidade/UF</dt><dd>{participation.municipalityName && participation.uf ? `${participation.municipalityName}/${participation.uf}` : "Não informado"}</dd></div>
+                        <div><dt className="font-semibold text-gray-500">Código IBGE</dt><dd>{participation.municipalityCode ?? "Não informado"}</dd></div>
+                        <div><dt className="font-semibold text-gray-500">Situação financeira</dt><dd>{participation.status ?? "Não informada"}</dd></div>
+                        <div><dt className="font-semibold text-gray-500">Auditoria</dt><dd>{participation.reviewStatus ?? "Pendente"}</dd></div>
+                        <div><dt className="font-semibold text-gray-500">Confirmação</dt><dd>{formatAdminDate(participation.confirmedAt)}</dd></div>
+                    </dl>
+
+                    {participation.reviewReason && (
+                        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                            <strong>Motivo de revisão:</strong> {participation.reviewReason}
+                        </div>
+                    )}
+
+                    <div className="mt-5 rounded-md border border-gray-200 bg-gray-50 p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h3 className="font-bold text-gray-900">Comprovante de residência</h3>
+                                {participation.proof ? (
+                                    <p className="mt-1 text-sm text-gray-600">
+                                        {participation.proof.originalName} · {(participation.proof.size / 1024 / 1024).toFixed(2)} MiB · enviado em {formatAdminDate(participation.proof.uploadedAt)}
+                                    </p>
+                                ) : (
+                                    <p className="mt-1 text-sm text-gray-600">Nenhum comprovante associado.</p>
+                                )}
+                            </div>
+                            {proofUrl && (
+                                <div className="flex flex-wrap gap-2">
+                                    <Link href={proofUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-50">
+                                        <ExternalLink className="h-4 w-4" />Visualizar
+                                    </Link>
+                                    <Link href={`${proofUrl}?download=1`} className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-100">
+                                        <Download className="h-4 w-4" />Baixar
+                                    </Link>
+                                </div>
+                            )}
+                        </div>
+                        {participation.proof && (
+                            <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
+                                <button
+                                    type="button"
+                                    disabled={isSaving}
+                                    onClick={() => void onReview("APPROVED")}
+                                    className="inline-flex items-center gap-2 rounded-md bg-green-700 px-4 py-2 text-sm font-bold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <ShieldCheck className="h-4 w-4" />Aprovar comprovante
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isSaving}
+                                    onClick={() => void onReview("INCONSISTENT")}
+                                    className="inline-flex items-center gap-2 rounded-md bg-red-700 px-4 py-2 text-sm font-bold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <ShieldAlert className="h-4 w-4" />Marcar inconsistente
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="mt-5">
+                        <h3 className="font-bold text-gray-900">Trabalhos remotos vinculados ({participation.remoteWorkCount})</h3>
+                        {participation.works.length === 0 ? (
+                            <p className="mt-2 rounded-md bg-gray-50 p-4 text-sm text-gray-600">Nenhum trabalho remoto vinculado a este acesso.</p>
+                        ) : (
+                            <ul className="mt-3 space-y-2">
+                                {participation.works.map(work => (
+                                    <li key={work.id} className="rounded-md border border-gray-200 p-4 text-sm">
+                                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                                            <strong className="text-gray-900">{work.title}</strong>
+                                            <span className="font-semibold text-gray-600">{work.status ?? "Sem status"}</span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-gray-500">Enviado em {formatAdminDate(work.submittedAt)}</p>
+                                        {work.financialReviewStatus === "REVIEW_REQUIRED" && (
+                                            <p className="mt-2 font-semibold text-red-700">Revisão financeira necessária</p>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </>
+            )}
+        </section>
     )
 }
 
@@ -553,6 +714,9 @@ const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment 
             <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">
+                            {payment.productType === "remote-work-access" ? "Apresentação remota" : "Inscrição regular"}
+                        </span>
                         <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusStyle}`}>
                             {payment.attributionStatus ?? "ATRIBUIÇÃO AUSENTE"}
                         </span>
@@ -602,6 +766,9 @@ const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment 
                 <div><dt className="font-semibold text-gray-500">Criada em</dt><dd>{formatAdminDate(payment.createdAt)}</dd></div>
                 <div><dt className="font-semibold text-gray-500">Confirmada em</dt><dd>{formatAdminDate(payment.confirmedAt)}</dd></div>
                 <div><dt className="font-semibold text-gray-500">Atualizada em</dt><dd>{formatAdminDate(payment.updatedAt)}</dd></div>
+                {payment.remoteAccessId && (
+                    <div><dt className="font-semibold text-gray-500">Acesso remoto</dt><dd className="break-all font-mono text-xs">{payment.remoteAccessId}</dd></div>
+                )}
             </dl>
 
             <div className="mt-4 grid gap-2 rounded-md bg-gray-50 p-4 text-xs text-gray-700">
