@@ -11,6 +11,7 @@ import { ObjectId } from 'bson';
 import { IUser } from '../lib/types/user/user.t';
 import { useRouter } from 'next/navigation';
 import './style.css';
+import { academicWorkDate } from '@/app/lib/academic-work-date';
 
 // Componente de Loading Personalizado
 const TrabalhosLoadingModal = ({ isLoading }: { isLoading: boolean }) => {
@@ -437,14 +438,8 @@ const TrabalhoComponent: FC<{
                     <div className="trabalhos-arquivo-detalhes">
                       <span>{formatBytes(arquivo.size)}</span>
                       <span>•</span>
-                      <time dateTime={new Date(arquivo.uploadDate).toISOString()}>
-                        {new Date(arquivo.uploadDate).toLocaleString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                      <time dateTime={academicWorkDate(arquivo.uploadDate).iso}>
+                        {academicWorkDate(arquivo.uploadDate).label}
                       </time>
                     </div>
                   </div>
