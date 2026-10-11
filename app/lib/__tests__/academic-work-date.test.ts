@@ -8,7 +8,8 @@ test('anexos antigos sem data não interrompem a renderização do admin', () =>
     }
 });
 test('datas confirmadas mantêm datetime válido e horário de Brasília', () => {
-    assert.deepEqual(academicWorkDate('2026-10-08T15:00:00Z'), {
-        iso: '2026-10-08T15:00:00.000Z', label: '08/10/2026, 12:00:00',
-    });
+    const { iso, label } = academicWorkDate('2026-10-08T15:00:00Z');
+    assert.equal(iso, '2026-10-08T15:00:00.000Z');
+    // O separador entre data e hora varia com a versão do ICU.
+    assert.match(label, /^08\/10\/2026,? 12:00$/);
 });

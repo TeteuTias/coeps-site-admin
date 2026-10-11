@@ -316,6 +316,9 @@ const TrabalhoComponent: FC<{
   toggleFichaAvalicaoProps: (fichaId: ObjectId, indexAcademicWork: number, newProps: Partial<IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"][number]>) => void;
 }> = ({ data, hydrateData, toggleFichaAvalicaoProps, indexTrabalho, user }) => {
   const [selectedStatus, setSelectedStatus] = useState<IAcademicWorks['status']>(data.status);
+  // Registros legados podem não ter as listas de anexos e de avaliações.
+  const arquivos = Array.isArray(data.arquivos) ? data.arquivos : [];
+  const avaliacoes = Array.isArray(data.avaliadorComentarios) ? data.avaliadorComentarios : [];
   const [newComentario, setNewComentario] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -426,14 +429,16 @@ const TrabalhoComponent: FC<{
         >
           <div className="flex items-center space-x-3">
             <Paperclip className="w-5 h-5" />
-            <h2>Arquivos ({data.arquivos.length})</h2>
+            <h2>Arquivos ({arquivos.length})</h2>
           </div>
           {arquivosOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
         </button>
         {arquivosOpen && (
           <div className="trabalhos-card-section-content">
             <div className="trabalhos-arquivos-list">
-              {data.arquivos.map((arquivo, index) => (
+              {arquivos.map((arquivo, index) => {
+                const uploadDate = academicWorkDate(arquivo.uploadDate);
+                return (
                 <div key={index} className="trabalhos-arquivo-item">
                   <File className="trabalhos-arquivo-icon" />
                   <div className="trabalhos-arquivo-info">
@@ -443,8 +448,8 @@ const TrabalhoComponent: FC<{
                     <div className="trabalhos-arquivo-detalhes">
                       <span>{formatBytes(arquivo.size)}</span>
                       <span>•</span>
-                      <time dateTime={academicWorkDate(arquivo.uploadDate).iso}>
-                        {academicWorkDate(arquivo.uploadDate).label}
+                      <time dateTime={uploadDate.iso}>
+                        {uploadDate.label}
                       </time>
                     </div>
                   </div>
@@ -458,7 +463,8 @@ const TrabalhoComponent: FC<{
                     <Download className="w-5 h-5" />
                   </a>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
         )}
@@ -498,23 +504,23 @@ const TrabalhoComponent: FC<{
         >
           <div className="flex items-center space-x-3">
             <MessageSquare className="w-5 h-5" />
-            <h2>Avaliações Anteriores ({data.avaliadorComentarios.length})</h2>
+            <h2>Avaliações Anteriores ({avaliacoes.length})</h2>
           </div>
           {avaliacoesAnterioresOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
         </button>
         {avaliacoesAnterioresOpen && (
           <div className="trabalhos-card-section-content">
-            {data.avaliadorComentarios.length === 0 ? (
+            {avaliacoes.length === 0 ? (
               <p className="text-center opacity-70">Nenhuma avaliação prévia registrada.</p>
             ) : (
               <div className="trabalhos-avaliacoes-list">
-                {[...data.avaliadorComentarios].reverse().map((avaliacao, index) => (
+                {[...avaliacoes].reverse().map((avaliacao, index) => (
                   <div key={index} className="trabalhos-avaliacao-item">
                     <div className="trabalhos-avaliacao-header">
                       <div className="trabalhos-avaliacao-data">
                         {new Date(avaliacao.date).toLocaleString('pt-BR')}
                       </div>
-                      <span className={`trabalhos-card-status ${avaliacao.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                      <span className={`trabalhos-card-status ${(avaliacao.status ?? '').toLowerCase().replace(/\s+/g, '-')}`}>
                         {avaliacao.status}
                       </span>
                     </div>
