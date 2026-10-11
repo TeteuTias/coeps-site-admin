@@ -94,6 +94,22 @@ test("substitui variáveis escapando HTML só no corpo", () => {
     )
 })
 
+test("lista os nomes dos autores do trabalho", () => {
+    const message = buildWorkEmailMessage(
+        { ...WORK, autores: [{ nome: " Ana S. " }, { nome: "Bruno <b>Lima</b>" }, { nome: "Ana S." }, { email: "x@y.com" }, null] },
+        { email: "ana@example.com", nome: "Ana" },
+        "Autores: {{autores}}",
+        "<li>{{autores}}</li>",
+    )
+
+    assert.equal(message.assunto, "Autores: Ana S., Bruno <b>Lima</b>")
+    assert.equal(message.corpoHtml, "<li>Ana S., Bruno &lt;b&gt;Lima&lt;/b&gt;</li>")
+    assert.equal(
+        buildWorkEmailMessage({ ...WORK, autores: undefined }, { email: "a@b.com", nome: "" }, "x", "[{{autores}}]").corpoHtml,
+        "[]",
+    )
+})
+
 test("usa tratamento genérico quando o destinatário não tem nome", () => {
     const message = buildWorkEmailMessage(WORK, { email: "x@example.com", nome: "" }, "a", "Olá {{nome}}")
     assert.equal(message.corpoHtml, "Olá participante")
