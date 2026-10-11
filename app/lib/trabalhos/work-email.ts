@@ -4,7 +4,7 @@ export const WORK_EMAIL_LIMITS = {
     worksPerRequest: 10,
 } as const
 
-export const WORK_EMAIL_VARIABLES = ["nome", "titulo", "modalidade", "status"] as const
+export const WORK_EMAIL_VARIABLES = ["nome", "titulo", "autores", "modalidade", "status"] as const
 
 export type WorkEmailVariable = typeof WORK_EMAIL_VARIABLES[number]
 
@@ -208,6 +208,13 @@ export function countUniqueEmails(recipients: readonly WorkEmailRecipient[]) {
     return new Set(recipients.map(recipient => recipient.email)).size
 }
 
+// Nomes na ordem em que foram cadastrados no trabalho, sem repetir.
+export function workAuthorNames(work: WorkEmailWork) {
+    if (!Array.isArray(work.autores)) return []
+    const names = work.autores.map(autor => text(asRecord(autor)?.nome)).filter(Boolean)
+    return Array.from(new Set(names))
+}
+
 export function workEmailVariables(
     work: WorkEmailWork,
     nome: string,
@@ -215,6 +222,7 @@ export function workEmailVariables(
     return {
         nome: nome || "participante",
         titulo: text(work.titulo),
+        autores: workAuthorNames(work).join(", "),
         modalidade: text(work.modalidade),
         status: text(work.status),
     }
