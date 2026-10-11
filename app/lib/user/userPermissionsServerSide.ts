@@ -58,6 +58,7 @@ const permittedRoutes: { [key: string]: string[] } = {
     "6a87990e9d8d0385e0a77083": [ // ID da conta Científica OK
         '/',
         '/trabalhos', // Acesso a rotas específicas e dinâmicas
+        '/trabalhos/email',
         '/usuarios/informacoes/:id',
     ],
     "6a8799078ecd649be9bdb061": [ // id do admin OK
@@ -68,9 +69,11 @@ const permittedRoutes: { [key: string]: string[] } = {
 // Objecto para bloquear algumas rotas de API
 const blockedApiRoutes: { [key: string]: string[] } = {
     "6a87991a310d49dafb8d113b": [ // ID da conta de apoio ………
-        "/api/put/usuario/atualizarUsuario"
+        "/api/put/usuario/atualizarUsuario",
+        "/api/post/trabalhos/email"
     ],
     "6a8799158b3fe756dd02f487": [ // ID da conta Certificados
+        "/api/post/trabalhos/email"
     ],
     "6a87990e9d8d0385e0a77083": [ // ID da conta Científica
     ],

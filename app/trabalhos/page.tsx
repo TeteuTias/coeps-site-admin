@@ -5,11 +5,12 @@ const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
 import 'react-quill-new/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 import { useEffect, useState, useMemo, FC } from 'react';
-import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Info, Download, UserCircle, MessageSquare, Edit, PieChart, Search, Filter, File } from 'lucide-react';
+import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Info, Download, UserCircle, MessageSquare, Edit, PieChart, Search, Filter, File, Mail } from 'lucide-react';
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 import { ObjectId } from 'bson';
 import { IUser } from '../lib/types/user/user.t';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import './style.css';
 
 // Componente de Loading Personalizado
@@ -260,6 +261,10 @@ export default function AvaliarTrabalhoPage() {
             <Download className="inline-block mr-2" />
             Baixar Informações
           </button>
+          <Link href="/trabalhos/email" className="trabalhos-download-btn">
+            <Mail className="inline-block mr-2" />
+            Enviar E-mails
+          </Link>
         </div>
 
         {/* Container de Resultados */}
