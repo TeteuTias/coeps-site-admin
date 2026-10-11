@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:admin-users": "node --experimental-strip-types --test \"app/lib/users/__tests__/*.test.ts\"",
-    "test:payments-admin": "node --experimental-strip-types --test \"app/lib/payments/__tests__/*.test.ts\""
+    "test:payments-admin": "node --experimental-strip-types --test \"app/lib/payments/__tests__/*.test.ts\"",
+    "test:trabalhos-email": "node --experimental-strip-types --test \"app/lib/trabalhos/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.5.1",
