@@ -97,6 +97,13 @@
   font-weight: 600;
 }
 
+.trabalhos-email-since label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .trabalhos-email-since input {
   padding: 0.4rem 0.6rem;
 }
