@@ -1,5 +1,6 @@
 import { getSession, withApiAuthRequired } from "@/app/lib/auth0"
 import { connectToDatabase } from "@/app/lib/mongodb"
+import { emailScriptConfig, postToEmailScript, type EmailScriptConfig } from "@/app/lib/trabalhos/email-script"
 import {
     buildWorkEmailMessage,
     buildWorkEmailMessages,
@@ -12,9 +13,6 @@ import { ObjectId, type Db } from "mongodb"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
-
-const SCRIPT_URL_PREFIX = "https://script.google.com/"
-const SCRIPT_TIMEOUT_MS = 50_000
 
 interface WorkDocument {
     _id: ObjectId
@@ -41,12 +39,6 @@ interface SendResult {
 // por isso as falhas de configuração e do provedor usam 409 e 424.
 function jsonError(status: number, error: string, message: string) {
     return Response.json({ error, message }, { status })
-}
-
-function scriptConfig() {
-    const url = (process.env.GOOGLE_SCRIPT_EMAIL_URL ?? "").trim()
-    const secret = (process.env.GOOGLE_SCRIPT_EMAIL_SECRET ?? "").trim()
-    return url.startsWith(SCRIPT_URL_PREFIX) && secret ? { url, secret } : null
 }
 
 async function loadWorks(db: Db, ids: string[]): Promise<WorkEmailWork[]> {
@@ -80,32 +72,19 @@ async function loadWorks(db: Db, ids: string[]): Promise<WorkEmailWork[]> {
 }
 
 async function sendThroughScript(
-    config: { url: string; secret: string },
+    config: EmailScriptConfig,
     messages: WorkEmailMessage[],
 ): Promise<{ results: SendResult[]; quota: number | null } | { failure: string }> {
-    let payload: unknown
-    try {
-        const response = await fetch(config.url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                secret: config.secret,
-                mensagens: messages.map(({ para, assunto, corpoHtml }) => ({ para, assunto, corpoHtml })),
-            }),
-            redirect: "follow",
-            cache: "no-store",
-            signal: AbortSignal.timeout(SCRIPT_TIMEOUT_MS),
-        })
-        payload = await response.json()
-    } catch {
+    const body = await postToEmailScript(config, {
+        mensagens: messages.map(({ para, assunto, corpoHtml }) => ({ para, assunto, corpoHtml })),
+    })
+    if (!body) {
         return {
             failure: "Não foi possível obter a confirmação do script de envio. Confira a caixa de enviados antes de tentar novamente.",
         }
     }
-
-    const body = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : null
-    if (!body || body.ok !== true) {
-        const reason = typeof body?.erro === "string" && body.erro.trim() ? ` (${body.erro.trim().slice(0, 200)})` : ""
+    if (body.ok !== true) {
+        const reason = typeof body.erro === "string" && body.erro.trim() ? ` (${body.erro.trim().slice(0, 200)})` : ""
         return { failure: `O script de envio recusou a solicitação${reason}.` }
     }
 
@@ -146,7 +125,7 @@ export const POST = withApiAuthRequired(async function POST(request: Request) {
     }
     const emailRequest = parsed.request
 
-    const config = scriptConfig()
+    const config = emailScriptConfig()
     if (!config) {
         return jsonError(
             409,

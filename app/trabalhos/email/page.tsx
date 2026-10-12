@@ -5,7 +5,7 @@ const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
 import 'react-quill-new/dist/quill.snow.css';
 import DOMPurify from 'dompurify';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Eye, FlaskConical, Mail, Search, Send, Users } from 'lucide-react';
+import { ArrowLeft, Eye, FlaskConical, Mail, MailCheck, Search, Send, Users } from 'lucide-react';
 import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
 import { IUser } from '@/app/lib/types/user/user.t';
 import {
@@ -23,6 +23,9 @@ import '../style.css';
 import './style.css';
 
 type Modo = 'todos' | 'escolher';
+
+// Registros legados podem não ter data de submissão.
+type PageWork = WorkEmailWork & { submetidoEm: number | null };
 
 interface SendResult {
   trabalhoId: string;
@@ -54,12 +57,13 @@ const plural = (count: number, singular: string, pluralForm: string) =>
 export default function EmailTrabalhosPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [works, setWorks] = useState<WorkEmailWork[]>([]);
+  const [works, setWorks] = useState<PageWork[]>([]);
 
   const [modo, setModo] = useState<Modo>('escolher');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [modalidadeFilter, setModalidadeFilter] = useState('Todas');
+  const [submetidosDesde, setSubmetidosDesde] = useState('');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [publico, setPublico] = useState<WorkEmailAudience>({ remetente: true, autores: false });
 
@@ -72,6 +76,46 @@ export default function EmailTrabalhosPage() {
   const [testStatus, setTestStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
+  // null = estado ainda desconhecido (carregando ou script indisponível)
+  const [autoAtivo, setAutoAtivo] = useState<boolean | null>(null);
+  const [autoErro, setAutoErro] = useState<string | null>(null);
+  const [autoSalvando, setAutoSalvando] = useState(true);
+
+  const sincronizarAuto = useCallback(async (ativo?: boolean) => {
+    setAutoSalvando(true);
+    setAutoErro(null);
+    try {
+      const response = await fetch('/api/post/trabalhos/email/confirmacao-automatica', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ativo === undefined ? {} : { ativo }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (response.ok && typeof payload?.data?.ativo === 'boolean') {
+        setAutoAtivo(payload.data.ativo);
+      } else {
+        setAutoErro(payload?.message || 'Não foi possível consultar a confirmação automática.');
+      }
+    } catch {
+      setAutoErro('Falha de conexão ao consultar a confirmação automática.');
+    } finally {
+      setAutoSalvando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    sincronizarAuto();
+  }, [sincronizarAuto]);
+
+  const handleToggleAuto = () => {
+    if (autoAtivo === null) return;
+    const novo = !autoAtivo;
+    const pergunta = novo
+      ? 'Ativar a confirmação automática? Cada novo trabalho submetido passará a gerar um e-mail de confirmação de recebimento para quem submeteu e para os autores.'
+      : 'Desativar a confirmação automática? Novas submissões deixarão de receber o e-mail de confirmação.';
+    if (window.confirm(pergunta)) sincronizarAuto(novo);
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -80,13 +124,14 @@ export default function EmailTrabalhosPage() {
         if (!response.ok) throw new Error('Falha ao buscar dados');
         const { data, users } = await response.json() as { data: IAcademicWorks[]; users: IUser[] };
         const usersById = new Map(users.map(user => [`${user._id}`, user.informacoes_usuario]));
-        const loaded = [...data].reverse().map((trabalho): WorkEmailWork => ({
+        const loaded = [...data].reverse().map((trabalho): PageWork => ({
           id: `${trabalho._id}`,
           titulo: trabalho.titulo,
           modalidade: trabalho.modalidade,
           status: trabalho.status,
           autores: trabalho.autores,
           remetente: usersById.get(`${trabalho.userId}`) ?? null,
+          submetidoEm: Date.parse(`${trabalho.dataSubmissao}`) || null,
         }));
         if (!cancelled) setWorks(loaded);
       } catch (error) {
@@ -108,15 +153,17 @@ export default function EmailTrabalhosPage() {
 
   const filteredWorks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    const desde = submetidosDesde ? new Date(submetidosDesde).getTime() : null;
     return works.filter(work => {
       if (statusFilter !== 'Todos' && work.status !== statusFilter) return false;
       if (modalidadeFilter !== 'Todas' && work.modalidade !== modalidadeFilter) return false;
+      if (desde !== null && (work.submetidoEm === null || work.submetidoEm < desde)) return false;
       if (!query) return true;
       const people = resolveWorkRecipients(work, TODOS_OS_EMAILS);
       return `${work.titulo ?? ''}`.toLowerCase().includes(query)
         || people.some(person => person.nome.toLowerCase().includes(query) || person.email.includes(query));
     });
-  }, [works, searchQuery, statusFilter, modalidadeFilter]);
+  }, [works, searchQuery, statusFilter, modalidadeFilter, submetidosDesde]);
 
   const publicoAtivo = modo === 'todos' ? TODOS_OS_EMAILS : publico;
   const worksAtivos = useMemo(
@@ -297,6 +344,33 @@ export default function EmailTrabalhosPage() {
 
         {!isLoading && !loadError && (
           <>
+            {/* Confirmação automática */}
+            <section className="trabalhos-filters-container">
+              <h2 className="trabalhos-filters-title">
+                <MailCheck className="inline-block mr-2" />
+                Confirmação automática de recebimento
+              </h2>
+              <p className="trabalhos-email-hint">
+                Quando ativada, cada novo trabalho submetido no site gera na hora um e-mail de confirmação de
+                recebimento para quem submeteu e para os autores. Trabalhos submetidos antes da ativação não
+                recebem; use o filtro de data abaixo para enviar a eles manualmente.
+              </p>
+              {autoErro && <div className="trabalhos-message error">{autoErro}</div>}
+              <div className="trabalhos-email-actions">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoAtivo === true}
+                  className={`trabalhos-email-switch ${autoAtivo ? 'on' : ''}`}
+                  onClick={handleToggleAuto}
+                  disabled={autoSalvando || autoAtivo === null}
+                >
+                  <span className="trabalhos-email-switch-track" aria-hidden="true" />
+                  {autoSalvando ? 'Consultando...' : autoAtivo === null ? 'Indisponível' : autoAtivo ? 'Ativada' : 'Desativada'}
+                </button>
+              </div>
+            </section>
+
             {/* Destinatários */}
             <section className="trabalhos-filters-container">
               <h2 className="trabalhos-filters-title">
@@ -384,6 +458,18 @@ export default function EmailTrabalhosPage() {
                     </select>
                   </div>
 
+                  <label className="trabalhos-email-since">
+                    Submetidos a partir de
+                    <input
+                      type="datetime-local"
+                      value={submetidosDesde}
+                      onChange={event => setSubmetidosDesde(event.target.value)}
+                    />
+                    {submetidosDesde && (
+                      <button type="button" onClick={() => setSubmetidosDesde('')}>Limpar</button>
+                    )}
+                  </label>
+
                   <label className="trabalhos-email-select-all">
                     <input
                       type="checkbox"
@@ -414,6 +500,7 @@ export default function EmailTrabalhosPage() {
                               <span className="trabalhos-email-item-meta">
                                 {`${work.modalidade ?? ''}`} · {`${work.status ?? ''}`} · Enviado por{' '}
                                 {`${work.remetente?.nome || 'usuário desconhecido'}`}
+                                {work.submetidoEm !== null && ` em ${new Date(work.submetidoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`}
                               </span>
                             </span>
                             <span className={`trabalhos-email-item-count ${quantidade === 0 ? 'empty' : ''}`}>
