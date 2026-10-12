@@ -64,6 +64,7 @@ export default function EmailTrabalhosPage() {
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [modalidadeFilter, setModalidadeFilter] = useState('Todas');
   const [submetidosDesde, setSubmetidosDesde] = useState('');
+  const [submetidosAte, setSubmetidosAte] = useState('');
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [publico, setPublico] = useState<WorkEmailAudience>({ remetente: true, autores: false });
 
@@ -154,16 +155,19 @@ export default function EmailTrabalhosPage() {
   const filteredWorks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const desde = submetidosDesde ? new Date(submetidosDesde).getTime() : null;
+    // O campo tem precisão de minuto: "até 14:30" inclui tudo que chegou até 14:30:59.
+    const ate = submetidosAte ? new Date(submetidosAte).getTime() + 60_000 : null;
     return works.filter(work => {
       if (statusFilter !== 'Todos' && work.status !== statusFilter) return false;
       if (modalidadeFilter !== 'Todas' && work.modalidade !== modalidadeFilter) return false;
       if (desde !== null && (work.submetidoEm === null || work.submetidoEm < desde)) return false;
+      if (ate !== null && (work.submetidoEm === null || work.submetidoEm >= ate)) return false;
       if (!query) return true;
       const people = resolveWorkRecipients(work, TODOS_OS_EMAILS);
       return `${work.titulo ?? ''}`.toLowerCase().includes(query)
         || people.some(person => person.nome.toLowerCase().includes(query) || person.email.includes(query));
     });
-  }, [works, searchQuery, statusFilter, modalidadeFilter, submetidosDesde]);
+  }, [works, searchQuery, statusFilter, modalidadeFilter, submetidosDesde, submetidosAte]);
 
   const publicoAtivo = modo === 'todos' ? TODOS_OS_EMAILS : publico;
   const worksAtivos = useMemo(
@@ -458,17 +462,31 @@ export default function EmailTrabalhosPage() {
                     </select>
                   </div>
 
-                  <label className="trabalhos-email-since">
-                    Submetidos a partir de
-                    <input
-                      type="datetime-local"
-                      value={submetidosDesde}
-                      onChange={event => setSubmetidosDesde(event.target.value)}
-                    />
-                    {submetidosDesde && (
-                      <button type="button" onClick={() => setSubmetidosDesde('')}>Limpar</button>
+                  <div className="trabalhos-email-since">
+                    <label>
+                      Submetidos a partir de
+                      <input
+                        type="datetime-local"
+                        value={submetidosDesde}
+                        max={submetidosAte || undefined}
+                        onChange={event => setSubmetidosDesde(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      até
+                      <input
+                        type="datetime-local"
+                        value={submetidosAte}
+                        min={submetidosDesde || undefined}
+                        onChange={event => setSubmetidosAte(event.target.value)}
+                      />
+                    </label>
+                    {(submetidosDesde || submetidosAte) && (
+                      <button type="button" onClick={() => { setSubmetidosDesde(''); setSubmetidosAte(''); }}>
+                        Limpar
+                      </button>
                     )}
-                  </label>
+                  </div>
 
                   <label className="trabalhos-email-select-all">
                     <input
