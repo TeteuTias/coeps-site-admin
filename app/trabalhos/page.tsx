@@ -1,5 +1,6 @@
 'use client'
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import dynamic from 'next/dynamic';
 const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
 import 'react-quill-new/dist/quill.snow.css';
@@ -17,7 +18,7 @@ import { academicWorkDate } from '@/app/lib/academic-work-date';
 // Componente de Loading Personalizado
 const TrabalhosLoadingModal = ({ isLoading }: { isLoading: boolean }) => {
   if (!isLoading) return null;
-  
+
   return (
     <div className="trabalhos-loading-container">
       <div className="trabalhos-loading-spinner"></div>
@@ -182,14 +183,63 @@ export default function AvaliarTrabalhoPage() {
 
   const statusOptionsFiltro = ["Todos", "Aceito", "Recusado", "Necessita de Alteração", "Em Avaliação"];
 
+  const downloadAllFilteredTrabalhos = async () => {
+    setIsLoading(true);
 
+    try {
+      let index = 0;
+      // Usamos for...of para lidar corretamente com o async/await
+      for (const trabalho of trabalhos) {
+
+        console.log(`INICIANDO - ${index + 1}/${filteredTrabalhos.length}: ${trabalho.titulo}`);
+        index++;
+        if (!trabalho.arquivos || trabalho.arquivos.length === 0) continue;
+
+        const zip = new JSZip();
+
+        // Baixa cada arquivo do trabalho atual e adiciona no ZIP
+        for (const arquivo of trabalho.arquivos) {
+          try {
+            const response = await fetch(arquivo.url);
+            if (!response.ok) {
+              throw new Error(`Falha ao baixar o arquivo: ${arquivo.originalName}`);
+            }
+            const blob = await response.blob();
+
+            // Adiciona o arquivo dentro do arquivo compactado
+            zip.file(arquivo.originalName, blob);
+          } catch (error) {
+            console.error(`Erro no arquivo ${arquivo.originalName}:`, error);
+          }
+        }
+
+        // Gera o arquivo ZIP compactado para este trabalho específico
+        const zipContent = await zip.generateAsync({ type: 'blob' });
+
+        // Cria o link de download automático para o ZIP gerado
+        const url = window.URL.createObjectURL(zipContent);
+        const a = document.createElement('a');
+        a.href = url;
+        // Define o nome do arquivo compactado (ex: Trabalho_NomeDoTrabalho.zip)
+        a.download = `${trabalho.titulo || 'trabalho'}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error("Erro geral no processo de download:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return (
     <div className="trabalhos-main-container">
       <TrabalhosLoadingModal isLoading={isLoading} />
       <div className="trabalhos-content-wrapper">
-          <header className="trabalhos-header">
-            <span className="main-eyebrow">CIEPS / Trabalhos</span>
-            <h1 className="trabalhos-title">Painel de Avaliação</h1>
+        <header className="trabalhos-header">
+          <span className="main-eyebrow">CIEPS / Trabalhos</span>
+          <h1 className="trabalhos-title">Painel de Avaliação</h1>
           <p className="trabalhos-subtitle">Revise, filtre e avalie os trabalhos acadêmicos submetidos.</p>
         </header>
 
@@ -255,7 +305,14 @@ export default function AvaliarTrabalhoPage() {
         )}
         {/* Botão de Download */}
         <div className="trabalhos-download-container">
-          <button 
+          <button
+            className="trabalhos-download-btn"
+            onClick={() => downloadAllFilteredTrabalhos()}
+          >
+            <Download className="inline-block mr-2" />
+            Baixar Trabalhos Filtrados
+          </button>
+          <button
             className="trabalhos-download-btn"
             onClick={() => downloadInfos()}
           >
@@ -378,8 +435,8 @@ const TrabalhoComponent: FC<{
         <div className="trabalhos-card-info-item">
           <UserCircle className="w-4 h-4" />
           <span>Enviado por:</span>
-          <button 
-            onClick={() => router.push(`/usuarios/informacoes/${user?._id}`)} 
+          <button
+            onClick={() => router.push(`/usuarios/informacoes/${user?._id}`)}
             className="trabalhos-card-info-link"
           >
             {user?.informacoes_usuario.nome || 'Usuário Desconhecido'}
@@ -392,8 +449,8 @@ const TrabalhoComponent: FC<{
 
       {/* Seção de Autores */}
       <div className="trabalhos-card-section">
-        <button 
-          className="trabalhos-card-section-header" 
+        <button
+          className="trabalhos-card-section-header"
           onClick={() => setAutoresOpen(!autoresOpen)}
         >
           <div className="flex items-center space-x-3">
@@ -423,8 +480,8 @@ const TrabalhoComponent: FC<{
 
       {/* Seção de Arquivos */}
       <div className="trabalhos-card-section">
-        <button 
-          className="trabalhos-card-section-header" 
+        <button
+          className="trabalhos-card-section-header"
           onClick={() => setArquivosOpen(!arquivosOpen)}
         >
           <div className="flex items-center space-x-3">
@@ -439,31 +496,31 @@ const TrabalhoComponent: FC<{
               {arquivos.map((arquivo, index) => {
                 const uploadDate = academicWorkDate(arquivo.uploadDate);
                 return (
-                <div key={index} className="trabalhos-arquivo-item">
-                  <File className="trabalhos-arquivo-icon" />
-                  <div className="trabalhos-arquivo-info">
-                    <div className="trabalhos-arquivo-nome" title={arquivo.originalName}>
-                      {arquivo.originalName}
+                  <div key={index} className="trabalhos-arquivo-item">
+                    <File className="trabalhos-arquivo-icon" />
+                    <div className="trabalhos-arquivo-info">
+                      <div className="trabalhos-arquivo-nome" title={arquivo.originalName}>
+                        {arquivo.originalName}
+                      </div>
+                      <div className="trabalhos-arquivo-detalhes">
+                        <span>{formatBytes(arquivo.size)}</span>
+                        <span>•</span>
+                        <time dateTime={uploadDate.iso}>
+                          {uploadDate.label}
+                        </time>
+                      </div>
                     </div>
-                    <div className="trabalhos-arquivo-detalhes">
-                      <span>{formatBytes(arquivo.size)}</span>
-                      <span>•</span>
-                      <time dateTime={uploadDate.iso}>
-                        {uploadDate.label}
-                      </time>
-                    </div>
+                    <a
+                      href={arquivo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Baixar arquivo"
+                      className="trabalhos-arquivo-download"
+                    >
+                      <Download className="w-5 h-5" />
+                    </a>
                   </div>
-                  <a
-                    href={arquivo.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Baixar arquivo"
-                    className="trabalhos-arquivo-download"
-                  >
-                    <Download className="w-5 h-5" />
-                  </a>
-                </div>
-              );
+                );
               })}
             </div>
           </div>
@@ -472,8 +529,8 @@ const TrabalhoComponent: FC<{
 
       {/* Seção de Tópicos */}
       <div className="trabalhos-card-section">
-        <button 
-          className="trabalhos-card-section-header" 
+        <button
+          className="trabalhos-card-section-header"
           onClick={() => setTopicosOpen(!topicosOpen)}
         >
           <div className="flex items-center space-x-3">
@@ -498,8 +555,8 @@ const TrabalhoComponent: FC<{
 
       {/* Seção de Avaliações Anteriores */}
       <div className="trabalhos-card-section">
-        <button 
-          className="trabalhos-card-section-header" 
+        <button
+          className="trabalhos-card-section-header"
           onClick={() => setAvaliacoesAnterioresOpen(!avaliacoesAnterioresOpen)}
         >
           <div className="flex items-center space-x-3">
@@ -524,9 +581,9 @@ const TrabalhoComponent: FC<{
                         {avaliacao.status}
                       </span>
                     </div>
-                    <div 
-                      className="trabalhos-avaliacao-comentario" 
-                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(avaliacao.comentario) }} 
+                    <div
+                      className="trabalhos-avaliacao-comentario"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(avaliacao.comentario) }}
                     />
                   </div>
                 ))}
@@ -546,11 +603,11 @@ const TrabalhoComponent: FC<{
         {success && <div className="trabalhos-message success">{success}</div>}
         <div className="trabalhos-status-buttons">
           {statusOptions.map(status => (
-            <button 
-              key={status} 
-              onClick={() => setSelectedStatus(status)} 
-              onMouseEnter={() => setHoveredStatus(status)} 
-              onMouseLeave={() => setHoveredStatus(null)} 
+            <button
+              key={status}
+              onClick={() => setSelectedStatus(status)}
+              onMouseEnter={() => setHoveredStatus(status)}
+              onMouseLeave={() => setHoveredStatus(null)}
               className={`trabalhos-status-btn ${status.toLowerCase().replace(/\s+/g, '-').replace('-de-', '-').replace('ção', 'cao')} ${selectedStatus === status ? 'active' : ''}`}
             >
               {status}
@@ -567,28 +624,28 @@ const TrabalhoComponent: FC<{
                   (Mín: {item.notaMinima} | Máx: {item.notaMaxima} | Peso: {item.peso})
                 </p>
                 <div className="trabalhos-ficha-inputs">
-                  <input 
-                    type="number" 
-                    placeholder='Nota' 
-                    min={item.notaMinima} 
-                    max={item.notaMaxima} 
-                    className="trabalhos-ficha-input" 
-                    value={item.notasRecebidas[0] || ''} 
-                    onChange={(e) => { 
-                      const nota = Math.max(item.notaMinima, Math.min(item.notaMaxima, Number(e.target.value))); 
-                      const updatedItem = { ...item, notasRecebidas: [nota] }; 
-                      toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, updatedItem); 
-                    }} 
+                  <input
+                    type="number"
+                    placeholder='Nota'
+                    min={item.notaMinima}
+                    max={item.notaMaxima}
+                    className="trabalhos-ficha-input"
+                    value={item.notasRecebidas[0] || ''}
+                    onChange={(e) => {
+                      const nota = Math.max(item.notaMinima, Math.min(item.notaMaxima, Number(e.target.value)));
+                      const updatedItem = { ...item, notasRecebidas: [nota] };
+                      toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, updatedItem);
+                    }}
                   />
-                  <textarea 
-                    className="trabalhos-ficha-textarea" 
-                    placeholder='Justificativa da nota' 
-                    rows={1} 
-                    value={item.justificativa[0] || ''} 
-                    onChange={(e) => { 
-                      const updatedItem = { ...item, justificativa: [e.target.value] }; 
-                      toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, updatedItem); 
-                    }} 
+                  <textarea
+                    className="trabalhos-ficha-textarea"
+                    placeholder='Justificativa da nota'
+                    rows={1}
+                    value={item.justificativa[0] || ''}
+                    onChange={(e) => {
+                      const updatedItem = { ...item, justificativa: [e.target.value] };
+                      toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, updatedItem);
+                    }}
                   />
                 </div>
               </div>
@@ -598,28 +655,28 @@ const TrabalhoComponent: FC<{
         <div className="trabalhos-editor-container">
           <label className="trabalhos-editor-label">Parecer Descritivo</label>
           <div className="trabalhos-editor">
-            <ReactQuill 
-              theme="snow" 
-              value={newComentario} 
-              onChange={setNewComentario} 
-              modules={{ 
+            <ReactQuill
+              theme="snow"
+              value={newComentario}
+              onChange={setNewComentario}
+              modules={{
                 toolbar: [
-                  [{ 'header': [1, 2, false] }], 
-                  ['bold', 'italic', 'underline'], 
-                  [{ 'list': 'ordered' }, { 'list': 'bullet' }], 
-                  ['link'], 
+                  [{ 'header': [1, 2, false] }],
+                  ['bold', 'italic', 'underline'],
+                  [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                  ['link'],
                   ['clean']
-                ] 
-              }} 
-              placeholder="Escreva seu parecer detalhado aqui..." 
+                ]
+              }}
+              placeholder="Escreva seu parecer detalhado aqui..."
             />
           </div>
         </div>
-        <button 
-          onClick={handleAddAvaliacao} 
-          disabled={loading} 
-          onFocus={() => setIsFocused(true)} 
-          onBlur={() => setIsFocused(false)} 
+        <button
+          onClick={handleAddAvaliacao}
+          disabled={loading}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           className="trabalhos-submit-btn"
         >
           {loading ? 'Enviando...' : 'Enviar Avaliação'}
