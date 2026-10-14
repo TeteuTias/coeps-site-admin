@@ -184,51 +184,75 @@ export default function AvaliarTrabalhoPage() {
   const statusOptionsFiltro = ["Todos", "Aceito", "Recusado", "Necessita de Alteração", "Em Avaliação"];
 
   const downloadAllFilteredTrabalhos = async () => {
+    if (filteredTrabalhos.length === 0) {
+      alert("Nenhum trabalho corresponde aos filtros atuais.");
+      return;
+    }
     setIsLoading(true);
 
-    try {
-      let index = 0;
-      // Usamos for...of para lidar corretamente com o async/await
-      for (const trabalho of trabalhos) {
+    // Remove caracteres que quebram a extração no Windows e evita "/" virar subpasta no ZIP
+    const nomeSeguro = (nome: string) => nome.replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 100);
+    const falhas: string[] = [];
+    let totalArquivos = 0;
 
-        console.log(`INICIANDO - ${index + 1}/${filteredTrabalhos.length}: ${trabalho.titulo}`);
-        index++;
+    try {
+      // Um único ZIP com uma pasta por trabalho: navegadores bloqueiam vários downloads automáticos
+      const zip = new JSZip();
+
+      for (const [index, trabalho] of filteredTrabalhos.entries()) {
         if (!trabalho.arquivos || trabalho.arquivos.length === 0) continue;
 
-        const zip = new JSZip();
+        // Numeração garante pastas distintas mesmo com títulos repetidos
+        const pasta = zip.folder(`${index + 1} - ${nomeSeguro(trabalho.titulo || 'trabalho')}`)!;
+        const nomesUsados = new Set<string>();
 
-        // Baixa cada arquivo do trabalho atual e adiciona no ZIP
-        for (const arquivo of trabalho.arquivos) {
+        for (const [indexArquivo, arquivo] of trabalho.arquivos.entries()) {
           try {
             const response = await fetch(arquivo.url);
             if (!response.ok) {
-              throw new Error(`Falha ao baixar o arquivo: ${arquivo.originalName}`);
+              throw new Error(`HTTP ${response.status}`);
             }
             const blob = await response.blob();
 
-            // Adiciona o arquivo dentro do arquivo compactado
-            zip.file(arquivo.originalName, blob);
+            let nome = nomeSeguro(arquivo.originalName || `arquivo-${indexArquivo + 1}`);
+            if (nomesUsados.has(nome)) nome = `${indexArquivo + 1} - ${nome}`;
+            nomesUsados.add(nome);
+
+            pasta.file(nome, blob);
+            totalArquivos++;
           } catch (error) {
             console.error(`Erro no arquivo ${arquivo.originalName}:`, error);
+            falhas.push(`${trabalho.titulo}: ${arquivo.originalName}`);
           }
         }
+      }
 
-        // Gera o arquivo ZIP compactado para este trabalho específico
-        const zipContent = await zip.generateAsync({ type: 'blob' });
+      if (totalArquivos === 0) {
+        alert(falhas.length > 0
+          ? `Nenhum arquivo pôde ser baixado (${falhas.length} falha(s)). Nenhum ZIP foi gerado.`
+          : "Os trabalhos filtrados não possuem arquivos anexados.");
+        return;
+      }
 
-        // Cria o link de download automático para o ZIP gerado
-        const url = window.URL.createObjectURL(zipContent);
-        const a = document.createElement('a');
-        a.href = url;
-        // Define o nome do arquivo compactado (ex: Trabalho_NomeDoTrabalho.zip)
-        a.download = `${trabalho.titulo || 'trabalho'}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
+      const zipContent = await zip.generateAsync({ type: 'blob' });
+
+      const url = window.URL.createObjectURL(zipContent);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Trabalhos_Filtrados.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+
+      if (falhas.length > 0) {
+        const lista = falhas.slice(0, 20).join('\n');
+        const resto = falhas.length > 20 ? `\n... e mais ${falhas.length - 20}` : '';
+        alert(`ZIP gerado, mas ${falhas.length} arquivo(s) não puderam ser baixados e ficaram de fora:\n\n${lista}${resto}`);
       }
     } catch (error) {
       console.error("Erro geral no processo de download:", error);
+      alert("Erro ao gerar o ZIP dos trabalhos. Nenhum arquivo foi baixado.");
     } finally {
       setIsLoading(false);
     }
