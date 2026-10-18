@@ -16,6 +16,10 @@ export interface AutomaticLotOccupancyCounts {
 
 type LotCapacity = Pick<ILoteAutomatico, "codigo" | "limiteVagas">;
 
+// Mesmo filtro do site (coeps-site app/lib/payments/config.ts): só ingresso ocupa vaga;
+// registros antigos não têm type, e "remote-work-access" (apresentação remota) fica de fora.
+const TICKET_TYPE_FILTER = [{ type: "ticket" }, { type: { $exists: false } }];
+
 function normalizeEditionId(value: string | undefined) {
   const normalized = value?.trim().toUpperCase();
   return normalized || undefined;
@@ -191,24 +195,28 @@ export async function getAutomaticLotOccupancy(
       countCapacityRelevantDocuments(
         db,
         "pagamentos.atribuicoes",
-        { edicaoId, status: "CONFIRMADA" },
+        { edicaoId, status: "CONFIRMADA", $or: TICKET_TYPE_FILTER },
       ),
       countCapacityRelevantDocuments(
         db,
         "pagamentos.sessoes",
         {
-          type: "ticket",
           edicaoId,
-          $or: [
-            { status: "OPEN", expiresAt: { $gt: now } },
+          $and: [
+            { $or: TICKET_TYPE_FILTER },
             {
-              status: {
-                $in: [
-                  "CREATING_PAYMENT",
-                  "PAYMENT_PENDING",
-                  "PAYMENT_REVIEW_REQUIRED",
-                ],
-              },
+              $or: [
+                { status: "OPEN", expiresAt: { $gt: now } },
+                {
+                  status: {
+                    $in: [
+                      "CREATING_PAYMENT",
+                      "PAYMENT_PENDING",
+                      "PAYMENT_REVIEW_REQUIRED",
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },

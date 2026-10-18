@@ -151,7 +151,11 @@ test("consulta os mesmos grupos e exclui somente perfil explicitamente organizad
   );
   assert.deepEqual(
     calls.find((call) => call.collection === "pagamentos.atribuicoes")?.pipeline?.[0],
-    { $match: { edicaoId: "CIEPS-2026", status: "CONFIRMADA" } },
+    { $match: {
+      edicaoId: "CIEPS-2026",
+      status: "CONFIRMADA",
+      $or: [{ type: "ticket" }, { type: { $exists: false } }],
+    } },
   );
   assert.deepEqual(
     calls.find((call) => call.collection === "pagamentos.atribuicoes")?.pipeline?.at(-2),
@@ -160,18 +164,22 @@ test("consulta os mesmos grupos e exclui somente perfil explicitamente organizad
   assert.deepEqual(
     calls.find((call) => call.collection === "pagamentos.sessoes")?.pipeline?.[0],
     { $match: {
-      type: "ticket",
       edicaoId: "CIEPS-2026",
-      $or: [
-        { status: "OPEN", expiresAt: { $gt: now } },
+      $and: [
+        { $or: [{ type: "ticket" }, { type: { $exists: false } }] },
         {
-          status: {
-            $in: [
-              "CREATING_PAYMENT",
-              "PAYMENT_PENDING",
-              "PAYMENT_REVIEW_REQUIRED",
-            ],
-          },
+          $or: [
+            { status: "OPEN", expiresAt: { $gt: now } },
+            {
+              status: {
+                $in: [
+                  "CREATING_PAYMENT",
+                  "PAYMENT_PENDING",
+                  "PAYMENT_REVIEW_REQUIRED",
+                ],
+              },
+            },
+          ],
         },
       ],
     } },
