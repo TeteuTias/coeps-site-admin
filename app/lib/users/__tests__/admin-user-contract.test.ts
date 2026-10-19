@@ -3,6 +3,11 @@ import test from "node:test"
 import {
     adminDateToIso,
     adminUserCreationDay,
+    adminUserLotKey,
+    adminUserLotLabel,
+    LOT_FILTER_NONE,
+    LOT_FILTER_ORGANIZER,
+    purchaseLotFromSession,
     filterAdminUsers,
     normalizeAdminUserDetails,
     normalizeAdminUserSummary,
@@ -166,4 +171,26 @@ test("filtros toleram campos nulos e preservam sem data apenas sem intervalo", (
         filterAdminUsers([full, partial], { selectedParticipationMode: "REGULAR" }).map((user) => user._id),
         [full._id],
     )
+})
+
+test("lote da compra: código da sessão, organizador separado e sem sessão", () => {
+    const sessaoLote = { paymentConfigOriginal: { codigo: 435, nome: "Lote Promocional" }, perfilUtilizador: "CONGRESSISTA" }
+    const sessaoOrganizador = { paymentConfigOriginal: { codigo: 435, nome: "Lote Promocional" }, origemPreco: "ORGANIZADOR_CONFIGURADO" }
+
+    const promo = normalizeAdminUserSummary({ ...FULL_USER, lote: purchaseLotFromSession(sessaoLote, "PIX") })
+    const organizador = normalizeAdminUserSummary({ ...FULL_USER, _id: "66bbc8c2db29318201acc2a3", lote: purchaseLotFromSession(sessaoOrganizador, "PIX") })
+    const organizadorSemSessao = normalizeAdminUserSummary({ ...FULL_USER, _id: "66bbc8c2db29318201acc2a4", lote: purchaseLotFromSession(undefined, "Organizador") })
+    const semLote = normalizeAdminUserSummary({ ...FULL_USER, _id: "66bbc8c2db29318201acc2a5", lote: purchaseLotFromSession(undefined, "PIX") })
+    assert.ok(promo && organizador && organizadorSemSessao && semLote)
+
+    assert.equal(adminUserLotKey(promo), "435")
+    assert.equal(adminUserLotLabel(promo), "Lote Promocional (#435)")
+    assert.equal(adminUserLotKey(organizador), LOT_FILTER_ORGANIZER)
+    assert.equal(adminUserLotKey(organizadorSemSessao), LOT_FILTER_ORGANIZER)
+    assert.equal(adminUserLotKey(semLote), LOT_FILTER_NONE)
+
+    const todos = [promo, organizador, organizadorSemSessao, semLote]
+    assert.deepEqual(filterAdminUsers(todos, { selectedLot: "435" }).map((user) => user._id), [promo._id])
+    assert.equal(filterAdminUsers(todos, { selectedLot: LOT_FILTER_ORGANIZER }).length, 2)
+    assert.equal(filterAdminUsers(todos, {}).length, 4)
 })

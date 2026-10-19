@@ -6,6 +6,8 @@ import { IAutomaticLotOccupancy, ILoteAutomatico, IPaymentConfig } from "../lib/
 import { parseAdminPaymentConfigHttpResponse } from "../lib/payments/payment-config-contract"
 import {
     type AdminUserSummary,
+    adminUserLotKey,
+    adminUserLotLabel,
     displayUserField,
     displayUserName,
     filterAdminUsers,
@@ -81,6 +83,7 @@ export default function Page() {
     const [searchTerm, setSearchTerm] = useState<string>("")
     const [selectedStatus, setSelectedStatus] = useState<string>("")
     const [selectedPaymentType, setSelectedPaymentType] = useState<string>("")
+    const [selectedLot, setSelectedLot] = useState<string>("")
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
     const [paymentData, setPaymentData] = useState<IPaymentConfig | null>(null)
@@ -339,6 +342,7 @@ export default function Page() {
         setSearchTerm("")
         setSelectedStatus("")
         setSelectedPaymentType("")
+        setSelectedLot("")
         setStartDate("")
         setEndDate("")
     }
@@ -362,9 +366,10 @@ export default function Page() {
         searchTerm,
         selectedStatus,
         selectedPaymentType,
+        selectedLot,
         startDate,
         endDate,
-    }), [payedUsers, searchTerm, selectedStatus, selectedPaymentType, startDate, endDate])
+    }), [payedUsers, searchTerm, selectedStatus, selectedPaymentType, selectedLot, startDate, endDate])
 
     const handleSaveParcelamentos = async () => {
         try {
@@ -528,6 +533,20 @@ export default function Page() {
         setLoading(false)
         alert("Pagamentos aceitos alterados com sucesso!")
     }
+
+    // Opções do filtro vêm dos próprios inscritos, com contagem, inclusive lotes que já saíram da configuração.
+    const lotOptions = useMemo(() => {
+        const options = new Map<string, { label: string; count: number }>()
+        for (const user of payedUsers) {
+            const key = adminUserLotKey(user)
+            const option = options.get(key) ?? { label: adminUserLotLabel(user), count: 0 }
+            option.count += 1
+            options.set(key, option)
+        }
+        const order = (key: string) => Number.isFinite(Number(key)) ? Number(key) : Infinity
+        return Array.from(options, ([key, option]) => ({ key, ...option }))
+            .sort((a, b) => order(a.key) - order(b.key) || a.label.localeCompare(b.label, "pt-BR"))
+    }, [payedUsers])
 
     const paymentTypes = useMemo(() => {
         if (!payedUsers.length) return []
@@ -1353,6 +1372,23 @@ export default function Page() {
                                 </select>
                             </div>
 
+                            <div className="usuarios-filtro-select">
+                                <label htmlFor="lotFilter" className="usuarios-label">Lote</label>
+                                <select
+                                    id="lotFilter"
+                                    value={selectedLot}
+                                    onChange={e => setSelectedLot(e.target.value)}
+                                    className="usuarios-select"
+                                >
+                                    <option value="">Todos os Lotes</option>
+                                    {lotOptions.map(option => (
+                                        <option key={option.key} value={option.key}>
+                                            {option.label} — {formatCount(option.count)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
                             <div className="usuarios-filtro-datas">
                                 <div className="usuarios-filtro-data">
                                     <label htmlFor="startDate" className="usuarios-label">Criado de</label>
@@ -1418,6 +1454,10 @@ export default function Page() {
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">ID Asaas:</span>
                                         <span className="financeiro-user-value">{displayUserField(user.id_api)}</span>
+                                    </div>
+                                    <div className="financeiro-user-item">
+                                        <span className="financeiro-user-label">Lote:</span>
+                                        <span className="financeiro-user-value">{adminUserLotLabel(user)}</span>
                                     </div>
                                 </div>
                                 <div className="financeiro-user-actions">
