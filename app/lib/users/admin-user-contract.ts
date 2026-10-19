@@ -37,6 +37,16 @@ export interface AdminUserPaymentSummary {
     tipo_pagamento: string | null
 }
 
+// Lote gravado na sessão da compra confirmada (paymentConfigOriginal); organizador não ocupa lote.
+export interface AdminUserLot {
+    codigo: number | null
+    nome: string | null
+    organizador: boolean
+}
+
+export const LOT_FILTER_ORGANIZER = "ORGANIZADOR"
+export const LOT_FILTER_NONE = "SEM_LOTE"
+
 export interface AdminUserSummary {
     _id: string
     id_api: string | null
@@ -45,6 +55,7 @@ export interface AdminUserSummary {
     informacoes_usuario: AdminUserProfile
     pagamento: AdminUserPaymentSummary
     participacao: AdminRemoteParticipation
+    lote: AdminUserLot | null
 }
 
 export interface AdminUserDetails extends Omit<AdminUserSummary, "pagamento"> {
@@ -58,6 +69,7 @@ export interface AdminUserFilters {
     selectedStatus?: string
     selectedPaymentType?: string
     selectedParticipationMode?: string
+    selectedLot?: string
     startDate?: string
     endDate?: string
 }
@@ -173,7 +185,45 @@ function normalizeBaseUser(value: unknown): AdminUserSummary | null {
         participacao: user.participacao === undefined
             ? buildAdminRemoteParticipation(user, null)
             : normalizeAdminRemoteParticipation(user.participacao),
+        lote: normalizeLot(user.lote),
     }
+}
+
+function normalizeLot(value: unknown): AdminUserLot | null {
+    const lot = asRecord(value)
+    if (!lot) return null
+    return {
+        codigo: Number.isInteger(lot.codigo) ? lot.codigo as number : null,
+        nome: stringOrNull(lot.nome),
+        organizador: lot.organizador === true,
+    }
+}
+
+// Converte a sessão da compra (pagamentos.sessoes) no lote exibido no Admin.
+export function purchaseLotFromSession(session: unknown, tipoPagamento: unknown): AdminUserLot | null {
+    const record = asRecord(session) ?? {}
+    const original = asRecord(record.paymentConfigOriginal)
+    const organizador =
+        record.perfilUtilizador === "ORGANIZADOR" ||
+        record.origemPreco === "ORGANIZADOR_CONFIGURADO" ||
+        asRecord(record.codigoDesconto)?.perfilUtilizador === "ORGANIZADOR" ||
+        (typeof tipoPagamento === "string" && /^organizador$/i.test(tipoPagamento.trim()))
+    if (!original && !organizador) return null
+    return normalizeLot({ codigo: original?.codigo, nome: original?.nome, organizador })
+}
+
+export function adminUserLotKey(user: AdminUserSummary): string {
+    if (user.lote?.organizador) return LOT_FILTER_ORGANIZER
+    return user.lote?.codigo === null || user.lote?.codigo === undefined
+        ? LOT_FILTER_NONE
+        : String(user.lote.codigo)
+}
+
+export function adminUserLotLabel(user: AdminUserSummary): string {
+    const key = adminUserLotKey(user)
+    if (key === LOT_FILTER_ORGANIZER) return "Organizador"
+    if (key === LOT_FILTER_NONE) return "Sem lote registrado"
+    return `${user.lote?.nome ?? "Lote"} (#${key})`
 }
 
 export function normalizeAdminUserSummary(value: unknown): AdminUserSummary | null {
@@ -261,6 +311,7 @@ export function filterAdminUsers(
     const selectedStatus = filters.selectedStatus ?? ""
     const selectedPaymentType = filters.selectedPaymentType ?? ""
     const selectedParticipationMode = filters.selectedParticipationMode ?? ""
+    const selectedLot = filters.selectedLot ?? ""
     const startDate = filters.startDate ?? ""
     const endDate = filters.endDate ?? ""
 
@@ -280,12 +331,13 @@ export function filterAdminUsers(
             user.pagamento.tipo_pagamento === selectedPaymentType
         const participationModeMatch = selectedParticipationMode === "" ||
             user.participacao.mode === selectedParticipationMode
+        const lotMatch = selectedLot === "" || adminUserLotKey(user) === selectedLot
         const creationDate = adminUserCreationDay(user.informacoes_usuario.data_criacao)
         const startDateMatch = startDate === "" ||
             (creationDate !== null && creationDate >= startDate)
         const endDateMatch = endDate === "" ||
             (creationDate !== null && creationDate <= endDate)
 
-        return searchMatch && statusMatch && paymentTypeMatch && participationModeMatch && startDateMatch && endDateMatch
+        return searchMatch && statusMatch && paymentTypeMatch && participationModeMatch && lotMatch && startDateMatch && endDateMatch
     })
 }
