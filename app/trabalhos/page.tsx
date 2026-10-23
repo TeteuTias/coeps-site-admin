@@ -387,6 +387,69 @@ export default function AvaliarTrabalhoPage() {
 }
 
 /******************************************
+ * AUTOR (com edição de nome e e-mail)
+ ******************************************/
+const AutorItem: FC<{
+  autor: IAcademicWorks['autores'][number];
+  index: number;
+  trabalhoId: string;
+  hydrateData: () => Promise<void>;
+}> = ({ autor, index, trabalhoId, hydrateData }) => {
+  const [editando, setEditando] = useState(false);
+  const [nome, setNome] = useState(autor.nome ?? '');
+  const [email, setEmail] = useState(autor.email ?? '');
+  const [salvando, setSalvando] = useState(false);
+
+  const salvar = async () => {
+    if (!confirm(`Alterar este autor para:\n\nNome: ${nome.trim()}\nE-mail: ${email.trim()}?`)) return;
+    setSalvando(true);
+    try {
+      const response = await fetch('/api/post/trabalhos/autor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trabalhoId, index, emailAtual: autor.email ?? null, nome, email }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || 'Falha ao atualizar o autor.');
+      setEditando(false);
+      await hydrateData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  if (editando) {
+    return (
+      <div className="trabalhos-autor-item">
+        <input className="trabalhos-ficha-input" style={{ width: '100%', marginBottom: '0.5rem' }} value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome" aria-label="Nome do autor" />
+        <input className="trabalhos-ficha-input" style={{ width: '100%', marginBottom: '0.5rem' }} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="E-mail" aria-label="E-mail do autor" />
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button className="trabalhos-submit-btn" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+          <button className="trabalhos-submit-btn" disabled={salvando} onClick={() => { setNome(autor.nome ?? ''); setEmail(autor.email ?? ''); setEditando(false); }}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="trabalhos-autor-item">
+      <div className="trabalhos-autor-nome">
+        {autor.nome}
+        {autor.isOrientador && (
+          <span className="trabalhos-autor-orientador">Orientador</span>
+        )}
+      </div>
+      <div className="trabalhos-autor-email">Email: {autor.email}</div>
+      <button className="trabalhos-card-info-link" style={{ marginTop: '0.5rem' }} onClick={() => setEditando(true)}>
+        <Edit className="inline-block w-4 h-4 mr-1" />Editar nome/e-mail
+      </button>
+    </div>
+  );
+};
+
+/******************************************
  * COMPONENTE DO CARD DE TRBALHO
  ******************************************/
 const TrabalhoComponent: FC<{
@@ -487,15 +550,7 @@ const TrabalhoComponent: FC<{
           <div className="trabalhos-card-section-content">
             <div className="trabalhos-autores-list">
               {data.autores.map((autor, index) => (
-                <div key={index} className="trabalhos-autor-item">
-                  <div className="trabalhos-autor-nome">
-                    {autor.nome}
-                    {autor.isOrientador && (
-                      <span className="trabalhos-autor-orientador">Orientador</span>
-                    )}
-                  </div>
-                  <div className="trabalhos-autor-email">Email: {autor.email}</div>
-                </div>
+                <AutorItem key={index} autor={autor} index={index} trabalhoId={`${data._id}`} hydrateData={hydrateData} />
               ))}
             </div>
           </div>
