@@ -1184,6 +1184,21 @@ textarea:focus {
   gap: 0.85rem !important;
 }
 
+.trabalhos-arquivo-revisado {
+  border: 2px solid var(--cieps-red) !important;
+}
+
+.trabalhos-arquivo-revisado-badge {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--cieps-red);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .trabalhos-arquivo-info {
   min-width: 0 !important;
   flex: 1 !important;
