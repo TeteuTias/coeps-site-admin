@@ -15,6 +15,10 @@ import Link from 'next/link';
 import './style.css';
 import { academicWorkDate } from '@/app/lib/academic-work-date';
 
+// shortcut: correções antigas não têm a flag; o site gravava o objeto do upload (com progress) e sem uploadDate
+const arquivoRevisado = (arquivo: IAcademicWorks['arquivos'][number]) =>
+  Boolean(arquivo.enviadoNaCorrecao || ('progress' in arquivo && !arquivo.uploadDate));
+
 // Componente de Loading Personalizado
 const TrabalhosLoadingModal = ({ isLoading }: { isLoading: boolean }) => {
   if (!isLoading) return null;
@@ -215,6 +219,7 @@ export default function AvaliarTrabalhoPage() {
             const blob = await response.blob();
 
             let nome = nomeSeguro(arquivo.originalName || `arquivo-${indexArquivo + 1}`);
+            if (arquivoRevisado(arquivo)) nome = `REVISADO - ${nome}`;
             if (nomesUsados.has(nome)) nome = `${indexArquivo + 1} - ${nome}`;
             nomesUsados.add(nome);
 
@@ -574,10 +579,16 @@ const TrabalhoComponent: FC<{
             <div className="trabalhos-arquivos-list">
               {arquivos.map((arquivo, index) => {
                 const uploadDate = academicWorkDate(arquivo.uploadDate);
+                const revisado = arquivoRevisado(arquivo);
                 return (
-                  <div key={index} className="trabalhos-arquivo-item">
+                  <div key={index} className={`trabalhos-arquivo-item${revisado ? ' trabalhos-arquivo-revisado' : ''}`}>
                     <File className="trabalhos-arquivo-icon" />
                     <div className="trabalhos-arquivo-info">
+                      {revisado && (
+                        <span className="trabalhos-arquivo-revisado-badge">
+                          Arquivo revisado{arquivo.correcaoNumero ? ` • correção ${arquivo.correcaoNumero}` : ''}
+                        </span>
+                      )}
                       <div className="trabalhos-arquivo-nome" title={arquivo.originalName}>
                         {arquivo.originalName}
                       </div>
