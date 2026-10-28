@@ -18,18 +18,21 @@ export async function POST(request: Request) {
     if (
       body.perfilUtilizador !== undefined &&
       body.perfilUtilizador !== "ORGANIZADOR" &&
-      body.perfilUtilizador !== "CONGRESSISTA"
+      body.perfilUtilizador !== "CONGRESSISTA" &&
+      body.perfilUtilizador !== "PROFISSIONAL_SAUDE"
     ) {
       return Response.json(
         {
           error: "invalid_user_profile",
-          message: "O perfil deve ser CONGRESSISTA ou ORGANIZADOR.",
+          message: "O perfil deve ser CONGRESSISTA, ORGANIZADOR ou PROFISSIONAL_SAUDE.",
         },
         { status: 400 },
       );
     }
     const perfilUtilizador =
-      body.perfilUtilizador === "ORGANIZADOR" ||
+      body.perfilUtilizador === "PROFISSIONAL_SAUDE"
+        ? "PROFISSIONAL_SAUDE"
+        : body.perfilUtilizador === "ORGANIZADOR" ||
       body.isOrganizer === "true" ||
       body.isOrganizer === true
         ? "ORGANIZADOR"

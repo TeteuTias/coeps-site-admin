@@ -86,6 +86,7 @@ export default function Page() {
             case 0: return <span className="usuarios-badge usuarios-badge-error"><BadgeX className="mr-1.5 h-4 w-4" />Não Inscrito</span>
             case 1: return <span className="usuarios-badge usuarios-badge-success"><BadgeCheck className="mr-1.5 h-4 w-4" />Inscrito</span>
             case 2: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Pagamento em Aberto</span>
+            case 3: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Suspenso</span>
             default: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Status não informado</span>
         }
     }
@@ -196,6 +197,7 @@ export default function Page() {
                                 <option value="1">Inscrito</option>
                                 <option value="0">Não Inscrito</option>
                                 <option value="2">Pagamento em Aberto</option>
+                                <option value="3">Suspenso</option>
                             </select>
                         </div>
 

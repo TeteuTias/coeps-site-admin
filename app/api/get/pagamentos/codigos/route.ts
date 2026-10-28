@@ -37,7 +37,7 @@ interface LedgerSummary {
   codigoId?: unknown;
   percentualDesconto?: number;
   responsavel?: PaymentCodeResponsible;
-  perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA";
+  perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
   confirmadas: number;
   confirmadasBrutas: number;
   pendentes: number;
@@ -527,8 +527,9 @@ export async function GET(request: Request) {
         ...(code.tipo === "DESCONTO"
           ? {
               perfilUtilizador:
-                code.perfilUtilizador === "ORGANIZADOR"
-                  ? "ORGANIZADOR"
+                code.perfilUtilizador === "ORGANIZADOR" ||
+                code.perfilUtilizador === "PROFISSIONAL_SAUDE"
+                  ? code.perfilUtilizador
                   : "CONGRESSISTA",
             }
           : {}),
@@ -557,8 +558,9 @@ export async function GET(request: Request) {
         ...(summary._id.tipo === "DESCONTO"
           ? {
               perfilUtilizador:
-                summary.perfilUtilizador === "ORGANIZADOR"
-                  ? "ORGANIZADOR"
+                summary.perfilUtilizador === "ORGANIZADOR" ||
+                summary.perfilUtilizador === "PROFISSIONAL_SAUDE"
+                  ? summary.perfilUtilizador
                   : "CONGRESSISTA",
             }
           : {}),
@@ -579,7 +581,12 @@ export async function GET(request: Request) {
     const metrics = {
       totalCodigos: allItems.length,
       ativos: allItems.filter((item) => item.status === "ATIVO").length,
-      descontos: allItems.filter((item) => item.tipo === "DESCONTO").length,
+      descontos: allItems.filter(
+        (item) => item.tipo === "DESCONTO" && item.perfilUtilizador !== "PROFISSIONAL_SAUDE",
+      ).length,
+      profissionaisSaude: allItems.filter(
+        (item) => item.perfilUtilizador === "PROFISSIONAL_SAUDE",
+      ).length,
       rastreios: allItems.filter((item) => item.tipo === "RASTREIO").length,
       vendasConfirmadas: confirmedPurchases,
       vendasBrutas: grossPurchases,
@@ -620,8 +627,11 @@ export async function GET(request: Request) {
       );
     }
 
+    // A aba de profissionais da saúde tem listagem própria; "Descontos" não mostra esses códigos.
+    const healthOnly = url.searchParams.get("perfil") === "PROFISSIONAL_SAUDE";
     const filteredItems = allItems.filter((item) => {
       if (typeFilter && item.tipo !== typeFilter) return false;
+      if (healthOnly !== (item.perfilUtilizador === "PROFISSIONAL_SAUDE")) return false;
       if (statusFilter && item.status !== statusFilter) return false;
       if (
         search &&

@@ -163,7 +163,7 @@ export async function createUniqueCodeDocument(
     tipo: PaymentCodeType;
     percentualDesconto?: number;
     responsavel?: PaymentCodeResponsible;
-    perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA";
+    perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
     createdBy: string;
   },
   session?: ClientSession,
@@ -224,7 +224,7 @@ function paymentCodeDocument(
     tipo: PaymentCodeType;
     percentualDesconto?: number;
     responsavel?: PaymentCodeResponsible;
-    perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA";
+    perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
     createdBy: string;
   },
   now = new Date(),
@@ -256,7 +256,7 @@ export async function createUniqueDiscountCodeDocuments(
     edicaoId: string;
     quantidade: number;
     percentualDesconto?: number;
-    perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA";
+    perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
     createdBy: string;
   },
   session: ClientSession,
