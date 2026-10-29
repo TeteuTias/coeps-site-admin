@@ -63,6 +63,46 @@ export function parseDiscountQuantity(value: unknown) {
   return quantity;
 }
 
+/** Limite de usos de um código de profissional da saúde. */
+export function parseUsageLimit(value: unknown) {
+  const limit = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 5000) return null;
+  return limit;
+}
+
+/**
+ * Aumenta (ou fecha, igualando aos usos) o limite sem nunca ficar abaixo do que já foi usado.
+ * O status é recalculado só para ATIVO/USADO; INATIVO (suspenso ou desativado à mão) não muda.
+ */
+export function buildUsageLimitUpdate(codeId: ObjectId, limit: number, now = new Date()) {
+  const usos = { $ifNull: ["$usosRealizados", 0] };
+  const filter: Filter<PaymentCodeDocument> = {
+    _id: codeId,
+    tipo: "DESCONTO",
+    perfilUtilizador: "PROFISSIONAL_SAUDE",
+    status: { $ne: "RESERVADO" },
+    $expr: { $lte: [usos, limit] },
+  };
+  return {
+    filter,
+    update: [
+      {
+        $set: {
+          limiteUsos: limit,
+          updatedAt: now,
+          status: {
+            $cond: [
+              { $in: ["$status", ["ATIVO", "USADO"]] },
+              { $cond: [{ $gte: [usos, limit] }, "USADO", "ATIVO"] },
+              "$status",
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+
 export function parseResponsible(value: unknown): PaymentCodeResponsible | null {
   if (typeof value !== "object" || value === null) return null;
 
@@ -225,6 +265,7 @@ function paymentCodeDocument(
     percentualDesconto?: number;
     responsavel?: PaymentCodeResponsible;
     perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
+    limiteUsos?: number;
     createdBy: string;
   },
   now = new Date(),
@@ -247,6 +288,9 @@ function paymentCodeDocument(
       ? { percentualDesconto: input.percentualDesconto }
       : {}),
     ...(input.responsavel ? { responsavel: input.responsavel } : {}),
+    ...(input.limiteUsos !== undefined
+      ? { limiteUsos: input.limiteUsos, usosRealizados: 0 }
+      : {}),
   };
 }
 
@@ -257,6 +301,7 @@ export async function createUniqueDiscountCodeDocuments(
     quantidade: number;
     percentualDesconto?: number;
     perfilUtilizador: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
+    limiteUsos?: number;
     createdBy: string;
   },
   session: ClientSession,

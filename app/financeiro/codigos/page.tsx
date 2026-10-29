@@ -62,6 +62,8 @@ interface CodeItem {
   updatedAt: string | null;
   metrics: CodeMetrics;
   perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
+  limiteUsos?: number;
+  usosRealizados?: number;
 }
 
 type CreatedCodeItem = Pick<
@@ -193,6 +195,35 @@ function usageCount(item: CodeItem) {
   );
 }
 
+// Espelha as regras do servidor; o servidor revalida e devolve o motivo de cada código ignorado.
+function canDeleteCode(item: CodeItem, isActiveEdition: boolean) {
+  return (
+    isActiveEdition &&
+    !item.historico &&
+    item.status !== "RESERVADO" &&
+    usageCount(item) === 0 &&
+    (item.tipo !== "RASTREIO" || item.status === "INATIVO") &&
+    Boolean(item.id)
+  );
+}
+
+function buildCodeListParams(filters: {
+  page: number;
+  limit: number;
+  editionId: string;
+  activeTab: CodeTab;
+  statusFilter: string;
+  search: string;
+}) {
+  const params = new URLSearchParams({ page: String(filters.page), limit: String(filters.limit) });
+  if (filters.editionId) params.set("edicaoId", filters.editionId);
+  params.set("tipo", filters.activeTab === "RASTREIO" ? "RASTREIO" : "DESCONTO");
+  if (filters.activeTab === "SAUDE") params.set("perfil", "PROFISSIONAL_SAUDE");
+  if (filters.statusFilter) params.set("status", filters.statusFilter);
+  if (filters.search) params.set("search", filters.search);
+  return params;
+}
+
 function formatAge(seconds: number | null) {
   if (seconds === null) return "Sem eventos pendentes";
   if (seconds < 60) return `${seconds}s`;
@@ -227,10 +258,13 @@ export default function PaymentCodesPage() {
   const [createdCodes, setCreatedCodes] = useState<CreatedCodeItem[]>([]);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [codePendingDeletion, setCodePendingDeletion] = useState<CodeItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeletionPending, setBulkDeletionPending] = useState(false);
 
   const [discountPercentage, setDiscountPercentage] = useState("10");
   const [discountQuantity, setDiscountQuantity] = useState("1");
-  const [healthQuantity, setHealthQuantity] = useState("100");
+  const [healthLimit, setHealthLimit] = useState("100");
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
   const [healthSuspension, setHealthSuspension] = useState<{
     ativos: number;
     suspensos: number;
@@ -249,12 +283,7 @@ export default function PaymentCodesPage() {
     setMessage(null);
 
     try {
-      const params = new URLSearchParams({ page: String(page), limit: "25" });
-      if (editionId) params.set("edicaoId", editionId);
-      params.set("tipo", activeTab === "RASTREIO" ? "RASTREIO" : "DESCONTO");
-      if (activeTab === "SAUDE") params.set("perfil", "PROFISSIONAL_SAUDE");
-      if (statusFilter) params.set("status", statusFilter);
-      if (search) params.set("search", search);
+      const params = buildCodeListParams({ page, limit: 25, editionId, activeTab, statusFilter, search });
 
       const data = await requestJson<CodesResponse>(
         `/api/get/pagamentos/codigos?${params.toString()}`,
@@ -285,6 +314,11 @@ export default function PaymentCodesPage() {
   useEffect(() => {
     void loadCodes();
   }, [loadCodes]);
+
+  // A seleção vale para a aba/filtro atual; trocar de contexto limpa.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeTab, editionId, statusFilter, search]);
 
   const loadHealthSuspension = useCallback(async () => {
     try {
@@ -415,7 +449,8 @@ export default function PaymentCodesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             edicaoId: editionId,
-            quantidade: Number(healthQuantity),
+            quantidade: 1,
+            limiteUsos: Number(healthLimit),
             perfilUtilizador: "PROFISSIONAL_SAUDE",
           }),
         },
@@ -459,6 +494,38 @@ export default function PaymentCodesPage() {
       setMessage({
         type: "error",
         text: error instanceof Error ? error.message : "Não foi possível alterar a suspensão.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function saveHealthLimit(item: CodeItem) {
+    if (!item.id) return;
+    setMutating(true);
+    setMessage(null);
+    try {
+      const data = await requestJson<{ message: string }>(
+        `/api/put/pagamentos/codigos/${item.id}/limite`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            limiteUsos: Number(limitDrafts[item.id] ?? item.limiteUsos),
+          }),
+        },
+      );
+      setLimitDrafts((drafts) => {
+        const next = { ...drafts };
+        delete next[item.id as string];
+        return next;
+      });
+      await loadCodes();
+      setMessage({ type: "success", text: data.message });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível alterar o limite.",
       });
     } finally {
       setMutating(false);
@@ -545,6 +612,79 @@ export default function PaymentCodesPage() {
       setMessage({
         type: "error",
         text: error instanceof Error ? error.message : "Não foi possível excluir o código.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]));
+  }
+
+  function togglePageSelection(pageIds: string[]) {
+    setSelectedIds((ids) =>
+      pageIds.every((id) => ids.includes(id))
+        ? ids.filter((id) => !pageIds.includes(id))
+        : [...new Set([...ids, ...pageIds])],
+    );
+  }
+
+  /** Seleciona todos os códigos excluíveis do filtro atual, em todas as páginas. */
+  async function selectAllDeletable() {
+    setMutating(true);
+    setMessage(null);
+    try {
+      const ids: string[] = [];
+      for (let current = 1, total = 1; current <= total; current += 1) {
+        const params = buildCodeListParams({ page: current, limit: 100, editionId, activeTab, statusFilter, search });
+        const data = await requestJson<CodesResponse>(`/api/get/pagamentos/codigos?${params.toString()}`);
+        total = data.pagination.totalPages;
+        const activeEdition = Boolean(data.activeEditionId && editionId && data.activeEditionId === editionId);
+        for (const item of data.items) {
+          if (canDeleteCode(item, activeEdition) && item.id) ids.push(item.id);
+        }
+      }
+      setSelectedIds(ids);
+      if (ids.length === 0) setMessage({ type: "error", text: "Nenhum código deste filtro pode ser excluído." });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível selecionar os códigos.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function deleteSelectedCodes() {
+    setBulkDeletionPending(false);
+    setMutating(true);
+    setMessage(null);
+    try {
+      const data = await requestJson<{
+        message: string;
+        excluidos: number;
+        ignorados: { id: string; codigo?: string; motivo: string }[];
+      }>("/api/delete/pagamentos/codigos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      setSelectedIds(data.ignorados.map((item) => item.id).filter(Boolean));
+      await loadCodes();
+      const details = data.ignorados
+        .slice(0, 5)
+        .map((item) => `${item.codigo ?? item.id}: ${item.motivo}`)
+        .join(" · ");
+      setMessage({
+        type: data.ignorados.length ? "error" : "success",
+        text: details ? `${data.message} ${details}` : data.message,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível excluir os códigos.",
       });
     } finally {
       setMutating(false);
@@ -876,21 +1016,21 @@ export default function PaymentCodesPage() {
               <div className="codigos-panel-title">
                 <HeartPulse size={22} />
                 <div>
-                  <h2>Gerar códigos de profissionais da saúde</h2>
-                  <p>Inscrição gratuita, de uso único, sem pagamento no Asaas e sem ocupar vagas dos lotes.</p>
+                  <h2>Gerar código de profissionais da saúde</h2>
+                  <p>Um único código com vários usos, para a prefeitura divulgar. Inscrição gratuita, sem pagamento no Asaas e sem ocupar vagas dos lotes.</p>
                 </div>
               </div>
               <div className="codigos-form-grid">
                 <label>
-                  Quantidade
+                  Limite de usos
                   <input
-                    id="healthQuantity"
+                    id="healthLimit"
                     type="number"
                     min="1"
-                    max="500"
+                    max="5000"
                     step="1"
-                    value={healthQuantity}
-                    onChange={(event) => setHealthQuantity(event.target.value)}
+                    value={healthLimit}
+                    onChange={(event) => setHealthLimit(event.target.value)}
                     required
                   />
                 </label>
@@ -902,7 +1042,7 @@ export default function PaymentCodesPage() {
               </div>
               <button className="codigos-button codigos-button--primary" type="submit" disabled={!isActiveEdition || mutating}>
                 {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-                Gerar {Number(healthQuantity) > 1 ? `${healthQuantity} códigos` : "código"}
+                Gerar código com {healthLimit || "N"} usos
               </button>
             </form>
             </>
@@ -1064,10 +1204,61 @@ export default function PaymentCodesPage() {
               <p>Nenhum código encontrado.</p>
             </div>
           ) : (
+            <>
+            {isActiveEdition && (
+              <div className="codigos-bulk-bar">
+                <span>
+                  {selectedIds.length
+                    ? `${selectedIds.length} código(s) selecionado(s)`
+                    : "Nenhum código selecionado"}
+                </span>
+                <button
+                  className="codigos-button"
+                  type="button"
+                  disabled={mutating}
+                  onClick={() => void selectAllDeletable()}
+                >
+                  Selecionar todos
+                </button>
+                <button
+                  className="codigos-button"
+                  type="button"
+                  disabled={mutating || selectedIds.length === 0}
+                  onClick={() => setSelectedIds([])}
+                >
+                  Limpar seleção
+                </button>
+                <button
+                  className="codigos-button codigos-button--danger"
+                  type="button"
+                  disabled={mutating || selectedIds.length === 0}
+                  onClick={() => setBulkDeletionPending(true)}
+                >
+                  <Trash2 size={16} /> Excluir selecionados
+                </button>
+              </div>
+            )}
             <div className="codigos-table-wrap">
               <table className="codigos-table">
                 <thead>
                   <tr>
+                    <th>
+                      {(() => {
+                        const pageIds = items
+                          .filter((item) => canDeleteCode(item, isActiveEdition))
+                          .map((item) => item.id as string);
+                        return (
+                          <input
+                            type="checkbox"
+                            aria-label="Selecionar todos os códigos excluíveis desta página"
+                            title="Selecionar esta página"
+                            disabled={pageIds.length === 0 || mutating}
+                            checked={pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id))}
+                            onChange={() => togglePageSelection(pageIds)}
+                          />
+                        );
+                      })()}
+                    </th>
                     <th>Código</th>
                     <th>{activeTab !== "RASTREIO" ? "Benefício" : "Responsável"}</th>
                     <th>Status</th>
@@ -1085,19 +1276,22 @@ export default function PaymentCodesPage() {
                       item.status !== "RESERVADO" &&
                       (item.tipo === "RASTREIO" || !used) &&
                       Boolean(item.id);
-                    const canDelete =
-                      isActiveEdition &&
-                      !item.historico &&
-                      item.status !== "RESERVADO" &&
-                      !used &&
-                      (item.tipo !== "RASTREIO" || item.status === "INATIVO") &&
-                      Boolean(item.id);
+                    const canDelete = canDeleteCode(item, isActiveEdition);
 
                     const itemKey = `${item.tipo}-${item.codigoNormalizado}`;
                     const isExpanded = expandedCode === itemKey;
                     return (
                       <Fragment key={itemKey}>
                       <tr>
+                        <td data-label="Selecionar">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar ${item.codigo}`}
+                            disabled={!canDelete || mutating}
+                            checked={Boolean(item.id && selectedIds.includes(item.id))}
+                            onChange={() => item.id && toggleSelected(item.id)}
+                          />
+                        </td>
                         <td data-label="Código">
                           <div className="codigos-code-cell">
                             <code>{item.codigo}</code>
@@ -1126,7 +1320,9 @@ export default function PaymentCodesPage() {
                               ? item.perfilUtilizador === "ORGANIZADOR"
                                 ? organizerPriceCents ? moneyFromCents(organizerPriceCents) : "Preço da edição indisponível"
                                 : item.perfilUtilizador === "PROFISSIONAL_SAUDE"
-                                  ? "Inscrição gratuita"
+                                  ? item.limiteUsos !== undefined
+                                    ? `Inscrição gratuita · ${item.usosRealizados ?? 0}/${item.limiteUsos} usos`
+                                    : "Inscrição gratuita"
                                   : "Congressista"
                               : item.responsavel?.email ?? "Sem e-mail"}
                           </small>
@@ -1190,7 +1386,7 @@ export default function PaymentCodesPage() {
                       </tr>
                       {isExpanded && (
                         <tr className="codigos-detail-row">
-                          <td colSpan={6}>
+                          <td colSpan={7}>
                             <dl className="codigos-detail-grid">
                               <div><dt>Vendas brutas</dt><dd>{item.metrics.confirmadasBrutas}</dd></div>
                               <div><dt>Estornadas</dt><dd>{item.metrics.estornadas}</dd></div>
@@ -1199,6 +1395,31 @@ export default function PaymentCodesPage() {
                               <div><dt>Refund DONE</dt><dd>{moneyFromCents(item.metrics.valorEstornadoDoneCentavos)}</dd></div>
                               <div><dt>Valor em risco</dt><dd>{moneyFromCents(item.metrics.valorEmRiscoCentavos)}</dd></div>
                             </dl>
+                            {item.id && item.limiteUsos !== undefined && isActiveEdition && (
+                              <div className="codigos-form-grid">
+                                <label>
+                                  Limite de usos ({item.usosRealizados ?? 0} já usados; igualar aos usos fecha o código)
+                                  <input
+                                    type="number"
+                                    min={Math.max(1, item.usosRealizados ?? 0)}
+                                    max="5000"
+                                    step="1"
+                                    value={limitDrafts[item.id] ?? String(item.limiteUsos)}
+                                    onChange={(event) =>
+                                      setLimitDrafts((drafts) => ({ ...drafts, [item.id as string]: event.target.value }))
+                                    }
+                                  />
+                                </label>
+                                <button
+                                  className="codigos-button codigos-button--primary"
+                                  type="button"
+                                  disabled={mutating}
+                                  onClick={() => void saveHealthLimit(item)}
+                                >
+                                  Salvar limite
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}
@@ -1208,6 +1429,7 @@ export default function PaymentCodesPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {pagination.totalPages > 1 && (
@@ -1326,6 +1548,19 @@ export default function PaymentCodesPage() {
         <p className="codigos-confirmation-copy">
           O código <code>{codePendingDeletion?.codigo}</code> será removido permanentemente.
           Essa ação não pode ser desfeita.
+        </p>
+      </ConfirmationModal>
+
+      <ConfirmationModal
+        isOpen={bulkDeletionPending}
+        onClose={() => setBulkDeletionPending(false)}
+        onConfirm={() => void deleteSelectedCodes()}
+        title={`Excluir ${selectedIds.length} código(s)?`}
+        confirmText="Excluir selecionados"
+      >
+        <p className="codigos-confirmation-copy">
+          Os códigos selecionados serão removidos permanentemente. Códigos com compra vinculada,
+          reservados ou rastreios ativos são ignorados. Essa ação não pode ser desfeita.
         </p>
       </ConfirmationModal>
     </main>

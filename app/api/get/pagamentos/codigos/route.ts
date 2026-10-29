@@ -214,6 +214,8 @@ export async function GET(request: Request) {
             tipo: 1,
             percentualDesconto: 1,
             responsavel: 1,
+            limiteUsos: 1,
+            usosRealizados: 1,
             status: 1,
             createdAt: 1,
             updatedAt: 1,
@@ -538,6 +540,9 @@ export async function GET(request: Request) {
         tipo: code.tipo,
         percentualDesconto: code.percentualDesconto,
         responsavel: code.responsavel,
+        ...(code.limiteUsos !== undefined
+          ? { limiteUsos: code.limiteUsos, usosRealizados: code.usosRealizados ?? 0 }
+          : {}),
         status: code.status,
         historico: false,
         createdAt: dateToIso(code.createdAt),

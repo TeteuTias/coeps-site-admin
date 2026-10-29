@@ -2,12 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ObjectId } from "mongodb";
 import {
+  buildUsageLimitUpdate,
   createUniqueDiscountCodeDocuments,
   generatePaymentCode,
   generateReadableTrackingCode,
   normalizePaymentCode,
   parseDiscountPercentage,
   parseDiscountQuantity,
+  parseUsageLimit,
 } from "../payment-code-repository.ts";
 
 test("gera rastreio legível removendo acentos e espaços", () => {
@@ -138,4 +140,66 @@ test("propaga falha do insertMany sem tentar inserções parciais", async () => 
     /bulk_failed/,
   );
   assert.equal(insertCalls, 1);
+});
+
+test("limite de usos aceita inteiros de 1 a 5000", () => {
+  assert.equal(parseUsageLimit(100), 100);
+  assert.equal(parseUsageLimit("250"), 250);
+  assert.equal(parseUsageLimit(0), null);
+  assert.equal(parseUsageLimit(5001), null);
+  assert.equal(parseUsageLimit(10.5), null);
+  assert.equal(parseUsageLimit(undefined), null);
+});
+
+test("código de profissional da saúde nasce com limite e zero usos", async () => {
+  const insertedDocuments: Record<string, any>[] = [];
+  const db = {
+    collection() {
+      return {
+        find() {
+          return { async toArray() { return []; } };
+        },
+        async insertMany(documents: Record<string, any>[]) {
+          insertedDocuments.push(...documents);
+          return { insertedIds: documents.map(() => new ObjectId()) };
+        },
+      };
+    },
+  };
+
+  await createUniqueDiscountCodeDocuments(
+    db as never,
+    {
+      edicaoId: "CIEPS-2026",
+      quantidade: 1,
+      perfilUtilizador: "PROFISSIONAL_SAUDE",
+      limiteUsos: 100,
+      createdBy: "admin-1",
+    },
+    {} as never,
+  );
+
+  assert.equal(insertedDocuments.length, 1);
+  assert.equal(insertedDocuments[0].limiteUsos, 100);
+  assert.equal(insertedDocuments[0].usosRealizados, 0);
+  assert.equal(insertedDocuments[0].status, "ATIVO");
+});
+
+test("alterar limite exige novo limite >= usos e só recalcula ATIVO/USADO", () => {
+  const id = new ObjectId();
+  const now = new Date("2026-10-29T12:00:00Z");
+  const { filter, update } = buildUsageLimitUpdate(id, 120, now);
+
+  assert.deepEqual(filter.$expr, { $lte: [{ $ifNull: ["$usosRealizados", 0] }, 120] });
+  assert.equal(filter.perfilUtilizador, "PROFISSIONAL_SAUDE");
+  assert.deepEqual(filter.status, { $ne: "RESERVADO" });
+
+  const stage = update[0].$set;
+  assert.equal(stage.limiteUsos, 120);
+  assert.equal(stage.updatedAt, now);
+  assert.deepEqual(stage.status.$cond[0], { $in: ["$status", ["ATIVO", "USADO"]] });
+  const recalculated = stage.status.$cond[1] as { $cond: unknown[] };
+  assert.equal(recalculated.$cond[1], "USADO");
+  assert.equal(recalculated.$cond[2], "ATIVO");
+  assert.equal(stage.status.$cond[2], "$status");
 });
