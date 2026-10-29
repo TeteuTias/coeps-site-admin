@@ -672,6 +672,19 @@
   gap: 1rem;
 }
 
+.codigos-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.codigos-bulk-bar span {
+  margin-right: auto;
+  font-weight: 600;
+}
+
 .codigos-search-form {
   display: flex;
   align-items: center;
