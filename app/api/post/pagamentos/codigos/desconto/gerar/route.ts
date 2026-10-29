@@ -5,6 +5,7 @@ import {
   normalizeEditionId,
   parseDiscountPercentage,
   parseDiscountQuantity,
+  parseUsageLimit,
 } from "@/app/lib/payments/payment-code-repository";
 import { getActivePaymentConfig } from "@/app/lib/payments/payment-config-repository";
 
@@ -37,7 +38,10 @@ export async function POST(request: Request) {
       body.isOrganizer === true
         ? "ORGANIZADOR"
         : "CONGRESSISTA";
-    const quantidade = parseDiscountQuantity(body.quantidade ?? 1);
+    // Profissionais da saúde: um único código com N usos, em vez de N códigos.
+    const isHealth = perfilUtilizador === "PROFISSIONAL_SAUDE";
+    const quantidade = isHealth ? 1 : parseDiscountQuantity(body.quantidade ?? 1);
+    const limiteUsos = isHealth ? parseUsageLimit(body.limiteUsos ?? 100) : undefined;
     if (!edicaoId) {
       return Response.json(
         {
@@ -53,6 +57,16 @@ export async function POST(request: Request) {
         {
           error: "invalid_quantity",
           message: "A quantidade deve ser um número inteiro entre 1 e 500.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (isHealth && limiteUsos === null) {
+      return Response.json(
+        {
+          error: "invalid_usage_limit",
+          message: "O limite de usos deve ser um número inteiro entre 1 e 5000.",
         },
         { status: 400 },
       );
@@ -96,6 +110,7 @@ export async function POST(request: Request) {
               quantidade,
               ...(typeof percentualDesconto === "number" ? { percentualDesconto } : {}),
               perfilUtilizador,
+              ...(typeof limiteUsos === "number" ? { limiteUsos } : {}),
               createdBy: authorization.identity.userId,
             },
             session,
@@ -139,6 +154,8 @@ export async function POST(request: Request) {
       tipo: code.tipo,
       percentualDesconto: code.percentualDesconto,
       perfilUtilizador: code.perfilUtilizador,
+      limiteUsos: code.limiteUsos,
+      usosRealizados: code.usosRealizados,
       status: code.status,
       createdAt: code.createdAt.toISOString(),
     }));
