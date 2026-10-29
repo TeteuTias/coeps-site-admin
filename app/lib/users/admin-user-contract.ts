@@ -32,7 +32,7 @@ export interface AdminUserProfile {
 }
 
 export interface AdminUserPaymentSummary {
-    situacao: 0 | 1 | 2 | null
+    situacao: 0 | 1 | 2 | 3 | null
     situacao_animacao: boolean
     tipo_pagamento: string | null
 }
@@ -42,9 +42,11 @@ export interface AdminUserLot {
     codigo: number | null
     nome: string | null
     organizador: boolean
+    profissionalSaude?: boolean
 }
 
 export const LOT_FILTER_ORGANIZER = "ORGANIZADOR"
+export const LOT_FILTER_HEALTH = "PROFISSIONAL_SAUDE"
 export const LOT_FILTER_NONE = "SEM_LOTE"
 
 export interface AdminUserSummary {
@@ -113,8 +115,8 @@ export function adminDateToIso(value: unknown): string | null {
     return date.toISOString()
 }
 
-function paymentStatus(value: unknown): 0 | 1 | 2 | null {
-    return value === 0 || value === 1 || value === 2 ? value : null
+function paymentStatus(value: unknown): 0 | 1 | 2 | 3 | null {
+    return value === 0 || value === 1 || value === 2 || value === 3 ? value : null
 }
 
 function normalizeLegacyPayment(value: unknown): IPayment["lista_pagamentos"][number] | null {
@@ -196,6 +198,7 @@ function normalizeLot(value: unknown): AdminUserLot | null {
         codigo: Number.isInteger(lot.codigo) ? lot.codigo as number : null,
         nome: stringOrNull(lot.nome),
         organizador: lot.organizador === true,
+        ...(lot.profissionalSaude === true ? { profissionalSaude: true } : {}),
     }
 }
 
@@ -208,12 +211,17 @@ export function purchaseLotFromSession(session: unknown, tipoPagamento: unknown)
         record.origemPreco === "ORGANIZADOR_CONFIGURADO" ||
         asRecord(record.codigoDesconto)?.perfilUtilizador === "ORGANIZADOR" ||
         (typeof tipoPagamento === "string" && /^organizador$/i.test(tipoPagamento.trim()))
-    if (!original && !organizador) return null
-    return normalizeLot({ codigo: original?.codigo, nome: original?.nome, organizador })
+    const profissionalSaude =
+        record.perfilUtilizador === "PROFISSIONAL_SAUDE" ||
+        asRecord(record.codigoDesconto)?.perfilUtilizador === "PROFISSIONAL_SAUDE" ||
+        (typeof tipoPagamento === "string" && /^profissional_saude$/i.test(tipoPagamento.trim()))
+    if (!original && !organizador && !profissionalSaude) return null
+    return normalizeLot({ codigo: original?.codigo, nome: original?.nome, organizador, profissionalSaude })
 }
 
 export function adminUserLotKey(user: AdminUserSummary): string {
     if (user.lote?.organizador) return LOT_FILTER_ORGANIZER
+    if (user.lote?.profissionalSaude) return LOT_FILTER_HEALTH
     return user.lote?.codigo === null || user.lote?.codigo === undefined
         ? LOT_FILTER_NONE
         : String(user.lote.codigo)
@@ -222,6 +230,7 @@ export function adminUserLotKey(user: AdminUserSummary): string {
 export function adminUserLotLabel(user: AdminUserSummary): string {
     const key = adminUserLotKey(user)
     if (key === LOT_FILTER_ORGANIZER) return "Organizador"
+    if (key === LOT_FILTER_HEALTH) return "Profissional da saúde"
     if (key === LOT_FILTER_NONE) return "Sem lote registrado"
     return `${user.lote?.nome ?? "Lote"} (#${key})`
 }

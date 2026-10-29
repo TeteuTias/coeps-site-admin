@@ -159,7 +159,7 @@ test("consulta os mesmos grupos e exclui somente perfil explicitamente organizad
   );
   assert.deepEqual(
     calls.find((call) => call.collection === "pagamentos.atribuicoes")?.pipeline?.at(-2),
-    { $match: { perfilUtilizadorResolvido: { $ne: "ORGANIZADOR" } } },
+    { $match: { perfilUtilizadorResolvido: { $nin: ["ORGANIZADOR", "PROFISSIONAL_SAUDE"] } } },
   );
   assert.deepEqual(
     calls.find((call) => call.collection === "pagamentos.sessoes")?.pipeline?.[0],

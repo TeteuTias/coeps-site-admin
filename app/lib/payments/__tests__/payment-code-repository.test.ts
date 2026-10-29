@@ -49,6 +49,7 @@ test("aceita lotes até 500 e rejeita quantidades inválidas", () => {
 test("valida percentual e gera 158 descontos aleatórios distintos", () => {
   assert.equal(parseDiscountPercentage(25), 25);
   assert.equal(parseDiscountPercentage(0), null);
+  assert.equal(parseDiscountPercentage(99), 99);
   assert.equal(parseDiscountPercentage(100), null);
 
   const codes = Array.from({ length: 158 }, () => generatePaymentCode("CIEPS-2026", "DESCONTO"));

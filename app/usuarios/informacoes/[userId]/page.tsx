@@ -330,6 +330,7 @@ export default function Page() {
                                 <option value="1">Pago</option>
                                 <option value="2">Pagamento Pendente</option>
                                 <option value="0">Não Pago</option>
+                                <option value="3">Suspenso</option>
                             </select>
                         </div>
 

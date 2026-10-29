@@ -194,3 +194,23 @@ test("lote da compra: código da sessão, organizador separado e sem sessão", (
     assert.equal(filterAdminUsers(todos, { selectedLot: LOT_FILTER_ORGANIZER }).length, 2)
     assert.equal(filterAdminUsers(todos, {}).length, 4)
 })
+
+test("lote da compra: profissional da saúde tem filtro e rótulo próprios, separado do organizador", () => {
+    const porSessao = normalizeAdminUserSummary({
+        ...FULL_USER,
+        lote: purchaseLotFromSession(
+            { perfilUtilizador: "PROFISSIONAL_SAUDE", paymentConfigOriginal: { codigo: 2, nome: "Lote 2" } },
+            "profissional_saude",
+        ),
+    })
+    const semSessao = normalizeAdminUserSummary({
+        ...FULL_USER,
+        _id: "66bbc8c2db29318201acc2a6",
+        lote: purchaseLotFromSession(undefined, "profissional_saude"),
+    })
+    assert.ok(porSessao && semSessao)
+    assert.equal(adminUserLotKey(porSessao), "PROFISSIONAL_SAUDE")
+    assert.equal(adminUserLotKey(semSessao), "PROFISSIONAL_SAUDE")
+    assert.equal(adminUserLotLabel(porSessao), "Profissional da saúde")
+    assert.notEqual(adminUserLotKey(porSessao), LOT_FILTER_ORGANIZER)
+})
