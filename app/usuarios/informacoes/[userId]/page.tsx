@@ -319,6 +319,11 @@ export default function Page() {
                             <label htmlFor="numero_telefone" className="block text-sm font-medium text-gray-700">Telefone</label>
                             <input type="tel" name="numero_telefone" id="numero_telefone" value={formData.numero_telefone} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
                         </div>
+                        <div>
+                            {/* Somente leitura: preenchida pelo congressista formado no cadastro do site. */}
+                            <span className="block text-sm font-medium text-gray-700">Profissão</span>
+                            <p className="mt-1 text-sm text-gray-900">{user.informacoes_usuario.profissao ?? "Não informada (estudante ou cadastro anterior ao campo)"}</p>
+                        </div>
                     </div>
 
                     <div className="p-6 bg-gray-50 border-t border-gray-200 space-y-6">

@@ -32,6 +32,7 @@ const FULL_USER = {
         email: "ada@example.com",
         data_criacao: new Date("2026-08-31T12:30:00.000Z"),
         titulo_honorario: "Dra.",
+        profissao: "Médica",
     },
     pagamento: {
         situacao: 1,
@@ -52,6 +53,7 @@ test("normaliza perfil completo, ObjectId e data BSON/ISO", () => {
     assert.equal(user.informacoes_usuario.data_criacao, "2026-08-31T12:30:00.000Z")
     assert.equal(user.pagamento.situacao, 1)
     assert.equal(user.cadastroPendente, false)
+    assert.equal(user.informacoes_usuario.profissao, "Médica")
 })
 
 test("mantém usuário com perfil e pagamento ausentes como cadastro pendente", () => {
@@ -65,6 +67,7 @@ test("mantém usuário com perfil e pagamento ausentes como cadastro pendente", 
         email: null,
         data_criacao: null,
         titulo_honorario: null,
+        profissao: null,
     })
     assert.deepEqual(user.pagamento, {
         situacao: null,
