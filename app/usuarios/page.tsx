@@ -10,7 +10,7 @@ import {
     parseAdminUserListHttpResponse,
 } from "../lib/users/admin-user-contract"
 import { participationModeLabel } from "../lib/users/admin-remote-work"
-import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2 } from "lucide-react"
+import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2, Briefcase } from "lucide-react"
 import { useRouter } from "next/navigation"
 import './style.css'
 import QrCodeUserSearch from "../components/QrCodeUserSearch"
@@ -308,6 +308,13 @@ export default function Page() {
                                             <span className="usuarios-info-label">Telefone:</span>
                                             <span className="usuarios-info-value">{displayUserField(user.informacoes_usuario.numero_telefone)}</span>
                                         </div>
+                                        {user.informacoes_usuario.profissao && (
+                                            <div className="usuarios-info-item">
+                                                <Briefcase className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Profissão:</span>
+                                                <span className="usuarios-info-value">{user.informacoes_usuario.profissao}</span>
+                                            </div>
+                                        )}
                                         <div className="usuarios-info-item">
                                             <CalendarDays className="h-4 w-4" />
                                             <span className="usuarios-info-label">Criação:</span>
