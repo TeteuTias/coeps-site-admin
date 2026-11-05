@@ -1,421 +1,358 @@
 "use client"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import LoadingModal from "../components/LoadingModal"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import {
+    Botao,
+    BotaoLink,
+    Cabecalho,
+    Campo,
+    CampoBusca,
+    Cartao,
+    Escolha,
+    Metrica,
+    Pagina,
+    Selo,
+    TabelaRolavel,
+    classeTd,
+    classeTh,
+    type TomSelo,
+} from "../components/ui"
+import { Atualizando, Estado } from "../components/Estado"
+import { useAvisos } from "../components/Avisos"
+import QrCodeUserSearch from "../components/QrCodeUserSearch"
 import {
     type AdminUserSummary,
-    adminDateToIso,
     displayUserField,
     displayUserName,
     filterAdminUsers,
     parseAdminUserListHttpResponse,
 } from "../lib/users/admin-user-contract"
 import { participationModeLabel } from "../lib/users/admin-remote-work"
-import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2, Briefcase } from "lucide-react"
-import { useRouter } from "next/navigation"
-import './style.css'
-import QrCodeUserSearch from "../components/QrCodeUserSearch"
+import { formatarData, formatarNumero } from "../lib/formatar"
 
-const formatUserCreationDate = (value: string | null) => {
-    const iso = adminDateToIso(value)
-    const date = iso ? new Date(iso) : null
-    return date ? date.toLocaleDateString("pt-BR") : "Data não informada"
+const POR_PAGINA = 50
+const PARAMS = ["q", "situacao", "modo", "pgto", "de", "ate", "pag"] as const
+
+const SITUACOES: Record<number, { rotulo: string; tom: TomSelo }> = {
+    0: { rotulo: "Não inscrito", tom: "erro" },
+    1: { rotulo: "Inscrito", tom: "ok" },
+    2: { rotulo: "Pagamento em aberto", tom: "alerta" },
+    3: { rotulo: "Suspenso", tom: "alerta" },
 }
 
-export default function Page() {
-    const [loading, setLoading] = useState<boolean>(true)
-    const [error, setError] = useState<string | null>(null)
-    const [dataUsers, setDataUsers] = useState<AdminUserSummary[]>([])
+function SeloSituacao({ situacao }: { situacao: AdminUserSummary["pagamento"]["situacao"] }) {
+    const s = situacao === null ? null : SITUACOES[situacao]
+    return <Selo tom={s?.tom ?? "neutro"}>{s?.rotulo ?? "Situação não informada"}</Selo>
+}
+
+// Só diz o que falta; o CPF em si nunca aparece na lista.
+function camposFaltando(u: AdminUserSummary): string[] {
+    const p = u.informacoes_usuario
+    return [
+        !p.nome && "nome",
+        !p.email && "e-mail",
+        !p.cpf && "CPF",
+        !p.numero_telefone && "telefone",
+    ].filter((c): c is string => Boolean(c))
+}
+
+function Pendencia({ user }: { user: AdminUserSummary }) {
+    if (!user.cadastroPendente) return null
+    const falta = camposFaltando(user)
+    return <Selo tom="alerta">Cadastro incompleto{falta.length ? `: falta ${falta.join(", ")}` : ""}</Selo>
+}
+
+function resumoParticipacao(u: AdminUserSummary): string {
+    const p = u.participacao
+    const partes = [participationModeLabel(p.mode)]
+    if (p.remoteWorkCount > 0) partes.push(`${formatarNumero(p.remoteWorkCount)} trabalho(s) remoto(s)`)
+    if (p.proof) partes.push("comprovante enviado")
+    return partes.join(" · ")
+}
+
+function Lista() {
     const router = useRouter()
+    const pathname = usePathname()
+    const params = useSearchParams()
+    const { avisar } = useAvisos()
 
-    const [searchTerm, setSearchTerm] = useState<string>("")
-    const [selectedStatus, setSelectedStatus] = useState<string>("")
-    const [selectedPaymentType, setSelectedPaymentType] = useState<string>("")
-    const [selectedParticipationMode, setSelectedParticipationMode] = useState<string>("")
-    const [startDate, setStartDate] = useState<string>("")
-    const [endDate, setEndDate] = useState<string>("")
+    const [usuarios, setUsuarios] = useState<AdminUserSummary[] | null>(null)
+    const [erro, setErro] = useState<string | null>(null)
+    const [atualizando, setAtualizando] = useState(false)
+    const topoRef = useRef<HTMLDivElement>(null)
+    const temLista = useRef(false)
 
-    const hydrate = useCallback(async () => {
-        setLoading(true)
-        setError(null)
+    const q = params.get("q") ?? ""
+    const situacao = params.get("situacao") ?? ""
+    const modo = params.get("modo") ?? ""
+    const pgto = params.get("pgto") ?? ""
+    const de = params.get("de") ?? ""
+    const ate = params.get("ate") ?? ""
+    const pagParam = Number.parseInt(params.get("pag") ?? "1", 10)
+
+    const mudarParams = useCallback((mudancas: Partial<Record<(typeof PARAMS)[number], string>>) => {
+        const next = new URLSearchParams(window.location.search)
+        for (const [chave, valor] of Object.entries(mudancas)) {
+            if (valor) next.set(chave, valor)
+            else next.delete(chave)
+        }
+        const qs = next.toString()
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    }, [pathname, router])
+
+    // A digitação fica local e só vai para a URL depois de uma pausa; o que veio da URL (voltar do navegador) volta para o campo.
+    const [busca, setBusca] = useState(q)
+    const ultimoEnviado = useRef(q)
+    useEffect(() => {
+        if (q !== ultimoEnviado.current) {
+            ultimoEnviado.current = q
+            setBusca(q)
+        }
+    }, [q])
+    useEffect(() => {
+        if (busca === ultimoEnviado.current) return
+        const t = setTimeout(() => {
+            ultimoEnviado.current = busca
+            mudarParams({ q: busca, pag: "" })
+        }, 300)
+        return () => clearTimeout(t)
+    }, [busca, mudarParams])
+
+    const carregar = useCallback(async () => {
+        setAtualizando(true)
         try {
             const response = await fetch(`/api/get/todosCongressistas/`, { cache: "no-store" })
             const payload: unknown = await response.json().catch(() => null)
-            const users = parseAdminUserListHttpResponse(response.ok, payload)
-            if (!users) {
-                const message = typeof payload === "object" && payload !== null &&
+            const lista = parseAdminUserListHttpResponse(response.ok, payload)
+            if (!lista) {
+                const mensagem = typeof payload === "object" && payload !== null &&
                     "message" in payload && typeof payload.message === "string"
                     ? payload.message
                     : response.ok
                         ? "A lista de congressistas recebida está em formato inválido."
                         : "Não foi possível carregar os congressistas."
-                throw new Error(message)
+                throw new Error(mensagem)
             }
-            setDataUsers(users)
+            temLista.current = true
+            setUsuarios(lista)
+            setErro(null)
         } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "Não foi possível carregar os congressistas.")
+            const mensagem = cause instanceof Error ? cause.message : "Não foi possível carregar os congressistas."
+            // Já havia lista: mantém a última válida e só avisa.
+            if (temLista.current) avisar("erro", "Não foi possível atualizar a lista", `${mensagem} Os dados abaixo podem estar desatualizados.`)
+            else setErro(mensagem)
         } finally {
-            setLoading(false)
+            setAtualizando(false)
         }
-    }, [])
+    }, [avisar])
 
-    useEffect(() => {
-        void hydrate()
-    }, [hydrate])
+    useEffect(() => { void carregar() }, [carregar])
 
-    const paymentTypes = useMemo(() => {
-        if (!dataUsers.length) return []
-        const types = new Set(
-            dataUsers
-                .map(user => user.pagamento.tipo_pagamento)
-                .filter((type): type is string => Boolean(type)),
-        )
-        return Array.from(types)
-    }, [dataUsers])
+    const tiposPagamento = useMemo(() => {
+        const tipos = new Set((usuarios ?? []).map(u => u.pagamento.tipo_pagamento).filter((t): t is string => Boolean(t)))
+        if (pgto) tipos.add(pgto)
+        return Array.from(tipos).sort((a, b) => a.localeCompare(b, "pt-BR"))
+    }, [usuarios, pgto])
 
-    const handleResetFilters = () => {
-        setSearchTerm("")
-        setSelectedStatus("")
-        setSelectedPaymentType("")
-        setSelectedParticipationMode("")
-        setStartDate("")
-        setEndDate("")
+    const filtrados = useMemo(() => filterAdminUsers(usuarios ?? [], {
+        searchTerm: q,
+        selectedStatus: situacao,
+        selectedPaymentType: pgto,
+        selectedParticipationMode: modo,
+        startDate: de,
+        endDate: ate,
+    }), [usuarios, q, situacao, pgto, modo, de, ate])
+
+    const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
+    const pagina = Math.min(Math.max(Number.isFinite(pagParam) ? pagParam : 1, 1), totalPaginas)
+    const inicio = (pagina - 1) * POR_PAGINA
+    const visiveis = filtrados.slice(inicio, inicio + POR_PAGINA)
+
+    const temFiltro = Boolean(q || situacao || modo || pgto || de || ate)
+    const limpar = () => {
+        ultimoEnviado.current = ""
+        setBusca("")
+        mudarParams(Object.fromEntries(PARAMS.map(p => [p, ""])))
+    }
+    const irParaPagina = (n: number) => {
+        mudarParams({ pag: n > 1 ? String(n) : "" })
+        topoRef.current?.scrollIntoView({ block: "start" })
     }
 
-    const getSituacaoBadge = (situacao: AdminUserSummary["pagamento"]["situacao"]) => {
-        switch (situacao) {
-            case 0: return <span className="usuarios-badge usuarios-badge-error"><BadgeX className="mr-1.5 h-4 w-4" />Não Inscrito</span>
-            case 1: return <span className="usuarios-badge usuarios-badge-success"><BadgeCheck className="mr-1.5 h-4 w-4" />Inscrito</span>
-            case 2: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Pagamento em Aberto</span>
-            case 3: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Suspenso</span>
-            default: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Status não informado</span>
-        }
-    }
-
-    const filteredUsers = useMemo(() => filterAdminUsers(dataUsers, {
-        searchTerm,
-        selectedStatus,
-        selectedPaymentType,
-        selectedParticipationMode,
-        startDate,
-        endDate,
-    }), [dataUsers, searchTerm, selectedStatus, selectedPaymentType, selectedParticipationMode, startDate, endDate])
-
-    // Estatísticas
-    const totalUsers = dataUsers.length
-    const inscritos = dataUsers.filter(user => user.pagamento.situacao === 1).length
-    const naoInscritos = dataUsers.filter(user => user.pagamento.situacao === 0).length
-    const pagamentoAberto = dataUsers.filter(user => user.pagamento.situacao === 2).length
-    const participantesRemotos = dataUsers.filter(user => ["REMOTE", "BOTH"].includes(user.participacao.mode)).length
-
-    if (loading) {
-        return (
-            <div className="usuarios-loading-container" role="status" aria-live="polite">
-                <div className="usuarios-spinner"><Loader2 size={48} className="animate-spin" /></div>
-                <span className="usuarios-loading-text">Carregando congressistas...</span>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="admin-state admin-state--error" role="alert">
-                <span className="admin-state__mark">!</span>
-                <h1>Não foi possível carregar os congressistas</h1>
-                <p>{error}</p>
-                <button type="button" className="usuarios-btn usuarios-btn-primary" onClick={() => void hydrate()}>
-                    Tentar novamente
-                </button>
-            </div>
-        )
-    }
+    const contar = (fn: (u: AdminUserSummary) => boolean) => (usuarios ? usuarios.filter(fn).length : null)
+    const filtro = (chave: (typeof PARAMS)[number]) => (e: { target: { value: string } }) =>
+        mudarParams({ [chave]: e.target.value, pag: "" })
 
     return (
-        <>
-            <LoadingModal isLoading={loading} />
+        <Pagina largura="ampla">
+            <Cabecalho
+                etiqueta="Pessoas"
+                titulo="Usuários"
+                sub="Congressistas cadastrados, com situação de pagamento e participação."
+                acoes={
+                    <Botao estilo="contorno" carregando={atualizando && usuarios !== null} onClick={() => void carregar()}>
+                        {!(atualizando && usuarios !== null) && <RefreshCw className="size-4" aria-hidden="true" />}
+                        Atualizar lista
+                    </Botao>
+                }
+            />
 
-            <div className="usuarios-main-container">
-                <span className="main-eyebrow">CIEPS / Pessoas</span>
-                <h1 className="usuarios-title">Congressistas</h1>
-                <p className="usuarios-subtitle">Visualize e gerencie as informações dos usuários cadastrados.</p>
+            <section aria-label="Resumo" className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                <Metrica rotulo="Total" valor={usuarios ? formatarNumero(usuarios.length) : null} />
+                <Metrica rotulo="Inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 1))} />
+                <Metrica rotulo="Não inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 0))} />
+                <Metrica rotulo="Pagamento em aberto" valor={formatarNullable(contar(u => u.pagamento.situacao === 2))} />
+                <Metrica rotulo="Acesso remoto" valor={formatarNullable(contar(u => ["REMOTE", "BOTH"].includes(u.participacao.mode)))} />
+            </section>
 
-                {/* Estatísticas */}
-                <div className="usuarios-estatisticas">
-                    <div className="usuarios-estatistica-card">
-                        <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
-                        <span className="usuarios-estatistica-valor">{totalUsers}</span>
-                        <span className="usuarios-estatistica-label">Total de Usuários</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <BadgeCheck size={32} style={{ marginBottom: '0.3rem', color: '#4CAF50' }} />
-                        <span className="usuarios-estatistica-valor">{inscritos}</span>
-                        <span className="usuarios-estatistica-label">Inscritos</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <BadgeX size={32} style={{ marginBottom: '0.3rem', color: '#F44336' }} />
-                        <span className="usuarios-estatistica-valor">{naoInscritos}</span>
-                        <span className="usuarios-estatistica-label">Não Inscritos</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <BadgeAlert size={32} style={{ marginBottom: '0.3rem', color: '#FF9800' }} />
-                        <span className="usuarios-estatistica-valor">{pagamentoAberto}</span>
-                        <span className="usuarios-estatistica-label">Pagamento Aberto</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <Laptop size={32} style={{ marginBottom: '0.3rem', color: '#2563EB' }} />
-                        <span className="usuarios-estatistica-valor">{participantesRemotos}</span>
-                        <span className="usuarios-estatistica-label">Acesso Remoto</span>
-                    </div>
+            <Cartao className="grid gap-4" aria-label="Busca e filtros">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                    <CampoBusca
+                        rotulo="Buscar usuário"
+                        rotuloOculto={false}
+                        placeholder="Nome, e-mail, telefone ou ID"
+                        value={busca}
+                        onChange={e => setBusca(e.target.value)}
+                    />
+                    <QrCodeUserSearch titleText="Pesquisar por QR Code" />
                 </div>
-
-                {/* Filtros */}
-                <div className="usuarios-filtros">
-                    <div className="usuarios-filtros-grid">
-                        <div className="usuarios-filtro-busca">
-                            <label htmlFor="search" className="usuarios-label">
-                                <Search className="h-5 w-5" />
-                                Busca
-                            </label>
-                            <input
-                                id="search"
-                                type="text"
-                                placeholder="Buscar por nome, e-mail, ID ou telefone..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="usuarios-input"
-                            />
-                        </div>
-
-                        <div className="usuarios-filtro-select">
-                            <label htmlFor="status" className="usuarios-label">Status de Inscrição</label>
-                            <select
-                                id="status"
-                                value={selectedStatus}
-                                onChange={e => setSelectedStatus(e.target.value)}
-                                className="usuarios-select"
-                            >
-                                <option value="">Todos os Status</option>
-                                <option value="1">Inscrito</option>
-                                <option value="0">Não Inscrito</option>
-                                <option value="2">Pagamento em Aberto</option>
-                                <option value="3">Suspenso</option>
-                            </select>
-                        </div>
-
-                        <div className="usuarios-filtro-select">
-                            <label htmlFor="participationMode" className="usuarios-label">Modalidade de Participação</label>
-                            <select
-                                id="participationMode"
-                                value={selectedParticipationMode}
-                                onChange={e => setSelectedParticipationMode(e.target.value)}
-                                className="usuarios-select"
-                            >
-                                <option value="">Todas as Modalidades</option>
-                                <option value="REGULAR">Regular</option>
-                                <option value="REMOTE">Somente remoto</option>
-                                <option value="BOTH">Regular + remoto</option>
-                                <option value="NONE">Sem acesso</option>
-                            </select>
-                        </div>
-
-                        <div className="usuarios-filtro-select">
-                            <label htmlFor="paymentType" className="usuarios-label">Tipo de Pagamento</label>
-                            <select
-                                id="paymentType"
-                                value={selectedPaymentType}
-                                onChange={e => setSelectedPaymentType(e.target.value)}
-                                className="usuarios-select"
-                            >
-                                <option value="">Todos os Tipos</option>
-                                {paymentTypes.map(type => <option key={type} value={type}>{type}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="usuarios-filtro-datas">
-                            <div className="usuarios-filtro-data">
-                                <label htmlFor="startDate" className="usuarios-label">Criado de</label>
-                                <input
-                                    type="date"
-                                    id="startDate"
-                                    value={startDate}
-                                    onChange={e => setStartDate(e.target.value)}
-                                    className="usuarios-input"
-                                />
-                            </div>
-                            <div className="usuarios-filtro-data">
-                                <label htmlFor="endDate" className="usuarios-label">Criado até</label>
-                                <input
-                                    type="date"
-                                    id="endDate"
-                                    value={endDate}
-                                    onChange={e => setEndDate(e.target.value)}
-                                    className="usuarios-input"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="w-full flex justify-between items-center content-center">
-                        <button onClick={handleResetFilters} className="usuarios-btn usuarios-btn-secondary">
-                            <FilterX className="h-5 w-5" />
-                            Limpar Filtros
-                        </button>
-                    </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    <Escolha rotulo="Situação" value={situacao} onChange={filtro("situacao")}>
+                        <option value="">Todas</option>
+                        <option value="1">Inscrito</option>
+                        <option value="0">Não inscrito</option>
+                        <option value="2">Pagamento em aberto</option>
+                        <option value="3">Suspenso</option>
+                    </Escolha>
+                    <Escolha rotulo="Participação" value={modo} onChange={filtro("modo")}>
+                        <option value="">Todas</option>
+                        <option value="REGULAR">Regular</option>
+                        <option value="REMOTE">Somente remoto</option>
+                        <option value="BOTH">Regular + remoto</option>
+                        <option value="NONE">Sem acesso</option>
+                    </Escolha>
+                    <Escolha rotulo="Tipo de pagamento" value={pgto} onChange={filtro("pgto")}>
+                        <option value="">Todos</option>
+                        {tiposPagamento.map(t => <option key={t} value={t}>{t}</option>)}
+                    </Escolha>
+                    <Campo rotulo="Cadastrado de" type="date" value={de} onChange={filtro("de")} />
+                    <Campo rotulo="Cadastrado até" type="date" value={ate} onChange={filtro("ate")} />
                 </div>
-                <div className="pb-5">
-                    <QrCodeUserSearch titleText={"Pesquisa por QrCode"}/>
-                </div>
-                {/* Lista de Usuários */}
-                {filteredUsers.length > 0 && (
-                    <>
-                        <div className="usuarios-header">
-                            <h2 className="usuarios-header-title">
-                                <List size={24} />
-                                CLIQUE PARA VER DETALHES
-                            </h2>
-                        </div>
-
-                        <div className="usuarios-grid">
-                            {filteredUsers.map((user) => (
-                                <div key={user._id} className="usuarios-card">
-                                    <div className="usuarios-card-header">
-                                        <div className="usuarios-avatar">
-                                            <User className="h-6 w-6" />
-                                        </div>
-                                        <div className="usuarios-user-info">
-                                            <h3 className="usuarios-user-name" title={displayUserName(user)}>
-                                                {displayUserName(user)}
-                                            </h3>
-                                            <p className="usuarios-user-email" title={displayUserField(user.informacoes_usuario.email)}>
-                                                <Mail className="h-4 w-4" />
-                                                {displayUserField(user.informacoes_usuario.email)}
-                                            </p>
-                                            {user.cadastroPendente && (
-                                                <span className="usuarios-badge usuarios-badge-warning">
-                                                    <BadgeAlert className="mr-1.5 h-4 w-4" />Cadastro pendente
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="usuarios-card-content">
-                                        <div className="usuarios-info-item">
-                                            <Hash className="h-4 w-4" />
-                                            <span className="usuarios-info-label">ID:</span>
-                                            <span className="usuarios-info-value">{user._id}</span>
-                                        </div>
-                                        <div className="usuarios-info-item">
-                                            <Phone className="h-4 w-4" />
-                                            <span className="usuarios-info-label">Telefone:</span>
-                                            <span className="usuarios-info-value">{displayUserField(user.informacoes_usuario.numero_telefone)}</span>
-                                        </div>
-                                        {user.informacoes_usuario.profissao && (
-                                            <div className="usuarios-info-item">
-                                                <Briefcase className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Profissão:</span>
-                                                <span className="usuarios-info-value">{user.informacoes_usuario.profissao}</span>
-                                            </div>
-                                        )}
-                                        <div className="usuarios-info-item">
-                                            <CalendarDays className="h-4 w-4" />
-                                            <span className="usuarios-info-label">Criação:</span>
-                                            <span className="usuarios-info-value">
-                                                {formatUserCreationDate(user.informacoes_usuario.data_criacao)}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="usuarios-card-payment">
-                                        <h4 className="usuarios-payment-title">
-                                            <CreditCard className="h-5 w-5" />
-                                            Informações de Pagamento
-                                        </h4>
-                                        <div className="usuarios-payment-info">
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Situação:</span>
-                                                {getSituacaoBadge(user.pagamento.situacao)}
-                                            </div>
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Tipo:</span>
-                                                <span className="usuarios-payment-type">
-                                                    {user.pagamento.tipo_pagamento || "N/D"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="usuarios-card-payment">
-                                        <h4 className="usuarios-payment-title">
-                                            <Laptop className="h-5 w-5" />
-                                            Participação em Trabalhos
-                                        </h4>
-                                        <div className="usuarios-payment-info">
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Modalidade:</span>
-                                                <span className="usuarios-payment-type">{participationModeLabel(user.participacao.mode)}</span>
-                                            </div>
-                                            <div className="usuarios-info-item">
-                                                <MapPin className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Cidade/UF:</span>
-                                                <span className="usuarios-info-value">
-                                                    {user.participacao.municipalityName && user.participacao.uf
-                                                        ? `${user.participacao.municipalityName}/${user.participacao.uf}`
-                                                        : "Não informado"}
-                                                </span>
-                                            </div>
-                                            <div className="usuarios-info-item">
-                                                <FileCheck2 className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Comprovante:</span>
-                                                <span className="usuarios-info-value">
-                                                    {user.participacao.proof
-                                                        ? `${user.participacao.reviewStatus ?? "PENDING"} · ${formatUserCreationDate(user.participacao.proof.uploadedAt)}`
-                                                        : "Não enviado"}
-                                                </span>
-                                            </div>
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Financeiro:</span>
-                                                <span className="usuarios-payment-type">{user.participacao.status ?? "SEM ACESSO"}</span>
-                                            </div>
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Trabalhos remotos:</span>
-                                                <span className="usuarios-payment-type">{user.participacao.remoteWorkCount}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="usuarios-card-actions">
-                                        <button
-                                            className="usuarios-btn usuarios-btn-primary"
-                                            onClick={() => router.push(`/usuarios/informacoes/${user._id}`)}
-                                        >
-                                            <ExternalLink size={18} />
-                                            VER DETALHES
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </>
+                {temFiltro && (
+                    <div>
+                        <Botao estilo="fantasma" tamanho="pequeno" onClick={limpar}>Limpar busca e filtros</Botao>
+                    </div>
                 )}
+            </Cartao>
 
-                {/* Estado vazio */}
-                {filteredUsers.length === 0 && (
-                    <div className="usuarios-empty">
-                        {searchTerm || selectedStatus || selectedPaymentType || selectedParticipationMode || startDate || endDate ? (
+            <div ref={topoRef} className="grid scroll-mt-4 gap-3">
+                {usuarios === null && !erro && <Estado tipo="carregando" titulo="Carregando congressistas…" linhas={5} />}
+                {usuarios === null && erro && <Estado tipo="erro" titulo="Não foi possível carregar os congressistas" texto={erro} aoTentar={() => void carregar()} />}
+                {usuarios !== null && (
+                    <>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="num text-sm text-sutil" aria-live="polite">
+                                {filtrados.length === 0
+                                    ? "Nenhum usuário"
+                                    : `${formatarNumero(inicio + 1)}–${formatarNumero(inicio + visiveis.length)} de ${formatarNumero(filtrados.length)}`}
+                                {temFiltro && usuarios.length !== filtrados.length ? ` (filtrado de ${formatarNumero(usuarios.length)})` : ""}
+                            </p>
+                            <Atualizando ativo={atualizando} />
+                        </div>
+
+                        {usuarios.length === 0 && <Estado tipo="vazio" titulo="Nenhum congressista cadastrado" texto="Ainda não há usuários cadastrados no sistema." />}
+                        {usuarios.length > 0 && filtrados.length === 0 && (
+                            <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={limpar}>Limpar busca e filtros</Botao>} />
+                        )}
+
+                        {visiveis.length > 0 && (
                             <>
-                                <SearchX className="usuarios-empty-icon" />
-                                <h3 className="usuarios-empty-title">Nenhum resultado encontrado</h3>
-                                <p className="usuarios-empty-text">Tente ajustar ou limpar os filtros aplicados.</p>
-                            </>
-                        ) : (
-                            <>
-                                <Ticket className="usuarios-empty-icon" />
-                                <h3 className="usuarios-empty-title">Nenhum congressista encontrado</h3>
-                                <p className="usuarios-empty-text">Ainda não há usuários cadastrados no sistema.</p>
+                                <div className="hidden md:block">
+                                    <TabelaRolavel rotulo="Lista de usuários" className="[&_table]:min-w-[60rem]">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col" className={classeTh}>Nome</th>
+                                                <th scope="col" className={classeTh}>E-mail</th>
+                                                <th scope="col" className={classeTh}>Situação</th>
+                                                <th scope="col" className={classeTh}>Participação</th>
+                                                <th scope="col" className={classeTh}>Cadastro em</th>
+                                                <th scope="col" className={classeTh}><span className="sr-only">Ação</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {visiveis.map(u => (
+                                                <tr key={u._id}>
+                                                    <td className={`${classeTd} max-w-64`}>
+                                                        <p className="truncate font-medium" title={displayUserName(u)}>{displayUserName(u)}</p>
+                                                        {u.informacoes_usuario.profissao && <p className="truncate text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
+                                                        <div className="mt-1"><Pendencia user={u} /></div>
+                                                    </td>
+                                                    <td className={`${classeTd} max-w-64`}>
+                                                        <p className="truncate" title={displayUserField(u.informacoes_usuario.email)}>{displayUserField(u.informacoes_usuario.email)}</p>
+                                                        <p className="num text-xs text-sutil">{displayUserField(u.informacoes_usuario.numero_telefone)}</p>
+                                                    </td>
+                                                    <td className={classeTd}>
+                                                        <SeloSituacao situacao={u.pagamento.situacao} />
+                                                        <p className="mt-1 text-xs text-sutil">{u.pagamento.tipo_pagamento ?? "Tipo não informado"}</p>
+                                                    </td>
+                                                    <td className={`${classeTd} text-sm`}>{resumoParticipacao(u)}</td>
+                                                    <td className={`${classeTd} num whitespace-nowrap text-sm`}>{formatarData(u.informacoes_usuario.data_criacao)}</td>
+                                                    <td className={`${classeTd} text-right`}>
+                                                        <BotaoLink href={`/usuarios/informacoes/${u._id}`} estilo="contorno" aria-label={`Abrir ficha de ${displayUserName(u)}`}>Abrir ficha</BotaoLink>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </TabelaRolavel>
+                                </div>
+
+                                <ul className="grid gap-3 md:hidden" aria-label="Lista de usuários">
+                                    {visiveis.map(u => (
+                                        <li key={u._id} className="grid gap-2 rounded-2xl bg-cartao p-4 ring-1 ring-linha/60">
+                                            <div className="min-w-0">
+                                                <p className="break-words font-semibold">{displayUserName(u)}</p>
+                                                <p className="break-all text-sm text-sutil">{displayUserField(u.informacoes_usuario.email)}</p>
+                                                {u.informacoes_usuario.profissao && <p className="text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                <SeloSituacao situacao={u.pagamento.situacao} />
+                                                <Pendencia user={u} />
+                                            </div>
+                                            <BotaoLink href={`/usuarios/informacoes/${u._id}`} estilo="contorno" aria-label={`Abrir ficha de ${displayUserName(u)}`}>Abrir ficha</BotaoLink>
+                                        </li>
+                                    ))}
+                                </ul>
                             </>
                         )}
-                    </div>
+
+                        {totalPaginas > 1 && (
+                            <nav aria-label="Paginação" className="flex items-center justify-between gap-3">
+                                <Botao estilo="contorno" disabled={pagina <= 1} onClick={() => irParaPagina(pagina - 1)}>
+                                    <ChevronLeft className="size-4" aria-hidden="true" />Anterior
+                                </Botao>
+                                <span className="num text-sm text-sutil" aria-current="page">Página {pagina} de {totalPaginas}</span>
+                                <Botao estilo="contorno" disabled={pagina >= totalPaginas} onClick={() => irParaPagina(pagina + 1)}>
+                                    Próxima<ChevronRight className="size-4" aria-hidden="true" />
+                                </Botao>
+                            </nav>
+                        )}
+                    </>
                 )}
             </div>
-        </>
+        </Pagina>
+    )
+}
+
+// Contagem que ainda não carregou fica null para a Métrica mostrar "Indisponível", nunca 0.
+function formatarNullable(n: number | null): string | null {
+    return n === null ? null : formatarNumero(n)
+}
+
+export default function Page() {
+    return (
+        <Suspense fallback={<Pagina largura="ampla"><Estado tipo="carregando" titulo="Carregando usuários…" linhas={5} /></Pagina>}>
+            <Lista />
+        </Suspense>
     )
 }

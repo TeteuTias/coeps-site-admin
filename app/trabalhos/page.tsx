@@ -1,222 +1,272 @@
-'use client'
-import * as XLSX from 'xlsx';
-import JSZip from 'jszip';
-import dynamic from 'next/dynamic';
-const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
-import 'react-quill-new/dist/quill.snow.css';
-import DOMPurify from 'dompurify';
-import { useEffect, useState, useMemo, FC } from 'react';
-import { Users, FileText, ChevronUp, ChevronDown, Paperclip, Info, Download, UserCircle, MessageSquare, Edit, PieChart, Search, Filter, File, Mail } from 'lucide-react';
-import { IAcademicWorks } from '@/app/lib/types/academicWorks/academicWorks.t';
-import { ObjectId } from 'bson';
-import { IUser } from '../lib/types/user/user.t';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import './style.css';
-import { academicWorkDate } from '@/app/lib/academic-work-date';
+"use client";
 
-// shortcut: correções antigas não têm a flag; o site gravava o objeto do upload (com progress) e sem uploadDate
-const arquivoRevisado = (arquivo: IAcademicWorks['arquivos'][number]) =>
-  Boolean(arquivo.enviadoNaCorrecao || ('progress' in arquivo && !arquivo.uploadDate));
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Download, Mail, RefreshCw } from "lucide-react";
+import { Botao, BotaoLink, Cabecalho, CampoBusca, Escolha, Metrica, Pagina } from "@/app/components/ui";
+import { Atualizando, Estado } from "@/app/components/Estado";
+import { useAvisos } from "@/app/components/Avisos";
+import { formatarNumero } from "@/app/lib/formatar";
+import type { IAcademicWorks } from "@/app/lib/types/academicWorks/academicWorks.t";
+import type { IUser } from "@/app/lib/types/user/user.t";
+import { CartaoTrabalho } from "./_componentes/CartaoTrabalho";
+import { arquivoRevisado, arquivosDe, autoresDe, fichasDe, normalizar, tituloDe, type Ficha } from "./_componentes/registro";
+import { gravarRascunhos, lerRascunhos, type Rascunho, type Rascunhos } from "./_componentes/rascunhos";
+import { ORDEM_AVALIACAO, SITUACOES, situacaoDe, type SituacaoId } from "./_componentes/situacao";
 
-// Componente de Loading Personalizado
-const TrabalhosLoadingModal = ({ isLoading }: { isLoading: boolean }) => {
-  if (!isLoading) return null;
+type Filtro = SituacaoId | "todas";
+const MSG_SEM_RESPOSTA = "Sem resposta do servidor.";
 
-  return (
-    <div className="trabalhos-loading-container">
-      <div className="trabalhos-loading-spinner"></div>
-      <div className="trabalhos-loading-text">
-        Carregando<span className="trabalhos-loading-dots">...</span>
-      </div>
-    </div>
-  );
-};
-
-// Paleta de Cores e Tema Inspirados em coeps.com.br
-const theme = {
-  colors: {
-    primary: '#003366', // Azul Escuro
-    accent: '#ff6200ff',  // Laranja Vibrante
-    background: '#f8f9fa', // Fundo Cinza Claro
-    surface: '#ffffff', // Superfície Branca (Cards)
-    textPrimary: '#212529',
-    textSecondary: '#6c757d',
-    border: '#dee2e6',
-    success: '#198754',
-    danger: '#dc3545',
-    warning: '#ffc107',
-  },
-  shadows: {
-    md: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-    lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.1)',
-  }
-};
-
-// Função Utilitária
-// Dentro do componente AvaliarTrabalhoPage
-const getTextoResultados = (count: number): string => {
-  if (count === 0) {
-    return 'Nenhum trabalho encontrado com os filtros atuais.';
-  }
-  if (count === 1) {
-    return '1 trabalho encontrado.';
-  }
-  return `${count} trabalhos encontrados.`;
-};
-
-// Função Utilitária
-const formatBytes = (bytes: number): string => {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
-
-/******************************************
- * COMPONENTE PRINCIPAL DA PÁGINA
- ******************************************/
 export default function AvaliarTrabalhoPage() {
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // useSearchParams exige Suspense: o filtro inicial vem da URL
+  return (
+    <Suspense fallback={<Pagina largura="ampla"><Estado tipo="carregando" titulo="Carregando trabalhos…" /></Pagina>}>
+      <PainelTrabalhos />
+    </Suspense>
+  );
+}
+
+function PainelTrabalhos() {
+  const { avisar, confirmar } = useAvisos();
+  const pathname = usePathname();
+  const params = useSearchParams();
+
   const [trabalhos, setTrabalhos] = useState<IAcademicWorks[]>([]);
   const [users, setUsers] = useState<IUser[]>([]);
+  const [carregou, setCarregou] = useState(false);
+  const [falhouCarga, setFalhouCarga] = useState(false);
+  const [atualizando, setAtualizando] = useState(false);
+  const carregouRef = useRef(false);
 
-  // Estados para os filtros
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('Todos');
+  const [busca, setBusca] = useState(params.get("q") ?? "");
+  const [situacao, setSituacao] = useState<Filtro>(() => {
+    const s = params.get("situacao");
+    return s && (ORDEM_AVALIACAO as readonly string[]).includes(s) ? (s as Filtro) : "todas";
+  });
 
-  const toggleFichaAvalicaoProps = (
-    fichaId: ObjectId,
-    indexAcademicWork: number,
-    newProps: Partial<IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"][number]>
-  ) => {
-    setTrabalhos((prevTrabalhos) => {
-      const updatedTrabalhos = [...prevTrabalhos];
-      // Encontra o trabalho correto no array original para garantir que o índice seja válido
-      const trabalhoToUpdate = updatedTrabalhos[indexAcademicWork];
-      if (!trabalhoToUpdate) return prevTrabalhos;
+  const [rascunhos, setRascunhos] = useState<Rascunhos>({});
+  const [rascunhosLidos, setRascunhosLidos] = useState(false);
 
-      const updatedFichaAvaliacao = [...trabalhoToUpdate.configuracaoModalidade.ficha_avalicao];
-      const fichaIndex = updatedFichaAvaliacao.findIndex((ficha) => `${ficha._id}` === `${fichaId}`);
-      if (fichaIndex === -1) return prevTrabalhos;
+  const [exportando, setExportando] = useState<"zip" | "planilha" | null>(null);
+  const [progresso, setProgresso] = useState("");
 
-      updatedFichaAvaliacao[fichaIndex] = { ...updatedFichaAvaliacao[fichaIndex], ...newProps };
-      updatedTrabalhos[indexAcademicWork] = {
-        ...trabalhoToUpdate,
-        configuracaoModalidade: {
-          ...trabalhoToUpdate.configuracaoModalidade,
-          ficha_avalicao: updatedFichaAvaliacao,
-        },
-      };
+  // Rascunhos: lidos da sessão depois da montagem (evita divergência com o HTML do servidor) e gravados a cada mudança
+  useEffect(() => { setRascunhos(lerRascunhos()); setRascunhosLidos(true); }, []);
+  useEffect(() => { if (rascunhosLidos) gravarRascunhos(rascunhos); }, [rascunhos, rascunhosLidos]);
 
-      return updatedTrabalhos;
-    });
-  };
-
-  const hydrateData = useMemo(() => async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch('/api/get/trabalhos-avaliacoes');
-      if (!response.ok) throw new Error('Falha ao buscar dados');
-      const { data, users } = await response.json();
-      setTrabalhos(data.reverse());
-      setUsers(users);
-    } catch (error) {
-      console.error("Erro ao carregar dados:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const downloadInfos = async () => {
-    setIsLoading(true)
-    // A. Converte os dados JSON em uma 'worksheet' (planilha)
-    const newData: {
-      "ID TRABALHO": string,
-      "TITULO": string,
-      "AUTOR PRINCIPAL": string,
-      "TELEFONE": string,
-      "E-MAIL": string,
-    }[] = trabalhos.map((trabalho) => {
-      const donoTrabalho = users.find((u) => `${u._id}` === `${trabalho.userId}`)?.informacoes_usuario
-      return {
-        "ID TRABALHO": `${trabalho._id}`,
-        "TITULO": `${trabalho.titulo}`,
-        "AUTOR PRINCIPAL": donoTrabalho?.nome || "NÃO ENCONTRADO",
-        "TELEFONE": donoTrabalho?.numero_telefone || "NÃO ENCONTRADO",
-        "E-MAIL": donoTrabalho?.email || "NÃO ENCONTRADO"
-      }
-    }
-    )
-    const worksheet = XLSX.utils.json_to_sheet(newData);
-
-    // B. Cria um novo 'workbook' (livro de trabalho/arquivo Excel)
-    const workbook = XLSX.utils.book_new();
-
-    // C. Adiciona a worksheet ao workbook
-    // O segundo argumento ('Dados') é o nome da aba da planilha
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados');
-
-    // D. Escreve o arquivo no formato binário (necessário para o download)
-    XLSX.writeFile(workbook, "Trabalhos.xlsx");
-    setIsLoading(false)
-  }
-
+  // Filtros na URL sem navegar: replaceState não refaz a requisição da página a cada tecla
   useEffect(() => {
-    hydrateData();
-  }, [hydrateData]);
+    const p = new URLSearchParams();
+    if (busca.trim()) p.set("q", busca);
+    if (situacao !== "todas") p.set("situacao", situacao);
+    const qs = p.toString();
+    if (qs !== window.location.search.replace(/^\?/, "")) window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+  }, [busca, situacao, pathname]);
 
-  // Lógica de cálculo de estatísticas
-  const stats = useMemo(() => {
-    return trabalhos.reduce((acc, trabalho) => {
-      const status = trabalho.status;
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {} as { [key: string]: number });
+  const carregar = useCallback(async () => {
+    setAtualizando(true);
+    try {
+      const resposta = await fetch("/api/get/trabalhos-avaliacoes");
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      const corpo = await resposta.json();
+      if (!Array.isArray(corpo?.data)) throw new Error("Resposta sem a lista de trabalhos.");
+      setTrabalhos([...corpo.data].reverse());
+      setUsers(Array.isArray(corpo.users) ? corpo.users : []);
+      setFalhouCarga(false);
+      carregouRef.current = true;
+      setCarregou(true);
+    } catch (erro) {
+      console.error("Erro ao carregar trabalhos:", erro);
+      // Com lista já na tela, ela fica; só avisa
+      if (carregouRef.current) avisar("erro", "Não foi possível atualizar a lista", "Você continua vendo a última lista carregada.");
+      else setFalhouCarga(true);
+    } finally {
+      setAtualizando(false);
+    }
+  }, [avisar]);
+
+  useEffect(() => { void carregar(); }, [carregar]);
+
+  const usuarioPorId = useMemo(() => new Map(users.map((u) => [`${u._id}`, u])), [users]);
+
+  const contagem = useMemo(() => {
+    const c: Record<SituacaoId, number> = { "em-avaliacao": 0, ajustes: 0, aceito: 0, recusado: 0, "sem-situacao": 0 };
+    for (const t of trabalhos) c[situacaoDe(t.status)]++;
+    return c;
   }, [trabalhos]);
 
-  // Lógica de filtragem dos trabalhos
-  const filteredTrabalhos = useMemo(() => {
-    return trabalhos.filter(trabalho => {
-      const matchesStatus = statusFilter === 'Todos' || trabalho.status === statusFilter;
-      const matchesSearch = trabalho.titulo.toLowerCase().includes(searchQuery.toLowerCase()) || trabalho.autores.filter((t) => t.nome.toLowerCase().includes(searchQuery.toLowerCase())).length > 0;
-      return matchesStatus && matchesSearch;
+  const filtrados = useMemo(() => {
+    const termo = normalizar(busca.trim());
+    return trabalhos.filter((t) => {
+      if (situacao !== "todas" && situacaoDe(t.status) !== situacao) return false;
+      if (!termo) return true;
+      const titular = usuarioPorId.get(`${t.userId}`)?.informacoes_usuario?.nome;
+      return [t.titulo, titular, ...autoresDe(t).map((a) => a?.nome)].some((campo) => normalizar(campo).includes(termo));
     });
-  }, [trabalhos, searchQuery, statusFilter]);
+  }, [trabalhos, busca, situacao, usuarioPorId]);
 
-  const statusOptionsFiltro = ["Todos", "Aceito", "Recusado", "Necessita de Alteração", "Em Avaliação"];
+  const filtrosAtivos = busca.trim() !== "" || situacao !== "todas";
+  const n = filtrados.length;
+  const escopo = `${formatarNumero(n)} ${n === 1 ? "trabalho" : "trabalhos"}${filtrosAtivos ? (n === 1 ? " filtrado" : " filtrados") : ""}`;
+  const limparFiltros = () => { setBusca(""); setSituacao("todas"); };
 
-  const downloadAllFilteredTrabalhos = async () => {
-    if (filteredTrabalhos.length === 0) {
-      alert("Nenhum trabalho corresponde aos filtros atuais.");
-      return;
+  const mudarRascunho = useCallback((id: string, patch: Partial<Rascunho> | null) => {
+    setRascunhos((prev) => {
+      const proximo = { ...prev };
+      if (patch === null) { delete proximo[id]; return proximo; }
+      const r: Rascunho = { ...prev[id], ...patch };
+      (Object.keys(r) as (keyof Rascunho)[]).forEach((k) => { if (r[k] === undefined) delete r[k]; });
+      if (Object.keys(r).length === 0) delete proximo[id]; else proximo[id] = r;
+      return proximo;
+    });
+  }, []);
+
+  // Salvar atualiza só o registro afetado: a lista não recarrega nem desmonta os outros cartões
+  const enviarAvaliacao = useCallback(async (t: IAcademicWorks, r?: Rascunho): Promise<boolean> => {
+    const id = `${t._id}`;
+    const apiStatus = SITUACOES[r?.situacao ?? situacaoDe(t.status)].api;
+    if (!apiStatus) { avisar("erro", "Escolha a situação do trabalho"); return false; }
+
+    const ficha: Ficha[] = fichasDe(t).map((item) => {
+      const d = r?.fichas?.[`${item._id}`];
+      if (!d) return item;
+      const saida = { ...item };
+      if (d.nota !== undefined && d.nota !== "" && Number.isFinite(Number(d.nota))) {
+        saida.notasRecebidas = [Math.max(item.notaMinima, Math.min(item.notaMaxima, Number(d.nota)))];
+      }
+      if (d.justificativa !== undefined) saida.justificativa = [d.justificativa];
+      return saida;
+    });
+
+    try {
+      const resposta = await fetch("/api/post/avaliar-trabalho", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId: t._id, userId: t.userId, status: apiStatus, avaliadorComentarios: r?.parecer ?? "", ficha_avalicao: ficha }),
+      });
+      const corpo = await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        avisar("erro", "A avaliação não foi enviada", `${corpo?.message || `Erro ${resposta.status}.`} O texto continua guardado.`);
+        return false;
+      }
+      // Espelha o que o servidor gravou: status, novo parecer e a nota/justificativa no topo do histórico da ficha
+      setTrabalhos((prev) => prev.map((x) => {
+        if (`${x._id}` !== id) return x;
+        const comentario = { comentario: r?.parecer ?? "", date: new Date(), status: apiStatus } as unknown as IAcademicWorks["avaliadorComentarios"][number];
+        return {
+          ...x,
+          status: apiStatus as IAcademicWorks["status"],
+          avaliadorComentarios: [...(Array.isArray(x.avaliadorComentarios) ? x.avaliadorComentarios : []), comentario],
+          configuracaoModalidade: {
+            ...x.configuracaoModalidade,
+            ficha_avalicao: fichasDe(x).map((f) => {
+              const enviado = ficha.find((p) => `${p._id}` === `${f._id}`);
+              return enviado ? { ...f, notasRecebidas: [enviado.notasRecebidas?.[0], ...(f.notasRecebidas ?? [])], justificativa: [enviado.justificativa?.[0], ...(f.justificativa ?? [])] } : f;
+            }) as Ficha[],
+          },
+        };
+      }));
+      mudarRascunho(id, null);
+      avisar("ok", "Avaliação enviada", `${tituloDe(t)}: ${apiStatus}.`);
+      return true;
+    } catch (erro) {
+      console.error("Erro ao enviar avaliação:", erro);
+      avisar("erro", MSG_SEM_RESPOSTA, "Não sabemos se a avaliação foi registrada. Veja em “Avaliações anteriores” ou atualize a lista antes de enviar de novo. Seu texto continua guardado.");
+      return false;
     }
-    setIsLoading(true);
+  }, [avisar, mudarRascunho]);
+
+  const salvarAutor = useCallback(async (id: string, index: number, emailAtual: string | null, nome: string, email: string): Promise<boolean> => {
+    const ok = await confirmar({
+      titulo: "Corrigir os dados deste autor?",
+      descricao: <>Nome: <strong>{nome || "(vazio)"}</strong><br />E-mail: <strong>{email || "(vazio)"}</strong></>,
+      rotuloConfirmar: "Corrigir autor",
+    });
+    if (!ok) return false;
+    try {
+      const resposta = await fetch("/api/post/trabalhos/autor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trabalhoId: id, index, emailAtual, nome, email }),
+      });
+      const corpo = await resposta.json().catch(() => null);
+      if (!resposta.ok) {
+        if (resposta.status === 409) {
+          avisar("alerta", "O autor foi alterado por outra pessoa", `${corpo?.message || ""} A lista foi atualizada: confira os dados e tente de novo.`.trim());
+          void carregar();
+        } else {
+          avisar("erro", "Não foi possível corrigir o autor", corpo?.message || `Erro ${resposta.status}.`);
+        }
+        return false;
+      }
+      const novo = { nome: corpo?.data?.nome ?? nome, email: corpo?.data?.email ?? email };
+      setTrabalhos((prev) => prev.map((t) => (`${t._id}` !== id ? t : { ...t, autores: autoresDe(t).map((a, i) => (i === index ? { ...a, ...novo } : a)) })));
+      avisar("ok", "Autor corrigido", `${novo.nome} · ${novo.email}`);
+      return true;
+    } catch (erro) {
+      console.error("Erro ao corrigir autor:", erro);
+      avisar("erro", MSG_SEM_RESPOSTA, "Não sabemos se o autor foi alterado. Atualize a lista e confira antes de repetir.");
+      return false;
+    }
+  }, [avisar, confirmar, carregar]);
+
+  // Planilha e ZIP usam a mesma lista filtrada que está na tela
+  async function baixarPlanilha() {
+    if (n === 0) { avisar("alerta", "Nenhum trabalho na lista", "Ajuste os filtros para exportar."); return; }
+    setExportando("planilha");
+    try {
+      const XLSX = await import("xlsx");
+      const linhas = filtrados.map((t) => {
+        const titular = usuarioPorId.get(`${t.userId}`)?.informacoes_usuario;
+        return {
+          "ID TRABALHO": `${t._id}`,
+          "TITULO": t.titulo ?? "",
+          "TITULAR QUE SUBMETEU": titular?.nome || "NÃO ENCONTRADO",
+          "TELEFONE DO TITULAR": titular?.numero_telefone || "NÃO ENCONTRADO",
+          "E-MAIL DO TITULAR": titular?.email || "NÃO ENCONTRADO",
+          "AUTORES": autoresDe(t).map((a) => a?.nome).filter(Boolean).join("; "),
+        };
+      });
+      const livro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(livro, XLSX.utils.json_to_sheet(linhas), "Dados");
+      XLSX.writeFile(livro, "Trabalhos.xlsx");
+      avisar("ok", "Planilha gerada", `${escopo} na planilha Trabalhos.xlsx.`);
+    } catch (erro) {
+      console.error("Erro ao gerar planilha:", erro);
+      avisar("erro", "Não foi possível gerar a planilha", "Tente de novo.");
+    } finally {
+      setExportando(null);
+    }
+  }
+
+  async function baixarZip() {
+    if (n === 0) { avisar("alerta", "Nenhum trabalho na lista", "Ajuste os filtros para baixar arquivos."); return; }
+    setExportando("zip");
 
     // Remove caracteres que quebram a extração no Windows e evita "/" virar subpasta no ZIP
-    const nomeSeguro = (nome: string) => nome.replace(/[\\/:*?"<>|]/g, '_').trim().slice(0, 100);
+    const nomeSeguro = (nome: string) => nome.replace(/[\\/:*?"<>|]/g, "_").trim().slice(0, 100);
     const falhas: string[] = [];
     let totalArquivos = 0;
 
     try {
+      const { default: JSZip } = await import("jszip");
       // Um único ZIP com uma pasta por trabalho: navegadores bloqueiam vários downloads automáticos
       const zip = new JSZip();
 
-      for (const [index, trabalho] of filteredTrabalhos.entries()) {
-        if (!trabalho.arquivos || trabalho.arquivos.length === 0) continue;
+      for (const [index, trabalho] of filtrados.entries()) {
+        const arquivos = arquivosDe(trabalho);
+        if (arquivos.length === 0) continue;
+        setProgresso(`Baixando arquivos: trabalho ${index + 1} de ${n}…`);
 
         // Numeração garante pastas distintas mesmo com títulos repetidos
-        const pasta = zip.folder(`${index + 1} - ${nomeSeguro(trabalho.titulo || 'trabalho')}`)!;
+        const pasta = zip.folder(`${index + 1} - ${nomeSeguro(trabalho.titulo || "trabalho")}`)!;
         const nomesUsados = new Set<string>();
 
-        for (const [indexArquivo, arquivo] of trabalho.arquivos.entries()) {
+        for (const [indexArquivo, arquivo] of arquivos.entries()) {
           try {
-            const response = await fetch(arquivo.url);
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-            const blob = await response.blob();
+            const resposta = await fetch(arquivo.url);
+            if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+            const blob = await resposta.blob();
 
             let nome = nomeSeguro(arquivo.originalName || `arquivo-${indexArquivo + 1}`);
             if (arquivoRevisado(arquivo)) nome = `REVISADO - ${nome}`;
@@ -225,553 +275,116 @@ export default function AvaliarTrabalhoPage() {
 
             pasta.file(nome, blob);
             totalArquivos++;
-          } catch (error) {
-            console.error(`Erro no arquivo ${arquivo.originalName}:`, error);
-            falhas.push(`${trabalho.titulo}: ${arquivo.originalName}`);
+          } catch (erro) {
+            console.error(`Erro no arquivo ${arquivo?.originalName}:`, erro);
+            falhas.push(`${tituloDe(trabalho)}: ${arquivo?.originalName ?? "arquivo sem nome"}`);
           }
         }
       }
 
       if (totalArquivos === 0) {
-        alert(falhas.length > 0
-          ? `Nenhum arquivo pôde ser baixado (${falhas.length} falha(s)). Nenhum ZIP foi gerado.`
-          : "Os trabalhos filtrados não possuem arquivos anexados.");
+        if (falhas.length > 0) avisar("erro", "Nenhum arquivo pôde ser baixado", `${falhas.length} falha(s). Nenhum ZIP foi gerado.`);
+        else avisar("alerta", "Sem arquivos", "Os trabalhos filtrados não têm arquivos anexados.");
         return;
       }
 
-      const zipContent = await zip.generateAsync({ type: 'blob' });
-
-      const url = window.URL.createObjectURL(zipContent);
-      const a = document.createElement('a');
+      setProgresso("Montando o ZIP…");
+      const conteudo = await zip.generateAsync({ type: "blob" });
+      const url = window.URL.createObjectURL(conteudo);
+      const a = document.createElement("a");
       a.href = url;
-      a.download = 'Trabalhos_Filtrados.zip';
+      a.download = "Trabalhos_Filtrados.zip";
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 
       if (falhas.length > 0) {
-        const lista = falhas.slice(0, 20).join('\n');
-        const resto = falhas.length > 20 ? `\n... e mais ${falhas.length - 20}` : '';
-        alert(`ZIP gerado, mas ${falhas.length} arquivo(s) não puderam ser baixados e ficaram de fora:\n\n${lista}${resto}`);
+        const lista = falhas.slice(0, 20).join("\n");
+        const resto = falhas.length > 20 ? `\n… e mais ${falhas.length - 20}` : "";
+        avisar("alerta", `ZIP gerado sem ${falhas.length} arquivo(s)`, `Estes anexos não puderam ser baixados e ficaram de fora:\n${lista}${resto}`);
+      } else {
+        avisar("ok", "ZIP gerado", `${formatarNumero(totalArquivos)} arquivo(s) de ${escopo}.`);
       }
-    } catch (error) {
-      console.error("Erro geral no processo de download:", error);
-      alert("Erro ao gerar o ZIP dos trabalhos. Nenhum arquivo foi baixado.");
+    } catch (erro) {
+      console.error("Erro geral no processo de download:", erro);
+      avisar("erro", "Não foi possível gerar o ZIP", "Nenhum arquivo foi baixado.");
     } finally {
-      setIsLoading(false);
+      setExportando(null);
+      setProgresso("");
     }
-  };
-  return (
-    <div className="trabalhos-main-container">
-      <TrabalhosLoadingModal isLoading={isLoading} />
-      <div className="trabalhos-content-wrapper">
-        <header className="trabalhos-header">
-          <span className="main-eyebrow">CIEPS / Trabalhos</span>
-          <h1 className="trabalhos-title">Painel de Avaliação</h1>
-          <p className="trabalhos-subtitle">Revise, filtre e avalie os trabalhos acadêmicos submetidos.</p>
-        </header>
-
-        {/* Seção de Estatísticas */}
-        {!isLoading && (
-          <div className="trabalhos-stats-container">
-            <h2 className="trabalhos-stats-title">
-              <PieChart className="inline-block mr-2" />
-              Estatísticas Gerais
-            </h2>
-            <div className="trabalhos-stats-grid">
-              <div className="trabalhos-stat-card">
-                <div className="trabalhos-stat-value">{trabalhos.length}</div>
-                <div className="trabalhos-stat-label">Total de Trabalhos</div>
-              </div>
-              <div className="trabalhos-stat-card">
-                <div className="trabalhos-stat-value">{stats['Aceito'] || 0}</div>
-                <div className="trabalhos-stat-label">Aceitos</div>
-              </div>
-              <div className="trabalhos-stat-card">
-                <div className="trabalhos-stat-value">{stats['Recusado'] || 0}</div>
-                <div className="trabalhos-stat-label">Recusados</div>
-              </div>
-              <div className="trabalhos-stat-card">
-                <div className="trabalhos-stat-value">{stats['Necessita de Alteração'] || 0}</div>
-                <div className="trabalhos-stat-label">Necessitam Alteração</div>
-              </div>
-              <div className="trabalhos-stat-card">
-                <div className="trabalhos-stat-value">{stats['Em Avaliação'] || 0}</div>
-                <div className="trabalhos-stat-label">Em Avaliação</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Seção de Filtros */}
-        {!isLoading && (
-          <div className="trabalhos-filters-container">
-            <h2 className="trabalhos-filters-title">
-              <Filter className="inline-block mr-2" />
-              Filtros de Pesquisa
-            </h2>
-            <div className="trabalhos-filters-grid">
-              <div className="trabalhos-search-container">
-                <Search className="trabalhos-search-icon" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar por título do trabalho ou congressista..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="trabalhos-search-input"
-                />
-              </div>
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="trabalhos-select"
-              >
-                {statusOptionsFiltro.map(opt => <option key={opt} value={opt}>{opt === 'Todos' ? 'Filtrar por Status (Todos)' : opt}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-        {/* Botão de Download */}
-        <div className="trabalhos-download-container">
-          <button
-            className="trabalhos-download-btn"
-            onClick={() => downloadAllFilteredTrabalhos()}
-          >
-            <Download className="inline-block mr-2" />
-            Baixar Trabalhos Filtrados
-          </button>
-          <button
-            className="trabalhos-download-btn"
-            onClick={() => downloadInfos()}
-          >
-            <Download className="inline-block mr-2" />
-            Baixar Informações
-          </button>
-          <Link href="/trabalhos/email" className="trabalhos-download-btn">
-            <Mail className="inline-block mr-2" />
-            Enviar E-mails
-          </Link>
-        </div>
-
-        {/* Container de Resultados */}
-        <div className="trabalhos-results-container">
-          <div className="trabalhos-results-info">
-            <Info className="inline-block mr-2" />
-            {getTextoResultados(filteredTrabalhos.length)}
-          </div>
-          {!isLoading && filteredTrabalhos.length > 0 ? (
-            <div className="trabalhos-list">
-              {filteredTrabalhos.map((trabalho) => {
-                // Encontra o índice original para a função de toggle, pois o array filtrado tem outros índices
-                const originalIndex = trabalhos.findIndex(t => t._id.toString() === trabalho._id.toString());
-                return (
-                  <TrabalhoComponent
-                    key={`${trabalho._id}`}
-                    user={users.find((user) => `${user._id}` === `${trabalho.userId}`)}
-                    indexTrabalho={originalIndex}
-                    toggleFichaAvalicaoProps={toggleFichaAvalicaoProps}
-                    hydrateData={hydrateData}
-                    data={trabalho}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            !isLoading && (
-              <div className="trabalhos-empty">
-                <h2 className="trabalhos-empty-title">Nenhum Trabalho Encontrado</h2>
-                <p className="trabalhos-empty-text">Tente ajustar seus filtros de pesquisa ou aguarde novas submissões.</p>
-              </div>
-            )
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/******************************************
- * AUTOR (com edição de nome e e-mail)
- ******************************************/
-const AutorItem: FC<{
-  autor: IAcademicWorks['autores'][number];
-  index: number;
-  trabalhoId: string;
-  hydrateData: () => Promise<void>;
-}> = ({ autor, index, trabalhoId, hydrateData }) => {
-  const [editando, setEditando] = useState(false);
-  const [nome, setNome] = useState(autor.nome ?? '');
-  const [email, setEmail] = useState(autor.email ?? '');
-  const [salvando, setSalvando] = useState(false);
-
-  const salvar = async () => {
-    if (!confirm(`Alterar este autor para:\n\nNome: ${nome.trim()}\nE-mail: ${email.trim()}?`)) return;
-    setSalvando(true);
-    try {
-      const response = await fetch('/api/post/trabalhos/autor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trabalhoId, index, emailAtual: autor.email ?? null, nome, email }),
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.message || 'Falha ao atualizar o autor.');
-      setEditando(false);
-      await hydrateData();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  if (editando) {
-    return (
-      <div className="trabalhos-autor-item">
-        <input className="trabalhos-ficha-input" style={{ width: '100%', marginBottom: '0.5rem' }} value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome" aria-label="Nome do autor" />
-        <input className="trabalhos-ficha-input" style={{ width: '100%', marginBottom: '0.5rem' }} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="E-mail" aria-label="E-mail do autor" />
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="trabalhos-submit-btn" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando...' : 'Salvar'}</button>
-          <button className="trabalhos-submit-btn" disabled={salvando} onClick={() => { setNome(autor.nome ?? ''); setEmail(autor.email ?? ''); setEditando(false); }}>Cancelar</button>
-        </div>
-      </div>
-    );
   }
 
-  return (
-    <div className="trabalhos-autor-item">
-      <div className="trabalhos-autor-nome">
-        {autor.nome}
-        {autor.isOrientador && (
-          <span className="trabalhos-autor-orientador">Orientador</span>
-        )}
-      </div>
-      <div className="trabalhos-autor-email">Email: {autor.email}</div>
-      <button className="trabalhos-card-info-link" style={{ marginTop: '0.5rem' }} onClick={() => setEditando(true)}>
-        <Edit className="inline-block w-4 h-4 mr-1" />Editar nome/e-mail
-      </button>
-    </div>
-  );
-};
-
-/******************************************
- * COMPONENTE DO CARD DE TRBALHO
- ******************************************/
-const TrabalhoComponent: FC<{
-  data: IAcademicWorks;
-  user: IUser | undefined;
-  indexTrabalho: number;
-  hydrateData: () => Promise<void>;
-  toggleFichaAvalicaoProps: (fichaId: ObjectId, indexAcademicWork: number, newProps: Partial<IAcademicWorks["configuracaoModalidade"]["ficha_avalicao"][number]>) => void;
-}> = ({ data, hydrateData, toggleFichaAvalicaoProps, indexTrabalho, user }) => {
-  const [selectedStatus, setSelectedStatus] = useState<IAcademicWorks['status']>(data.status);
-  // Registros legados podem não ter as listas de anexos e de avaliações.
-  const arquivos = Array.isArray(data.arquivos) ? data.arquivos : [];
-  const avaliacoes = Array.isArray(data.avaliadorComentarios) ? data.avaliadorComentarios : [];
-  const [newComentario, setNewComentario] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [hoveredStatus, setHoveredStatus] = useState<string | null>(null);
-  const [isFocused, setIsFocused] = useState(false);
-  const router = useRouter();
-
-  // Estados para as seções colapsáveis (inlined)
-  const [autoresOpen, setAutoresOpen] = useState(false);
-  const [arquivosOpen, setArquivosOpen] = useState(false);
-  const [topicosOpen, setTopicosOpen] = useState(false);
-  const [avaliacoesAnterioresOpen, setAvaliacoesAnterioresOpen] = useState(false);
-
-  const handleAddAvaliacao = async () => {
-    if (!newComentario.trim()) {
-      setError('O campo de parecer não pode estar vazio.'); return;
-    }
-    setLoading(true); setError(null); setSuccess(null);
-    try {
-      const response = await fetch("/api/post/avaliar-trabalho", {
-        method: "POST", headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId: data._id, userId: data.userId, status: selectedStatus, avaliadorComentarios: newComentario, ficha_avalicao: data.configuracaoModalidade.ficha_avalicao })
-      });
-      if (!response.ok) throw new Error('Falha ao enviar avaliação');
-      alert("Avaliação feita com sucesso!")
-      await hydrateData(); setNewComentario(''); setSuccess('Avaliação enviada com sucesso!');
-      setTimeout(() => setSuccess(null), 5000);
-    } catch (err: any) {
-      setError(err.message || 'Erro desconhecido ao enviar a avaliação.');
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const statusOptions: IAcademicWorks['status'][] = ["Aceito", "Recusado", "Necessita de Alteração", "Em Avaliação"];
-  const statusBadgeStyles: { [key in IAcademicWorks['status']]: string } = { 'Aceito': `bg-green-100 text-[${theme.colors.success}]`, 'Recusado': `bg-red-100 text-[${theme.colors.danger}]`, 'Em Avaliação': `bg-yellow-100 text-[${theme.colors.warning}]`, 'Necessita de Alteração': `bg-orange-100 text-[${theme.colors.accent}]` };
+  const carregando = !carregou && !falhouCarga;
 
   return (
-    <div className="trabalhos-card">
-      {/* Cabeçalho do Card */}
-      <div className="trabalhos-card-header">
-        <div>
-          <h1 className="trabalhos-card-title">{data.titulo}</h1>
-          <div className="trabalhos-card-modalidade-badge">
-            {data.modalidade}
-          </div>
-        </div>
-        <div className="trabalhos-card-status-container">
-          <div className={`trabalhos-card-status-badge ${data.status.toLowerCase().replace(/\s+/g, '-')}`}>
-            {data.status}
-          </div>
-        </div>
-      </div>
-      <div className="trabalhos-card-info">
-        <div className="trabalhos-card-info-item">
-          <UserCircle className="w-4 h-4" />
-          <span>Enviado por:</span>
-          <button
-            onClick={() => router.push(`/usuarios/informacoes/${user?._id}`)}
-            className="trabalhos-card-info-link"
-          >
-            {user?.informacoes_usuario.nome || 'Usuário Desconhecido'}
-          </button>
-        </div>
-        <div className="trabalhos-card-info-item">
-          <span><strong>Data:</strong> {new Date(data.dataSubmissao).toLocaleDateString('pt-BR')}</span>
-        </div>
-      </div>
+    <Pagina largura="ampla">
+      <Cabecalho
+        etiqueta="CIEPS / Trabalhos"
+        titulo="Painel de avaliação"
+        sub="Revise, filtre e avalie os trabalhos acadêmicos submetidos."
+        acoes={<BotaoLink href="/trabalhos/email" estilo="contorno"><Mail className="size-4" aria-hidden="true" />Enviar e-mails</BotaoLink>}
+      />
 
-      {/* Seção de Autores */}
-      <div className="trabalhos-card-section">
-        <button
-          className="trabalhos-card-section-header"
-          onClick={() => setAutoresOpen(!autoresOpen)}
-        >
-          <div className="flex items-center space-x-3">
-            <Users className="w-5 h-5" />
-            <h2>Autores ({data.autores.length})</h2>
+      {carregando && <Estado tipo="carregando" titulo="Carregando trabalhos…" linhas={4} />}
+      {falhouCarga && <Estado tipo="erro" titulo="Não foi possível carregar os trabalhos" aoTentar={() => void carregar()} />}
+
+      {carregou && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Metrica rotulo="Total de trabalhos" valor={formatarNumero(trabalhos.length)} />
+            {ORDEM_AVALIACAO.map((id) => <Metrica key={id} rotulo={SITUACOES[id].plural} valor={formatarNumero(contagem[id])} />)}
+            {contagem["sem-situacao"] > 0 && <Metrica rotulo={SITUACOES["sem-situacao"].plural} valor={formatarNumero(contagem["sem-situacao"])} />}
           </div>
-          {autoresOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </button>
-        {autoresOpen && (
-          <div className="trabalhos-card-section-content">
-            <div className="trabalhos-autores-list">
-              {data.autores.map((autor, index) => (
-                <AutorItem key={index} autor={autor} index={index} trabalhoId={`${data._id}`} hydrateData={hydrateData} />
-              ))}
+
+          <section aria-label="Filtros e exportação" className="grid gap-4 rounded-2xl bg-cartao p-4 ring-1 ring-linha/60 sm:p-5">
+            <div className="grid gap-3 md:grid-cols-[1fr_16rem_auto] md:items-end">
+              <CampoBusca rotulo="Buscar por título, autor ou titular" rotuloOculto={false} placeholder="Título do trabalho, autor ou titular da conta…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+              <Escolha rotulo="Situação" value={situacao} onChange={(e) => setSituacao(e.target.value as Filtro)}>
+                <option value="todas">Todas as situações</option>
+                {ORDEM_AVALIACAO.map((id) => <option key={id} value={id}>{SITUACOES[id].rotulo}</option>)}
+              </Escolha>
+              <Botao estilo="contorno" carregando={atualizando} onClick={() => void carregar()}>
+                {!atualizando && <RefreshCw className="size-4" aria-hidden="true" />}Atualizar lista
+              </Botao>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Seção de Arquivos */}
-      <div className="trabalhos-card-section">
-        <button
-          className="trabalhos-card-section-header"
-          onClick={() => setArquivosOpen(!arquivosOpen)}
-        >
-          <div className="flex items-center space-x-3">
-            <Paperclip className="w-5 h-5" />
-            <h2>Arquivos ({arquivos.length})</h2>
-          </div>
-          {arquivosOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </button>
-        {arquivosOpen && (
-          <div className="trabalhos-card-section-content">
-            <div className="trabalhos-arquivos-list">
-              {arquivos.map((arquivo, index) => {
-                const uploadDate = academicWorkDate(arquivo.uploadDate);
-                const revisado = arquivoRevisado(arquivo);
-                return (
-                  <div key={index} className={`trabalhos-arquivo-item${revisado ? ' trabalhos-arquivo-revisado' : ''}`}>
-                    <File className="trabalhos-arquivo-icon" />
-                    <div className="trabalhos-arquivo-info">
-                      {revisado && (
-                        <span className="trabalhos-arquivo-revisado-badge">
-                          Arquivo revisado{arquivo.correcaoNumero ? ` • correção ${arquivo.correcaoNumero}` : ''}
-                        </span>
-                      )}
-                      <div className="trabalhos-arquivo-nome" title={arquivo.originalName}>
-                        {arquivo.originalName}
-                      </div>
-                      <div className="trabalhos-arquivo-detalhes">
-                        <span>{formatBytes(arquivo.size)}</span>
-                        <span>•</span>
-                        <time dateTime={uploadDate.iso}>
-                          {uploadDate.label}
-                        </time>
-                      </div>
-                    </div>
-                    <a
-                      href={arquivo.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Baixar arquivo"
-                      className="trabalhos-arquivo-download"
-                    >
-                      <Download className="w-5 h-5" />
-                    </a>
-                  </div>
-                );
-              })}
+            <div className="flex flex-wrap items-center gap-2 border-t border-linha pt-4">
+              <Botao carregando={exportando === "zip"} disabled={exportando !== null || n === 0} onClick={() => void baixarZip()}>
+                {exportando !== "zip" && <Download className="size-4" aria-hidden="true" />}Baixar arquivos de {escopo}
+              </Botao>
+              <Botao estilo="contorno" carregando={exportando === "planilha"} disabled={exportando !== null || n === 0} onClick={() => void baixarPlanilha()}>
+                {exportando !== "planilha" && <Download className="size-4" aria-hidden="true" />}Baixar informações de {escopo}
+              </Botao>
             </div>
-          </div>
-        )}
-      </div>
+            <p className="text-xs text-sutil">Os dois botões usam a lista exibida abaixo, com a busca e a situação escolhidas. A planilha traz o titular que submeteu e os autores, sem CPF.</p>
+            {progresso && <p role="status" aria-live="polite" className="text-sm text-sutil">{progresso}</p>}
+          </section>
 
-      {/* Seção de Tópicos */}
-      <div className="trabalhos-card-section">
-        <button
-          className="trabalhos-card-section-header"
-          onClick={() => setTopicosOpen(!topicosOpen)}
-        >
-          <div className="flex items-center space-x-3">
-            <FileText className="w-5 h-5" />
-            <h2>Tópicos do Trabalho</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p role="status" aria-live="polite" className="text-sm font-medium">
+              {n === 0 ? "Nenhum trabalho com os filtros atuais." : `${formatarNumero(n)} ${n === 1 ? "trabalho encontrado" : "trabalhos encontrados"}.`}
+            </p>
+            <Atualizando ativo={atualizando} />
           </div>
-          {topicosOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </button>
-        {topicosOpen && (
-          <div className="trabalhos-card-section-content">
-            <div className="trabalhos-topicos-grid">
-              {Object.entries(data.topicos).map(([key, value]) => (
-                <div key={key} className="trabalhos-topico-item">
-                  <div className="trabalhos-topico-label">{key.replace(/_/g, ' ')}</div>
-                  <div className="trabalhos-topico-value">{value || 'Não informado.'}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Seção de Avaliações Anteriores */}
-      <div className="trabalhos-card-section">
-        <button
-          className="trabalhos-card-section-header"
-          onClick={() => setAvaliacoesAnterioresOpen(!avaliacoesAnterioresOpen)}
-        >
-          <div className="flex items-center space-x-3">
-            <MessageSquare className="w-5 h-5" />
-            <h2>Avaliações Anteriores ({avaliacoes.length})</h2>
-          </div>
-          {avaliacoesAnterioresOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-        </button>
-        {avaliacoesAnterioresOpen && (
-          <div className="trabalhos-card-section-content">
-            {avaliacoes.length === 0 ? (
-              <p className="text-center opacity-70">Nenhuma avaliação prévia registrada.</p>
-            ) : (
-              <div className="trabalhos-avaliacoes-list">
-                {[...avaliacoes].reverse().map((avaliacao, index) => (
-                  <div key={index} className="trabalhos-avaliacao-item">
-                    <div className="trabalhos-avaliacao-header">
-                      <div className="trabalhos-avaliacao-data">
-                        {new Date(avaliacao.date).toLocaleString('pt-BR')}
-                      </div>
-                      <span className={`trabalhos-card-status ${(avaliacao.status ?? '').toLowerCase().replace(/\s+/g, '-')}`}>
-                        {avaliacao.status}
-                      </span>
-                    </div>
-                    <div
-                      className="trabalhos-avaliacao-comentario"
-                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(avaliacao.comentario) }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+          {trabalhos.length === 0 && <Estado tipo="vazio" titulo="Nenhum trabalho submetido ainda" texto="Quando alguém submeter um trabalho, ele aparece aqui." />}
+          {trabalhos.length > 0 && n === 0 && <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={limparFiltros}>Limpar busca e filtros</Botao>} />}
 
-      {/* Seção de Nova Avaliação */}
-      <div className="trabalhos-avaliacao-section">
-        <h2 className="trabalhos-avaliacao-title">
-          <Edit className="w-5 h-5" />
-          Adicionar Nova Avaliação
-        </h2>
-        {error && <div className="trabalhos-message error">{error}</div>}
-        {success && <div className="trabalhos-message success">{success}</div>}
-        <div className="trabalhos-status-buttons">
-          {statusOptions.map(status => (
-            <button
-              key={status}
-              onClick={() => setSelectedStatus(status)}
-              onMouseEnter={() => setHoveredStatus(status)}
-              onMouseLeave={() => setHoveredStatus(null)}
-              className={`trabalhos-status-btn ${status.toLowerCase().replace(/\s+/g, '-').replace('-de-', '-').replace('ção', 'cao')} ${selectedStatus === status ? 'active' : ''}`}
-            >
-              {status}
-            </button>
-          ))}
-        </div>
-        {(selectedStatus === "Aceito" || selectedStatus === "Recusado") && (
-          <div className="trabalhos-ficha-container">
-            <h3 className="trabalhos-ficha-title">Ficha de Avaliação Final</h3>
-            {data.configuracaoModalidade.ficha_avalicao.map((item) => (
-              <div key={`${item._id}`} className="trabalhos-ficha-item">
-                <h4 className="trabalhos-ficha-item-title">{item.nome}</h4>
-                <p className="trabalhos-ficha-item-info">
-                  (Mín: {item.notaMinima} | Máx: {item.notaMaxima} | Peso: {item.peso})
-                </p>
-                <div className="trabalhos-ficha-inputs">
-                  <input
-                    type="number"
-                    placeholder='Nota'
-                    min={item.notaMinima}
-                    max={item.notaMaxima}
-                    className="trabalhos-ficha-input"
-                    value={item.notasRecebidas[0] || ''}
-                    onChange={(e) => {
-                      const nota = Math.max(item.notaMinima, Math.min(item.notaMaxima, Number(e.target.value)));
-                      const updatedItem = { ...item, notasRecebidas: [nota] };
-                      toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, updatedItem);
-                    }}
-                  />
-                  <textarea
-                    className="trabalhos-ficha-textarea"
-                    placeholder='Justificativa da nota'
-                    rows={1}
-                    value={item.justificativa[0] || ''}
-                    onChange={(e) => {
-                      const updatedItem = { ...item, justificativa: [e.target.value] };
-                      toggleFichaAvalicaoProps(new ObjectId(item._id), indexTrabalho, updatedItem);
-                    }}
-                  />
-                </div>
-              </div>
+          <div className="grid gap-4">
+            {filtrados.map((t) => (
+              <CartaoTrabalho
+                key={`${t._id}`}
+                trabalho={t}
+                titular={usuarioPorId.get(`${t.userId}`)}
+                rascunho={rascunhos[`${t._id}`]}
+                aoMudarRascunho={mudarRascunho}
+                aoEnviarAvaliacao={enviarAvaliacao}
+                aoSalvarAutor={salvarAutor}
+              />
             ))}
           </div>
-        )}
-        <div className="trabalhos-editor-container">
-          <label className="trabalhos-editor-label">Parecer Descritivo</label>
-          <div className="trabalhos-editor">
-            <ReactQuill
-              theme="snow"
-              value={newComentario}
-              onChange={setNewComentario}
-              modules={{
-                toolbar: [
-                  [{ 'header': [1, 2, false] }],
-                  ['bold', 'italic', 'underline'],
-                  [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                  ['link'],
-                  ['clean']
-                ]
-              }}
-              placeholder="Escreva seu parecer detalhado aqui..."
-            />
-          </div>
-        </div>
-        <button
-          onClick={handleAddAvaliacao}
-          disabled={loading}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          className="trabalhos-submit-btn"
-        >
-          {loading ? 'Enviando...' : 'Enviar Avaliação'}
-        </button>
-      </div>
-    </div>
+        </>
+      )}
+    </Pagina>
   );
-};
+}

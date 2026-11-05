@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import "./style.css"; // legado: sai quando o último módulo migrar (ver plano da repaginação)
 import { Auth0Provider } from "@/app/lib/auth0-client";
 import { AvisosProvider } from "@/app/components/Avisos";
 import { NavAdmin } from "@/app/components/NavAdmin";

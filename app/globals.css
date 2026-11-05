@@ -30,7 +30,7 @@
 
   accent-color: var(--tinta);
 
-  /* Nomes antigos, usados pelas folhas de estilo que ainda não foram migradas. Saem junto com elas. */
+  /* Nomes antigos: só print-list.css (listas A4 de impressão, fora desta repaginação) ainda os lê. */
   --cieps-paper: var(--papel);
   --cieps-paper-deep: #e5ded0;
   --cieps-surface: var(--cartao);

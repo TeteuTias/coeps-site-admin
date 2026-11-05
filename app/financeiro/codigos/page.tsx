@@ -1,388 +1,190 @@
 "use client";
 
-import Link from "next/link";
-import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import ConfirmationModal from "@/app/components/ConfirmationModal";
-import { buildPaymentCodesCsv } from "@/app/lib/payments/payment-codes-csv";
-import type { AdminPaymentLedgerBacklog } from "@/app/lib/types/payments/payment-admin.t";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
+import { BadgePercent, Clipboard, Download, HeartPulse, Plus, RefreshCw, Trash2, UserRound } from "lucide-react";
 import {
-  ArrowLeft,
-  BadgePercent,
-  Ban,
-  CheckCircle2,
-  CircleX,
-  ChevronDown,
-  Clipboard,
-  Download,
-  HeartPulse,
-  History,
-  Link2,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Search,
-  ShieldAlert,
-  Tag,
-  TriangleAlert,
-  Trash2,
-  UserRound,
-} from "lucide-react";
-import "./style.css";
+  Aviso, Botao, Cabecalho, Campo, CampoBusca, Escolha, Metrica, Pagina, Secao, Selo,
+} from "@/app/components/ui";
+import { Atualizando, Estado } from "@/app/components/Estado";
+import { Dialogo } from "@/app/components/Dialogo";
+import { useAvisos } from "@/app/components/Avisos";
+import { formatarCentavos, formatarMoeda, formatarNumero } from "@/app/lib/formatar";
+import { buildPaymentCodesCsv } from "@/app/lib/payments/payment-codes-csv";
+import { Diagnostico } from "./_componentes/Diagnostico";
+import { Manutencao } from "./_componentes/Manutencao";
+import { PainelRepasse } from "./_componentes/PainelRepasse";
+import { TabelaCodigos } from "./_componentes/TabelaCodigos";
+import {
+  LIMITE_EXCLUSAO_LOTE,
+  SemRespostaError,
+  buildCodeListParams,
+  canDeleteCode,
+  ehAbortError,
+  mensagemErro,
+  orientacaoParaMotivo,
+  requestJson,
+  type CodeItem,
+  type CodeTab,
+  type CodesResponse,
+  type CodigoIgnorado,
+  type CreatedCodeItem,
+} from "./_componentes/tipos";
 
-type CodeType = "DESCONTO" | "RASTREIO";
-// A aba "SAUDE" lista os códigos de perfil PROFISSIONAL_SAUDE (tipo DESCONTO).
-type CodeTab = CodeType | "SAUDE";
-type CodeStatus = "ATIVO" | "RESERVADO" | "INATIVO" | "USADO" | "CONSUMIDO";
+const TAMANHO_PAGINA = 25;
 
-interface CodeMetrics {
-  confirmadas: number;
-  confirmadasBrutas: number;
-  pendentes: number;
-  estornadas: number;
-  canceladasOuExpiradas: number;
-  emRevisaoFinanceira: number;
-  valorConfirmadoCentavos: number;
-  valorBrutoConfirmadoCentavos: number;
-  valorEstornadoDoneCentavos: number;
-  valorEmRiscoCentavos: number;
-  valorLiquidoCentavos: number;
-}
+const ABAS: { id: CodeTab; rotulo: string; icone: typeof BadgePercent }[] = [
+  { id: "DESCONTO", rotulo: "Descontos", icone: BadgePercent },
+  { id: "RASTREIO", rotulo: "Rastreios", icone: UserRound },
+  { id: "SAUDE", rotulo: "Profissionais da saúde", icone: HeartPulse },
+];
 
-interface CodeItem {
-  id: string | null;
+interface Filtros { page: number; editionId: string; activeTab: CodeTab; statusFilter: string; search: string }
+// A seleção e a lista valem para o conjunto de filtros sem a página; trocar de contexto descarta os dois.
+const contextoDe = (f: Filtros) => [f.activeTab, f.editionId, f.statusFilter, f.search].join("|");
+
+interface Lista { contexto: string; items: CodeItem[]; pagination: CodesResponse["pagination"] }
+interface Resumo {
   edicaoId: string;
-  codigo: string;
-  codigoNormalizado: string;
-  tipo: CodeType;
-  percentualDesconto?: number;
-  responsavel?: { nome: string; email?: string };
-  status: CodeStatus;
-  historico: boolean;
-  createdAt: string | null;
-  updatedAt: string | null;
-  metrics: CodeMetrics;
-  perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
-  limiteUsos?: number;
-  usosRealizados?: number;
-}
-
-type CreatedCodeItem = Pick<
-  CodeItem,
-  "id" | "edicaoId" | "codigo" | "codigoNormalizado" | "tipo" | "percentualDesconto" | "perfilUtilizador" | "status" | "createdAt"
->;
-
-interface CodesResponse {
   activeEditionId: string | null;
-  edicaoId: string | null;
   organizerPriceCents: number | null;
-  items: CodeItem[];
-  metrics: {
-    totalCodigos: number;
-    ativos: number;
-    descontos: number;
-    profissionaisSaude: number;
-    rastreios: number;
-    vendasConfirmadas: number;
-    vendasBrutas: number;
-    pagamentosPendentes: number;
-    vendasEstornadas: number;
-    revisoesFinanceiras: number;
-    atribuicoesSemSessao: number;
-    sessoesSemAtribuicao: number;
-    webhooksEmRevisao: number;
-    webhooksFalhos: number;
-    valorBrutoConfirmadoCentavos: number;
-    valorEstornadoDoneCentavos: number;
-    valorEmRiscoCentavos: number;
-    valorLiquidoCentavos: number;
-  };
-  ledger: AdminPaymentLedgerBacklog;
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
+  metrics: CodesResponse["metrics"];
+  ledger: CodesResponse["ledger"];
 }
-
-interface CleanupPreview {
-  edicaoId: string;
-  activeEditionId: string;
-  isActiveEdition: boolean;
-  eligible: boolean;
-  reason: string | null;
-  retentionDays: number;
-  cutoffDate: string;
-  latestRelevantDate: string | null;
-  expectedConfirmation: string;
-  counts: {
-    codigos: number;
-    atribuicoes: number;
-    total: number;
-  };
-}
-
-const EMPTY_METRICS: CodesResponse["metrics"] = {
-  totalCodigos: 0,
-  ativos: 0,
-  descontos: 0,
-  profissionaisSaude: 0,
-  rastreios: 0,
-  vendasConfirmadas: 0,
-  vendasBrutas: 0,
-  pagamentosPendentes: 0,
-  vendasEstornadas: 0,
-  revisoesFinanceiras: 0,
-  atribuicoesSemSessao: 0,
-  sessoesSemAtribuicao: 0,
-  webhooksEmRevisao: 0,
-  webhooksFalhos: 0,
-  valorBrutoConfirmadoCentavos: 0,
-  valorEstornadoDoneCentavos: 0,
-  valorEmRiscoCentavos: 0,
-  valorLiquidoCentavos: 0,
-};
-
-const EMPTY_LEDGER: AdminPaymentLedgerBacklog = {
-  counts: { pending: 0, processing: 0, failed: 0, reviewRequired: 0 },
-  oldestOutstandingAt: null,
-  oldestOutstandingAgeSeconds: null,
-  worker: {
-    locked: false,
-    leaseUntil: null,
-    leaseExpired: false,
-    blockedByFailedEvent: false,
-    updatedAt: null,
-  },
-};
-
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  const payload = (await response.json().catch(() => ({}))) as {
-    message?: string;
-    [key: string]: unknown;
-  };
-
-  if (!response.ok) {
-    throw new Error(payload.message || "Não foi possível concluir a operação.");
-  }
-
-  return payload as T;
-}
-
-function moneyFromCents(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value / 100);
-}
-
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function usageCount(item: CodeItem) {
-  return (
-    item.metrics.confirmadasBrutas +
-    item.metrics.pendentes +
-    item.metrics.canceladasOuExpiradas
-  );
-}
-
-// Espelha as regras do servidor; o servidor revalida e devolve o motivo de cada código ignorado.
-function canDeleteCode(item: CodeItem, isActiveEdition: boolean) {
-  return (
-    isActiveEdition &&
-    !item.historico &&
-    item.status !== "RESERVADO" &&
-    usageCount(item) === 0 &&
-    (item.tipo !== "RASTREIO" || item.status === "INATIVO") &&
-    Boolean(item.id)
-  );
-}
-
-function buildCodeListParams(filters: {
-  page: number;
-  limit: number;
-  editionId: string;
-  activeTab: CodeTab;
-  statusFilter: string;
-  search: string;
-}) {
-  const params = new URLSearchParams({ page: String(filters.page), limit: String(filters.limit) });
-  if (filters.editionId) params.set("edicaoId", filters.editionId);
-  params.set("tipo", filters.activeTab === "RASTREIO" ? "RASTREIO" : "DESCONTO");
-  if (filters.activeTab === "SAUDE") params.set("perfil", "PROFISSIONAL_SAUDE");
-  if (filters.statusFilter) params.set("status", filters.statusFilter);
-  if (filters.search) params.set("search", filters.search);
-  return params;
-}
-
-function formatAge(seconds: number | null) {
-  if (seconds === null) return "Sem eventos pendentes";
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  return `${Math.floor(seconds / 86400)}d`;
-}
+interface ResultadoExclusao { excluidos: number; ignorados: CodigoIgnorado[] }
 
 export default function PaymentCodesPage() {
+  const { avisar, confirmar } = useAvisos();
+
   const [activeTab, setActiveTab] = useState<CodeTab>("DESCONTO");
-  const [items, setItems] = useState<CodeItem[]>([]);
-  const [metrics, setMetrics] = useState(EMPTY_METRICS);
-  const [ledger, setLedger] = useState(EMPTY_LEDGER);
-  const [activeEditionId, setActiveEditionId] = useState<string | null>(null);
-  const [organizerPriceCents, setOrganizerPriceCents] = useState<number | null>(null);
   const [editionInput, setEditionInput] = useState("");
   const [editionId, setEditionId] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState<CodesResponse["pagination"]>({
-    page: 1,
-    limit: 25,
-    total: 0,
-    totalPages: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [hasLoadedCodes, setHasLoadedCodes] = useState(false);
-  const [mutating, setMutating] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const [lista, setLista] = useState<Lista | null>(null);
+  const [resumo, setResumo] = useState<Resumo | null>(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erroLista, setErroLista] = useState<string | null>(null);
+
+  const [acaoAtiva, setAcaoAtiva] = useState<string | null>(null);
+  const [ocupadoPainel, setOcupadoPainel] = useState(false);
+  const ocupado = acaoAtiva !== null || ocupadoPainel;
+
   const [createdCodes, setCreatedCodes] = useState<CreatedCodeItem[]>([]);
-  const [expandedCode, setExpandedCode] = useState<string | null>(null);
-  const [codePendingDeletion, setCodePendingDeletion] = useState<CodeItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkDeletionPending, setBulkDeletionPending] = useState(false);
+  const [progressoSelecao, setProgressoSelecao] = useState<string | null>(null);
+  const [resultadoExclusao, setResultadoExclusao] = useState<ResultadoExclusao | null>(null);
+  const [verIgnorados, setVerIgnorados] = useState(false);
 
   const [discountPercentage, setDiscountPercentage] = useState("10");
   const [discountQuantity, setDiscountQuantity] = useState("1");
   const [healthLimit, setHealthLimit] = useState("100");
-  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
-  const [healthSuspension, setHealthSuspension] = useState<{
-    ativos: number;
-    suspensos: number;
-    codigosBloqueados: number;
-  } | null>(null);
   const [discountProfile, setDiscountProfile] = useState<"ORGANIZADOR" | "CONGRESSISTA">("CONGRESSISTA");
   const [trackingName, setTrackingName] = useState("");
   const [trackingEmail, setTrackingEmail] = useState("");
 
-  const [cleanupEdition, setCleanupEdition] = useState("");
-  const [cleanupPreview, setCleanupPreview] = useState<CleanupPreview | null>(null);
-  const [cleanupConfirmation, setCleanupConfirmation] = useState("");
+  // Filtros atuais para as funções assíncronas: um recarregamento disparado por uma ação antiga nunca usa filtros velhos.
+  const filtrosRef = useRef<Filtros>({ page, editionId, activeTab, statusFilter, search });
+  const pedidoRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const carregadaRef = useRef("");
+  const varreduraRef = useRef<AbortController | null>(null);
+  const elegiveisRef = useRef<{ contexto: string; ids: string[] } | null>(null);
 
-  const loadCodes = useCallback(async () => {
-    setLoading(true);
-    setMessage(null);
-
+  const loadCodes = useCallback(async (): Promise<boolean> => {
+    const f = filtrosRef.current;
+    const pedido = ++pedidoRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setCarregando(true);
+    setErroLista(null);
     try {
-      const params = buildCodeListParams({ page, limit: 25, editionId, activeTab, statusFilter, search });
-
-      const data = await requestJson<CodesResponse>(
-        `/api/get/pagamentos/codigos?${params.toString()}`,
-      );
-
-      setItems(data.items);
-      setMetrics(data.metrics);
-      setLedger(data.ledger);
-      setPagination(data.pagination);
-      setActiveEditionId(data.activeEditionId);
-      setOrganizerPriceCents(data.organizerPriceCents);
-      setHasLoadedCodes(true);
-
-      if (!editionId && data.edicaoId) {
+      const params = buildCodeListParams({ ...f, limit: TAMANHO_PAGINA });
+      const data = await requestJson<CodesResponse>(`/api/get/pagamentos/codigos?${params.toString()}`, { signal: controller.signal });
+      if (pedido !== pedidoRef.current) return false; // chegou depois de um filtro mais novo: descarta
+      const edicao = f.editionId || data.edicaoId || "";
+      const efetivos = { ...f, editionId: edicao };
+      carregadaRef.current = JSON.stringify(efetivos);
+      setLista({ contexto: contextoDe(efetivos), items: data.items, pagination: data.pagination });
+      setResumo({ edicaoId: edicao, activeEditionId: data.activeEditionId, organizerPriceCents: data.organizerPriceCents, metrics: data.metrics, ledger: data.ledger });
+      if (!f.editionId && data.edicaoId) {
+        filtrosRef.current = efetivos;
         setEditionId(data.edicaoId);
         setEditionInput(data.edicaoId);
       }
+      return true;
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível carregar os códigos.",
-      });
+      if (ehAbortError(error) || pedido !== pedidoRef.current) return false;
+      setErroLista(mensagemErro(error, "Não foi possível carregar os códigos."));
+      return false;
     } finally {
-      setLoading(false);
-    }
-  }, [activeTab, editionId, page, search, statusFilter]);
-
-  useEffect(() => {
-    void loadCodes();
-  }, [loadCodes]);
-
-  // A seleção vale para a aba/filtro atual; trocar de contexto limpa.
-  useEffect(() => {
-    setSelectedIds([]);
-  }, [activeTab, editionId, statusFilter, search]);
-
-  const loadHealthSuspension = useCallback(async () => {
-    try {
-      setHealthSuspension(await requestJson("/api/post/pagamentos/profissionaisSaude/suspensao"));
-    } catch {
-      setHealthSuspension(null);
+      if (pedido === pedidoRef.current) setCarregando(false);
     }
   }, []);
 
   useEffect(() => {
-    if (activeTab === "SAUDE") void loadHealthSuspension();
-  }, [activeTab, loadHealthSuspension]);
+    filtrosRef.current = { page, editionId, activeTab, statusFilter, search };
+  }, [page, editionId, activeTab, statusFilter, search]);
 
-  const isActiveEdition = Boolean(
-    activeEditionId && editionId && activeEditionId === editionId,
-  );
+  const chaveCarga = JSON.stringify({ page, editionId, activeTab, statusFilter, search });
+  useEffect(() => {
+    if (carregadaRef.current === chaveCarga) return; // a primeira resposta já trouxe a edição padrão: não pede de novo
+    void loadCodes();
+  }, [chaveCarga, loadCodes]);
 
-  const metricCards = useMemo(
-    () => ({
-      operational: [
-        { label: "Códigos ativos", value: metrics.ativos, icon: Tag },
-        { label: "Vendas brutas", value: metrics.vendasBrutas, icon: Link2 },
-        { label: "Confirmadas sem risco", value: metrics.vendasConfirmadas, icon: CheckCircle2 },
-        {
-          label: "Compras em revisão financeira",
-          value: metrics.revisoesFinanceiras,
-          icon: TriangleAlert,
-        },
-        {
-          label: "Atribuições sem sessão",
-          value: metrics.atribuicoesSemSessao,
-          icon: ShieldAlert,
-        },
-        {
-          label: "Sessões sem atribuição",
-          value: metrics.sessoesSemAtribuicao,
-          icon: ShieldAlert,
-        },
-      ],
-      financial: [
-        {
-          label: "Valor bruto confirmado",
-          value: moneyFromCents(metrics.valorBrutoConfirmadoCentavos),
-          icon: BadgePercent,
-        },
-        {
-          label: "Estornos concluídos (DONE)",
-          value: moneyFromCents(metrics.valorEstornadoDoneCentavos),
-          icon: CircleX,
-        },
-        {
-          label: "Valor em risco",
-          value: moneyFromCents(metrics.valorEmRiscoCentavos),
-          icon: ShieldAlert,
-        },
-        {
-          label: "Valor líquido após DONE",
-          value: moneyFromCents(metrics.valorLiquidoCentavos),
-          icon: CheckCircle2,
-        },
-      ],
-    }),
-    [metrics],
-  );
+  const contexto = contextoDe({ page, editionId, activeTab, statusFilter, search });
+  useEffect(() => {
+    setSelectedIds([]);
+    setResultadoExclusao(null);
+    elegiveisRef.current = null;
+    varreduraRef.current?.abort();
+  }, [contexto]);
+
+  useEffect(() => () => { abortRef.current?.abort(); varreduraRef.current?.abort(); }, []);
+
+  const isActiveEdition = Boolean(resumo?.activeEditionId && editionId && resumo.activeEditionId === editionId);
+  const listaVisivel = lista && lista.contexto === contexto ? lista : null;
+  const abaAtual = ABAS.find((a) => a.id === activeTab) ?? ABAS[0];
+  const metrics = resumo?.metrics ?? null;
+  const contagemAba = (n: number | undefined) => (n === undefined ? "" : formatarNumero(n));
+
+  /** Roda uma operação com o botão em "carregando" e a lista na tela; erro e falta de resposta viram aviso com orientação. */
+  async function executar<T>(chave: string, titulo: string, fn: () => Promise<T>): Promise<T | undefined> {
+    setAcaoAtiva(chave);
+    elegiveisRef.current = null;
+    try {
+      return await fn();
+    } catch (error) {
+      avisar("erro", titulo, mensagemErro(error, "Tente de novo."));
+      if (error instanceof SemRespostaError) void loadCodes();
+      return undefined;
+    } finally {
+      setAcaoAtiva(null);
+    }
+  }
+
+  function trocarAba(id: CodeTab) {
+    setActiveTab(id);
+    setPage(1);
+  }
+
+  function aoTeclarAba(event: KeyboardEvent) {
+    const atual = ABAS.findIndex((a) => a.id === activeTab);
+    const proximo =
+      event.key === "ArrowRight" ? (atual + 1) % ABAS.length
+      : event.key === "ArrowLeft" ? (atual - 1 + ABAS.length) % ABAS.length
+      : event.key === "Home" ? 0
+      : event.key === "End" ? ABAS.length - 1
+      : -1;
+    if (proximo < 0) return;
+    event.preventDefault();
+    trocarAba(ABAS[proximo].id);
+    document.getElementById(`aba-${ABAS[proximo].id}`)?.focus();
+  }
 
   function applyEdition(event: FormEvent) {
     event.preventDefault();
@@ -391,7 +193,6 @@ export default function PaymentCodesPage() {
     setEditionId(normalized);
     setPage(1);
     setCreatedCodes([]);
-    setCleanupPreview(null);
   }
 
   function applySearch(event: FormEvent) {
@@ -400,222 +201,110 @@ export default function PaymentCodesPage() {
     setPage(1);
   }
 
-  async function createDiscount(event: FormEvent) {
-    event.preventDefault();
-    setMutating(true);
-    setMessage(null);
-    setCreatedCodes([]);
+  function limparFiltros() {
+    setSearch("");
+    setSearchInput("");
+    setStatusFilter("");
+    setPage(1);
+  }
 
-    try {
-      const data = await requestJson<{ message: string; codes: CreatedCodeItem[]; code?: CreatedCodeItem }>(
-        "/api/post/pagamentos/codigos/desconto/gerar",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            edicaoId: editionId,
-            quantidade: Number(discountQuantity),
-            perfilUtilizador: discountProfile,
-            ...(discountProfile === "CONGRESSISTA"
-              ? { percentualDesconto: Number(discountPercentage) }
-              : {}),
-          }),
-        },
-      );
+  async function atualizar() {
+    elegiveisRef.current = null;
+    await loadCodes();
+  }
+
+  async function gerar(chave: string, titulo: string, url: string, corpo: unknown, aoConcluir?: () => void) {
+    setCreatedCodes([]);
+    const dados = await executar(chave, titulo, async () => {
+      const data = await requestJson<{ message: string; codes?: CreatedCodeItem[]; code?: CreatedCodeItem }>(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpo),
+      });
       setCreatedCodes(data.codes ?? (data.code ? [data.code] : []));
+      aoConcluir?.();
       await loadCodes();
-      setMessage({ type: "success", text: data.message });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível gerar o desconto.",
-      });
-    } finally {
-      setMutating(false);
-    }
+      return data;
+    });
+    if (dados) avisar("ok", dados.message);
   }
 
-  async function createHealthCodes(event: FormEvent) {
+  function createDiscount(event: FormEvent) {
     event.preventDefault();
-    setMutating(true);
-    setMessage(null);
-    setCreatedCodes([]);
-
-    try {
-      const data = await requestJson<{ message: string; codes: CreatedCodeItem[]; code?: CreatedCodeItem }>(
-        "/api/post/pagamentos/codigos/desconto/gerar",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            edicaoId: editionId,
-            quantidade: 1,
-            limiteUsos: Number(healthLimit),
-            perfilUtilizador: "PROFISSIONAL_SAUDE",
-          }),
-        },
-      );
-      setCreatedCodes(data.codes ?? (data.code ? [data.code] : []));
-      await loadCodes();
-      setMessage({ type: "success", text: data.message });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível gerar os códigos.",
-      });
-    } finally {
-      setMutating(false);
-    }
+    void gerar("gerar", "Não foi possível gerar o desconto", "/api/post/pagamentos/codigos/desconto/gerar", {
+      edicaoId: editionId,
+      quantidade: Number(discountQuantity),
+      perfilUtilizador: discountProfile,
+      ...(discountProfile === "CONGRESSISTA" ? { percentualDesconto: Number(discountPercentage) } : {}),
+    });
   }
 
-  async function changeHealthSuspension(acao: "SUSPENDER" | "REATIVAR") {
-    const confirmation = acao === "SUSPENDER"
-      ? "Suspender TODOS os profissionais da saúde inscritos e bloquear os códigos ainda não usados?"
-      : "Reativar todos os profissionais da saúde suspensos e liberar os códigos bloqueados pela suspensão?";
-    if (!window.confirm(confirmation)) return;
-
-    setMutating(true);
-    setMessage(null);
-    try {
-      const data = await requestJson<{ usuarios: number; codigos: number }>(
-        "/api/post/pagamentos/profissionaisSaude/suspensao",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ acao }),
-        },
-      );
-      await Promise.all([loadCodes(), loadHealthSuspension()]);
-      setMessage({
-        type: "success",
-        text: `${data.usuarios} inscrições ${acao === "SUSPENDER" ? "suspensas" : "reativadas"} e ${data.codigos} códigos ${acao === "SUSPENDER" ? "bloqueados" : "liberados"}.`,
-      });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível alterar a suspensão.",
-      });
-    } finally {
-      setMutating(false);
-    }
-  }
-
-  async function saveHealthLimit(item: CodeItem) {
-    if (!item.id) return;
-    setMutating(true);
-    setMessage(null);
-    try {
-      const data = await requestJson<{ message: string }>(
-        `/api/put/pagamentos/codigos/${item.id}/limite`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            limiteUsos: Number(limitDrafts[item.id] ?? item.limiteUsos),
-          }),
-        },
-      );
-      setLimitDrafts((drafts) => {
-        const next = { ...drafts };
-        delete next[item.id as string];
-        return next;
-      });
-      await loadCodes();
-      setMessage({ type: "success", text: data.message });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível alterar o limite.",
-      });
-    } finally {
-      setMutating(false);
-    }
-  }
-
-  async function createTracking(event: FormEvent) {
+  function createHealthCodes(event: FormEvent) {
     event.preventDefault();
-    setMutating(true);
-    setMessage(null);
-    setCreatedCodes([]);
+    void gerar("gerar", "Não foi possível gerar o código", "/api/post/pagamentos/codigos/desconto/gerar", {
+      edicaoId: editionId,
+      quantidade: 1,
+      limiteUsos: Number(healthLimit),
+      perfilUtilizador: "PROFISSIONAL_SAUDE",
+    });
+  }
 
-    try {
-      const data = await requestJson<{ message: string; code: CreatedCodeItem }>(
-        "/api/post/pagamentos/codigos/rastreio",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            edicaoId: editionId,
-            responsavel: {
-              nome: trackingName,
-              ...(trackingEmail.trim() ? { email: trackingEmail } : {}),
-            },
-          }),
-        },
-      );
-      setTrackingName("");
-      setTrackingEmail("");
-      setCreatedCodes([data.code]);
-      await loadCodes();
-      setMessage({ type: "success", text: data.message });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível gerar o rastreio.",
+  function createTracking(event: FormEvent) {
+    event.preventDefault();
+    void gerar(
+      "gerar",
+      "Não foi possível gerar o rastreio",
+      "/api/post/pagamentos/codigos/rastreio",
+      { edicaoId: editionId, responsavel: { nome: trackingName, ...(trackingEmail.trim() ? { email: trackingEmail } : {}) } },
+      () => { setTrackingName(""); setTrackingEmail(""); },
+    );
+  }
+
+  async function saveHealthLimit(item: CodeItem, limite: number): Promise<boolean> {
+    if (!item.id) return false;
+    const dados = await executar(`limite:${item.id}`, "Não foi possível alterar o limite", async () => {
+      const data = await requestJson<{ message: string }>(`/api/put/pagamentos/codigos/${item.id}/limite`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limiteUsos: limite }),
       });
-    } finally {
-      setMutating(false);
-    }
+      await loadCodes();
+      return data;
+    });
+    if (dados) avisar("ok", dados.message);
+    return Boolean(dados);
   }
 
   async function toggleCode(item: CodeItem) {
     if (!item.id) return;
-    setMutating(true);
-    setMessage(null);
-
-    try {
-      const nextStatus = item.status === "ATIVO" ? "INATIVO" : "ATIVO";
-      const data = await requestJson<{ message: string }>(
-        `/api/put/pagamentos/codigos/${item.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: nextStatus }),
-        },
-      );
-      await loadCodes();
-      setMessage({ type: "success", text: data.message });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível alterar o código.",
+    const dados = await executar(`alternar:${item.id}`, "Não foi possível alterar o código", async () => {
+      const data = await requestJson<{ message: string }>(`/api/put/pagamentos/codigos/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: item.status === "ATIVO" ? "INATIVO" : "ATIVO" }),
       });
-    } finally {
-      setMutating(false);
-    }
+      await loadCodes();
+      return data;
+    });
+    if (dados) avisar("ok", dados.message);
   }
 
   async function deleteUnusedCode(item: CodeItem) {
     if (!item.id) return;
-    setCodePendingDeletion(null);
-    setMutating(true);
-    setMessage(null);
-
-    try {
-      const data = await requestJson<{ message: string }>(
-        `/api/delete/pagamentos/codigos/${item.id}`,
-        { method: "DELETE" },
-      );
+    const confirmou = await confirmar({
+      titulo: `Excluir o código ${item.codigo}?`,
+      descricao: "O código será removido para sempre. Não dá para desfazer.",
+      perigo: true,
+      rotuloConfirmar: "Excluir código",
+    });
+    if (!confirmou) return;
+    const dados = await executar(`excluir:${item.id}`, "Não foi possível excluir o código", async () => {
+      const data = await requestJson<{ message: string }>(`/api/delete/pagamentos/codigos/${item.id}`, { method: "DELETE" });
+      setSelectedIds((ids) => ids.filter((id) => id !== item.id));
       await loadCodes();
-      setMessage({ type: "success", text: data.message });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível excluir o código.",
-      });
-    } finally {
-      setMutating(false);
-    }
+      return data;
+    });
+    if (dados) avisar("ok", dados.message);
   }
 
   function toggleSelected(id: string) {
@@ -624,145 +313,87 @@ export default function PaymentCodesPage() {
 
   function togglePageSelection(pageIds: string[]) {
     setSelectedIds((ids) =>
-      pageIds.every((id) => ids.includes(id))
-        ? ids.filter((id) => !pageIds.includes(id))
-        : [...new Set([...ids, ...pageIds])],
+      pageIds.every((id) => ids.includes(id)) ? ids.filter((id) => !pageIds.includes(id)) : [...new Set([...ids, ...pageIds])],
     );
   }
 
-  /** Seleciona todos os códigos excluíveis do filtro atual, em todas as páginas. */
+  function aplicarSelecao(ids: string[]) {
+    setSelectedIds(ids);
+    if (ids.length === 0) avisar("alerta", "Nada para selecionar", "Nenhum código deste filtro pode ser excluído agora.");
+    else if (ids.length > LIMITE_EXCLUSAO_LOTE) avisar("alerta", `${formatarNumero(ids.length)} códigos selecionados`, `A exclusão aceita até ${LIMITE_EXCLUSAO_LOTE} por vez. Use "Selecionar só os primeiros ${LIMITE_EXCLUSAO_LOTE}" ou exclua em etapas.`);
+  }
+
+  /** Seleciona os códigos excluíveis do filtro atual em todas as páginas; reaproveita a busca enquanto nada mudou. */
   async function selectAllDeletable() {
-    setMutating(true);
-    setMessage(null);
+    const f = filtrosRef.current;
+    const alvo = contextoDe(f);
+    if (elegiveisRef.current?.contexto === alvo) {
+      aplicarSelecao(elegiveisRef.current.ids);
+      return;
+    }
+    varreduraRef.current?.abort();
+    const controller = new AbortController();
+    varreduraRef.current = controller;
+    setAcaoAtiva("selecionar");
     try {
       const ids: string[] = [];
-      for (let current = 1, total = 1; current <= total; current += 1) {
-        const params = buildCodeListParams({ page: current, limit: 100, editionId, activeTab, statusFilter, search });
-        const data = await requestJson<CodesResponse>(`/api/get/pagamentos/codigos?${params.toString()}`);
+      for (let atual = 1, total = 1; atual <= total; atual += 1) {
+        setProgressoSelecao(`Procurando códigos excluíveis: página ${atual} de ${total}…`);
+        const params = buildCodeListParams({ ...f, page: atual, limit: 100 });
+        const data = await requestJson<CodesResponse>(`/api/get/pagamentos/codigos?${params.toString()}`, { signal: controller.signal });
         total = data.pagination.totalPages;
-        const activeEdition = Boolean(data.activeEditionId && editionId && data.activeEditionId === editionId);
-        for (const item of data.items) {
-          if (canDeleteCode(item, activeEdition) && item.id) ids.push(item.id);
-        }
+        const ativa = Boolean(data.activeEditionId && f.editionId && data.activeEditionId === f.editionId);
+        for (const item of data.items) if (canDeleteCode(item, ativa) && item.id) ids.push(item.id);
       }
-      setSelectedIds(ids);
-      if (ids.length === 0) setMessage({ type: "error", text: "Nenhum código deste filtro pode ser excluído." });
+      if (controller.signal.aborted) return;
+      elegiveisRef.current = { contexto: alvo, ids };
+      aplicarSelecao(ids);
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível selecionar os códigos.",
-      });
+      if (ehAbortError(error)) return;
+      avisar("erro", "Não foi possível selecionar os códigos", mensagemErro(error, "Tente de novo."));
     } finally {
-      setMutating(false);
+      setProgressoSelecao(null);
+      setAcaoAtiva(null);
     }
   }
 
   async function deleteSelectedCodes() {
-    setBulkDeletionPending(false);
-    setMutating(true);
-    setMessage(null);
-    try {
-      const data = await requestJson<{
-        message: string;
-        excluidos: number;
-        ignorados: { id: string; codigo?: string; motivo: string }[];
-      }>("/api/delete/pagamentos/codigos", {
+    const ids = [...selectedIds];
+    if (ids.length === 0 || ids.length > LIMITE_EXCLUSAO_LOTE) return;
+    const confirmou = await confirmar({
+      titulo: `Excluir ${formatarNumero(ids.length)} código(s)?`,
+      descricao: (
+        <div className="grid gap-2">
+          <p>Você selecionou <strong className="num">{formatarNumero(ids.length)}</strong> código(s). A exclusão aceita no máximo <strong className="num">{LIMITE_EXCLUSAO_LOTE}</strong> por vez.</p>
+          <p>Eles serão removidos para sempre. Códigos com compra vinculada, reservados ou rastreios ainda ativos são ignorados e listados no resultado.</p>
+        </div>
+      ),
+      perigo: true,
+      digitar: `EXCLUIR ${ids.length}`,
+      rotuloConfirmar: `Excluir ${formatarNumero(ids.length)}`,
+    });
+    if (!confirmou) return;
+
+    const dados = await executar("excluir-lote", "Não foi possível excluir os códigos", async () => {
+      const data = await requestJson<{ message: string; excluidos: number; ignorados: CodigoIgnorado[] }>("/api/delete/pagamentos/codigos", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: selectedIds }),
+        body: JSON.stringify({ ids }),
       });
       setSelectedIds(data.ignorados.map((item) => item.id).filter(Boolean));
+      setResultadoExclusao({ excluidos: data.excluidos, ignorados: data.ignorados });
       await loadCodes();
-      const details = data.ignorados
-        .slice(0, 5)
-        .map((item) => `${item.codigo ?? item.id}: ${item.motivo}`)
-        .join(" · ");
-      setMessage({
-        type: data.ignorados.length ? "error" : "success",
-        text: details ? `${data.message} ${details}` : data.message,
-      });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível excluir os códigos.",
-      });
-    } finally {
-      setMutating(false);
-    }
+      return data;
+    });
+    if (dados) avisar(dados.ignorados.length ? "alerta" : "ok", dados.message);
   }
 
-  async function previewCleanup(event: FormEvent) {
-    event.preventDefault();
-    setMutating(true);
-    setMessage(null);
-    setCleanupPreview(null);
-    setCleanupConfirmation("");
-
+  async function copiar(texto: string, ok: string) {
     try {
-      const edition = cleanupEdition.trim().toUpperCase();
-      const preview = await requestJson<CleanupPreview>(
-        `/api/get/pagamentos/historico/preview?edicaoId=${encodeURIComponent(edition)}`,
-      );
-      setCleanupPreview(preview);
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível gerar a prévia.",
-      });
-    } finally {
-      setMutating(false);
-    }
-  }
-
-  async function executeCleanup() {
-    if (!cleanupPreview?.eligible) return;
-    setMutating(true);
-    setMessage(null);
-
-    try {
-      const data = await requestJson<{
-        message: string;
-        deleted: { total: number };
-      }>(
-        `/api/delete/pagamentos/historico/${encodeURIComponent(cleanupPreview.edicaoId)}`,
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ confirmation: cleanupConfirmation }),
-        },
-      );
-      setMessage({
-        type: "success",
-        text: `${data.message} ${data.deleted.total} registros removidos.`,
-      });
-      setCleanupPreview(null);
-      setCleanupConfirmation("");
-      if (editionId === cleanupPreview.edicaoId) await loadCodes();
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível executar a limpeza.",
-      });
-    } finally {
-      setMutating(false);
-    }
-  }
-
-  async function copyCode(code: string) {
-    try {
-      await navigator.clipboard.writeText(code);
-      setMessage({ type: "success", text: "Código copiado." });
+      await navigator.clipboard.writeText(texto);
+      avisar("ok", ok);
     } catch {
-      setMessage({ type: "error", text: "Não foi possível copiar o código." });
-    }
-  }
-
-  async function copyCreatedCodes() {
-    try {
-      await navigator.clipboard.writeText(createdCodes.map((item) => item.codigo).join("\n"));
-      setMessage({ type: "success", text: `${createdCodes.length} código(s) copiado(s).` });
-    } catch {
-      setMessage({ type: "error", text: "Não foi possível copiar o lote." });
+      avisar("erro", "Não foi possível copiar", "O navegador não permitiu. Selecione o texto e copie à mão.");
     }
   }
 
@@ -778,791 +409,342 @@ export default function PaymentCodesPage() {
     URL.revokeObjectURL(url);
   }
 
+  const ignorados = resultadoExclusao?.ignorados ?? [];
+  const textoIgnorados = ignorados.map((i) => `${i.codigo ?? "(vários códigos)"} — ${i.motivo} ${orientacaoParaMotivo(i.motivo)}`).join("\n");
+  const excedeLimite = selectedIds.length > LIMITE_EXCLUSAO_LOTE;
+  const semEdicaoAtiva = Boolean(resumo && !resumo.activeEditionId);
+  const bloqueioForm = !isActiveEdition || ocupado;
+  const rotuloLista = `${abaAtual.rotulo} da edição ${editionId || "consultada"}`;
+
   return (
-    <main className="codigos-page">
-      <div className="codigos-shell">
-        <header className="codigos-hero">
-          <div className="codigos-hero-copy">
-            <Link href="/financeiro" className="codigos-back-link">
-              <ArrowLeft size={18} /> Voltar ao financeiro
-            </Link>
-            <p className="codigos-eyebrow">CIEPS / Financeiro</p>
-            <h1>Códigos de pagamento</h1>
-            <p className="codigos-hero-description">
-              Gere descontos de uso único, acompanhe rastreios e consulte o andamento das
-              vendas vinculadas a cada código.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="codigos-button codigos-button--secondary"
-            onClick={() => void loadCodes()}
-            disabled={loading || mutating}
-          >
-            <RefreshCw size={17} /> Atualizar
-          </button>
-        </header>
+    <Pagina largura="ampla">
+      <Cabecalho
+        etiqueta="CIEPS · Financeiro"
+        titulo="Códigos de pagamento"
+        sub="Gere descontos de uso único, acompanhe rastreios e consulte as vendas ligadas a cada código."
+        voltar={{ href: "/financeiro", rotulo: "Voltar ao financeiro" }}
+        acoes={
+          <>
+            <Selo tom="info">Edição ativa: {resumo ? (resumo.activeEditionId ?? "não configurada") : "carregando"}</Selo>
+            <Botao estilo="contorno" carregando={carregando && Boolean(listaVisivel)} disabled={carregando} onClick={() => void atualizar()}>
+              <RefreshCw className="size-4" aria-hidden="true" />Atualizar
+            </Botao>
+          </>
+        }
+      />
 
-        {message && (
-          <div
-            className={`codigos-message codigos-message--${message.type}`}
-            role={message.type === "error" ? "alert" : "status"}
-          >
-            {message.text}
-          </div>
+      <Secao titulo="Edição consultada" descricao="Escolha qual edição você quer ver. Só a edição ativa aceita alterações.">
+        <form onSubmit={applyEdition} className="flex flex-wrap items-end gap-3">
+          <Campo rotulo="Código da edição" value={editionInput} onChange={(e) => setEditionInput(e.target.value)} placeholder="COEPS-2026" maxLength={64} className="w-full sm:w-72" />
+          <Botao type="submit" estilo="contorno" disabled={!editionInput.trim()}>Consultar</Botao>
+          {editionId && <Selo tom={isActiveEdition ? "ok" : "info"}>{isActiveEdition ? "Edição ativa: pode alterar" : "Somente consulta"}</Selo>}
+        </form>
+        {resumo && !isActiveEdition && resumo.activeEditionId && (
+          <Aviso tom="info" titulo="Você está vendo uma edição que não é a ativa">
+            Gerar, ativar, desativar e excluir códigos só funciona na edição ativa ({resumo.activeEditionId}).
+          </Aviso>
         )}
-
-        {createdCodes.length > 0 && (
-          <section className="codigos-created codigos-created-batch" aria-live="polite">
-            <div className="codigos-created-heading">
-              <div>
-                <strong>{createdCodes.length === 1 ? "Novo código" : "Novo lote de códigos"}</strong>
-                <span>{createdCodes.length} código(s) pronto(s) para distribuição</span>
-              </div>
-              <div className="codigos-created-actions">
-                <button type="button" onClick={() => void copyCreatedCodes()}>
-                  <Clipboard size={17} /> Copiar todos
-                </button>
-                <button type="button" onClick={downloadCreatedCodesCsv}>
-                  <Download size={17} /> Baixar CSV
-                </button>
-              </div>
-            </div>
-            <div className="codigos-created-list">
-              {createdCodes.map((item) => (
-                <code key={item.codigoNormalizado}>{item.codigo}</code>
-              ))}
-            </div>
-          </section>
+        {semEdicaoAtiva && (
+          <Aviso tom="alerta" titulo="Nenhuma edição ativa configurada">
+            <p>Enquanto não houver edição ativa, novos códigos ficam bloqueados.</p>
+            <details className="mt-1">
+              <summary className="cursor-pointer font-medium">Detalhe técnico para quem configura</summary>
+              <p className="mt-1">Configure <code>PAYMENT_EDITION_ID</code> ou marque um documento de <code>ingressos_config</code> com <code>ativo: true</code> e <code>edicaoId</code>.</p>
+            </details>
+          </Aviso>
         )}
+      </Secao>
 
-        <section className="codigos-toolbar" aria-label="Selecionar edição">
-          <form onSubmit={applyEdition} className="codigos-inline-form">
-            <label htmlFor="edition">Edição consultada</label>
-            <div>
-              <input
-                id="edition"
-                value={editionInput}
-                onChange={(event) => setEditionInput(event.target.value)}
-                placeholder="COEPS-2026"
-                maxLength={64}
-              />
-              <button className="codigos-button codigos-button--primary" type="submit">
-                Consultar
-              </button>
-            </div>
-          </form>
-          <div className="codigos-edition-status">
-            <span>Edição ativa</span>
-            <strong>{activeEditionId ?? "Não configurada"}</strong>
-            {editionId && (
-              <small className={isActiveEdition ? "is-active" : "is-archive"}>
-                {isActiveEdition ? "Edição editável" : "Somente consulta"}
-              </small>
-            )}
-          </div>
-        </section>
-
-        {hasLoadedCodes && !activeEditionId && (
-          <div className="codigos-warning" role="alert">
-            <ShieldAlert size={21} />
-            <span>
-              Configure <code>PAYMENT_EDITION_ID</code> ou marque um documento de
-              <code> ingressos_config</code> com <code>ativo: true</code> e
-              <code> edicaoId</code>. Até lá, novos códigos permanecem bloqueados.
-            </span>
-          </div>
-        )}
-
-        <section className="codigos-metrics-summary" aria-label="Resumo dos códigos e valores">
-          <div className="codigos-metrics-group">
-            <h2 className="codigos-metrics-title">Indicadores de vendas</h2>
-            <div className="codigos-metrics codigos-metrics--counts">
-              {metricCards.operational.map(({ label, value, icon: Icon }) => (
-                <article className="codigos-metric codigos-metric--count" key={label}>
-                  <Icon size={22} />
-                  <strong>{value}</strong>
-                  <span>{label}</span>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <div className="codigos-metrics-group">
-            <h2 className="codigos-metrics-title">Valores financeiros</h2>
-            <div className="codigos-metrics codigos-metrics--currency">
-              {metricCards.financial.map(({ label, value, icon: Icon }) => (
-                <article className="codigos-metric codigos-metric--currency" key={label}>
-                  <Icon size={22} />
-                  <strong>{value}</strong>
-                  <span>{label}</span>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="codigos-ledger-panel" aria-labelledby="ledger-heading">
-          <div className="codigos-ledger-heading">
-            <div>
-              <p className="codigos-eyebrow">Operação global do webhook</p>
-              <h2 id="ledger-heading">Fila e worker de conciliação</h2>
-            </div>
-            <span className={ledger.worker.locked ? "is-locked" : "is-unlocked"}>
-              {ledger.worker.locked ? "Worker com lease ativo" : "Worker sem lease ativo"}
-            </span>
-          </div>
-          <div className="codigos-ledger-grid">
-            <div><strong>{ledger.counts.pending}</strong><span>PENDING</span></div>
-            <div><strong>{ledger.counts.processing}</strong><span>PROCESSING</span></div>
-            <div><strong>{ledger.counts.failed}</strong><span>FAILED</span></div>
-            <div><strong>{ledger.counts.reviewRequired}</strong><span>REVIEW_REQUIRED</span></div>
-          </div>
-          <dl className="codigos-ledger-details">
-            <div>
-              <dt>Evento pendente mais antigo</dt>
-              <dd>{formatAge(ledger.oldestOutstandingAgeSeconds)} · {formatDate(ledger.oldestOutstandingAt)}</dd>
-            </div>
-            <div>
-              <dt>Lease até</dt>
-              <dd>{formatDate(ledger.worker.leaseUntil)}</dd>
-            </div>
-            <div>
-              <dt>Estado do lease</dt>
-              <dd>{ledger.worker.leaseExpired ? "Expirado" : ledger.worker.locked ? "Ativo" : "Livre"}</dd>
-            </div>
-            <div>
-              <dt>Bloqueio por falha</dt>
-              <dd>{ledger.worker.blockedByFailedEvent ? "Sim — exige atenção" : "Não"}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="codigos-workspace">
-          <div className="codigos-tabs" role="tablist" aria-label="Tipo de código">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "DESCONTO"}
-              className={activeTab === "DESCONTO" ? "is-active" : ""}
-              onClick={() => { setActiveTab("DESCONTO"); setPage(1); setExpandedCode(null); }}
-            >
-              <BadgePercent size={18} /> Descontos <span>{metrics.descontos}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "RASTREIO"}
-              className={activeTab === "RASTREIO" ? "is-active" : ""}
-              onClick={() => { setActiveTab("RASTREIO"); setPage(1); setExpandedCode(null); }}
-            >
-              <UserRound size={18} /> Rastreios <span>{metrics.rastreios}</span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeTab === "SAUDE"}
-              className={activeTab === "SAUDE" ? "is-active" : ""}
-              onClick={() => { setActiveTab("SAUDE"); setPage(1); setExpandedCode(null); }}
-            >
-              <HeartPulse size={18} /> Profissionais da saúde <span>{metrics.profissionaisSaude}</span>
-            </button>
-          </div>
-
-          {activeTab === "SAUDE" ? (
+      {createdCodes.length > 0 && (
+        <Secao
+          titulo={createdCodes.length === 1 ? "Novo código" : "Novo lote de códigos"}
+          descricao={`${formatarNumero(createdCodes.length)} código(s) pronto(s) para distribuir. Copie ou baixe agora: esta lista some ao gerar outro código ou sair da página.`}
+          acoes={
             <>
-            <div className="codigos-panel codigos-create-form">
-              <div className="codigos-panel-title">
-                <HeartPulse size={22} />
-                <div>
-                  <h2>Repasse da prefeitura</h2>
-                  <p>
-                    Suspende o acesso de todos os profissionais da saúde inscritos e bloqueia os códigos
-                    ainda não usados. Ao reativar, tudo volta como estava.
-                  </p>
-                </div>
-              </div>
-              <div className="codigos-form-grid">
-                <div className="codigos-organizer-price is-ready">
-                  <span>Inscritos ativos</span>
-                  <strong>{healthSuspension?.ativos ?? "—"}</strong>
-                </div>
-                <div className="codigos-organizer-price is-ready">
-                  <span>Suspensos</span>
-                  <strong>{healthSuspension?.suspensos ?? "—"}</strong>
-                  <small>{healthSuspension?.codigosBloqueados ?? 0} códigos bloqueados</small>
-                </div>
-              </div>
-              <div className="codigos-form-grid">
-                <button
-                  className="codigos-button"
-                  type="button"
-                  disabled={!isActiveEdition || mutating}
-                  onClick={() => void changeHealthSuspension("SUSPENDER")}
-                >
-                  Suspender todos
-                </button>
-                <button
-                  className="codigos-button codigos-button--primary"
-                  type="button"
-                  disabled={!isActiveEdition || mutating}
-                  onClick={() => void changeHealthSuspension("REATIVAR")}
-                >
-                  Reativar todos
-                </button>
-              </div>
-            </div>
-            <form className="codigos-panel codigos-create-form" onSubmit={createHealthCodes}>
-              <div className="codigos-panel-title">
-                <HeartPulse size={22} />
-                <div>
-                  <h2>Gerar código de profissionais da saúde</h2>
-                  <p>Um único código com vários usos, para a prefeitura divulgar. Inscrição gratuita, sem pagamento no Asaas e sem ocupar vagas dos lotes.</p>
-                </div>
-              </div>
-              <div className="codigos-form-grid">
-                <label>
-                  Limite de usos
-                  <input
-                    id="healthLimit"
-                    type="number"
-                    min="1"
-                    max="5000"
-                    step="1"
-                    value={healthLimit}
-                    onChange={(event) => setHealthLimit(event.target.value)}
-                    required
-                  />
-                </label>
-                <div className="codigos-organizer-price is-ready">
-                  <span>Valor da inscrição</span>
-                  <strong>{moneyFromCents(0)}</strong>
-                  <small>Marcados como profissional da saúde no cadastro.</small>
-                </div>
-              </div>
-              <button className="codigos-button codigos-button--primary" type="submit" disabled={!isActiveEdition || mutating}>
-                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-                Gerar código com {healthLimit || "N"} usos
-              </button>
-            </form>
+              <Botao estilo="contorno" onClick={() => void copiar(createdCodes.map((i) => i.codigo).join("\n"), `${createdCodes.length} código(s) copiado(s)`)}><Clipboard className="size-4" aria-hidden="true" />Copiar todos</Botao>
+              <Botao estilo="contorno" onClick={downloadCreatedCodesCsv}><Download className="size-4" aria-hidden="true" />Baixar CSV</Botao>
             </>
-          ) : activeTab === "DESCONTO" ? (
-            <form className="codigos-panel codigos-create-form" onSubmit={createDiscount}>
-              <div className="codigos-panel-title">
-                <BadgePercent size={22} />
-                <div>
-                  <h2>Gerar descontos</h2>
-                  <p>Cada código é individual, aleatório e de uso único.</p>
-                </div>
-              </div>
-              <div className="codigos-form-grid">
-                <label>
-                  Perfil do participante
-                  <select
-                    value={discountProfile}
-                    onChange={(event) => setDiscountProfile(event.target.value as "ORGANIZADOR" | "CONGRESSISTA")}
-                  >
+          }
+        >
+          <div role="region" aria-label="Códigos recém-gerados" tabIndex={0} className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
+            {createdCodes.map((item) => <code key={item.codigoNormalizado} className="num select-all rounded-lg bg-recuo px-2.5 py-1.5 text-sm">{item.codigo}</code>)}
+          </div>
+        </Secao>
+      )}
+
+      <Secao titulo={`Resumo da edição ${resumo?.edicaoId || editionId || ""}`.trim()} descricao="Vale para a edição inteira, não só para a aba aberta.">
+        {!resumo && !carregando && <Aviso tom="erro" titulo="Os números não foram carregados">Os indicadores aparecem como indisponíveis até a lista carregar.</Aviso>}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Metrica rotulo="Códigos ativos" valor={metrics ? formatarNumero(metrics.ativos) : null} />
+          <Metrica rotulo="Vendas com código" valor={metrics ? formatarNumero(metrics.vendasBrutas) : null} detalhe="Brutas, antes de estornos" />
+          <Metrica rotulo="Vendas confirmadas" valor={metrics ? formatarNumero(metrics.vendasConfirmadas) : null} detalhe="Sem risco financeiro" />
+          <Metrica rotulo="Compras para revisar" valor={metrics ? formatarNumero(metrics.revisoesFinanceiras) : null} detalhe="Em revisão financeira" />
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Metrica rotulo="Valor bruto confirmado" valor={metrics ? formatarCentavos(metrics.valorBrutoConfirmadoCentavos) : null} />
+          <Metrica rotulo="Estornos concluídos" valor={metrics ? formatarCentavos(metrics.valorEstornadoDoneCentavos) : null} />
+          <Metrica rotulo="Valor em risco" valor={metrics ? formatarCentavos(metrics.valorEmRiscoCentavos) : null} />
+          <Metrica rotulo="Valor líquido" valor={metrics ? formatarCentavos(metrics.valorLiquidoCentavos) : null} detalhe="Depois dos estornos concluídos" />
+        </div>
+        <details className="text-sm">
+          <summary className="min-h-11 cursor-pointer py-2.5 font-medium">Conferências de consistência</summary>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Metrica rotulo="Atribuições sem sessão" valor={metrics ? formatarNumero(metrics.atribuicoesSemSessao) : null} />
+            <Metrica rotulo="Sessões sem atribuição" valor={metrics ? formatarNumero(metrics.sessoesSemAtribuicao) : null} />
+          </div>
+        </details>
+      </Secao>
+
+      <div className="grid gap-4">
+        <div role="tablist" aria-label="Tipo de código" onKeyDown={aoTeclarAba} className="flex flex-wrap gap-2">
+          {ABAS.map(({ id, rotulo, icone: Icone }) => {
+            const ativa = id === activeTab;
+            const n = contagemAba(id === "DESCONTO" ? metrics?.descontos : id === "RASTREIO" ? metrics?.rastreios : metrics?.profissionaisSaude);
+            return (
+              <button
+                key={id}
+                id={`aba-${id}`}
+                type="button"
+                role="tab"
+                aria-selected={ativa}
+                aria-controls="painel-codigos"
+                tabIndex={ativa ? 0 : -1}
+                onClick={() => trocarAba(id)}
+                className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors ${ativa ? "border-tinta bg-tinta text-white" : "border-linha bg-cartao text-tinta hover:border-tinta/40"}`}
+              >
+                <Icone className="size-4" aria-hidden="true" />{rotulo}{n && <span className="num text-xs opacity-80">{n}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div id="painel-codigos" role="tabpanel" aria-labelledby={`aba-${activeTab}`} className="grid gap-4">
+          {activeTab === "SAUDE" && (
+            <>
+              <PainelRepasse
+                editionId={editionId}
+                activeEditionId={resumo?.activeEditionId ?? null}
+                isActiveEdition={isActiveEdition}
+                bloqueado={acaoAtiva !== null}
+                aoOcupar={setOcupadoPainel}
+                aoMudar={atualizar}
+              />
+              <Secao titulo="Gerar código de profissionais da saúde" descricao="Um único código com vários usos, para a prefeitura divulgar. Inscrição gratuita, sem pagamento no Asaas e sem ocupar vagas dos lotes.">
+                <form onSubmit={createHealthCodes} className="grid gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Campo rotulo="Limite de usos" type="number" min={1} max={5000} step={1} value={healthLimit} onChange={(e) => setHealthLimit(e.target.value)} required ajuda="De 1 a 5.000 usos." />
+                    <div className="rounded-xl bg-recuo/60 px-4 py-3 text-sm">
+                      <p className="text-xs text-sutil">Valor da inscrição</p>
+                      <p className="num font-semibold">{formatarMoeda(0)} (gratuita)</p>
+                      <p className="text-xs text-sutil">Quem usa o código é marcado como profissional da saúde no cadastro.</p>
+                    </div>
+                  </div>
+                  <div><Botao type="submit" carregando={acaoAtiva === "gerar"} disabled={bloqueioForm}><Plus className="size-4" aria-hidden="true" />Gerar código com {healthLimit || "N"} usos</Botao></div>
+                </form>
+              </Secao>
+            </>
+          )}
+
+          {activeTab === "DESCONTO" && (
+            <Secao titulo="Gerar descontos" descricao="Cada código é individual, aleatório e de uso único.">
+              <form onSubmit={createDiscount} className="grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Escolha rotulo="Perfil do participante" value={discountProfile} onChange={(e) => setDiscountProfile(e.target.value as "ORGANIZADOR" | "CONGRESSISTA")}>
                     <option value="CONGRESSISTA">Congressista</option>
                     <option value="ORGANIZADOR">Organizador</option>
-                  </select>
-                </label>
-                <label>
-                  Quantidade
-                  <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    step="1"
-                    value={discountQuantity}
-                    onChange={(event) => setDiscountQuantity(event.target.value)}
-                    required
-                  />
-                </label>
-                {discountProfile === "CONGRESSISTA" ? (
-                  <label>
-                    Percentual de desconto
-                    <div className="codigos-percentage-input">
-                      <input
-                        id="discountPercentage"
-                        type="number"
-                        min="1"
-                        max="99"
-                        step="1"
-                        value={discountPercentage}
-                        onChange={(event) => setDiscountPercentage(event.target.value)}
-                        required
-                      />
-                      <span>%</span>
+                  </Escolha>
+                  <Campo rotulo="Quantidade" type="number" min={1} max={500} step={1} value={discountQuantity} onChange={(e) => setDiscountQuantity(e.target.value)} required ajuda="De 1 a 500 por vez." />
+                  {discountProfile === "CONGRESSISTA" ? (
+                    <Campo rotulo="Percentual de desconto (%)" type="number" min={1} max={99} step={1} value={discountPercentage} onChange={(e) => setDiscountPercentage(e.target.value)} required ajuda="De 1% a 99%." />
+                  ) : (
+                    <div className="rounded-xl bg-recuo/60 px-4 py-3 text-sm">
+                      <p className="text-xs text-sutil">Preço fixo de organizador</p>
+                      <p className="num font-semibold">{resumo?.organizerPriceCents ? formatarCentavos(resumo.organizerPriceCents) : "Não configurado"}</p>
+                      <p className="text-xs text-sutil">Não ocupa vagas dos lotes.</p>
                     </div>
-                  </label>
-                ) : (
-                  <div className={`codigos-organizer-price ${organizerPriceCents ? "is-ready" : "is-missing"}`}>
-                    <span>Preço fixo de organizador</span>
-                    <strong>{organizerPriceCents ? moneyFromCents(organizerPriceCents) : "Não configurado"}</strong>
-                    <small>Não ocupa vagas dos lotes.</small>
-                  </div>
+                  )}
+                </div>
+                {discountProfile === "ORGANIZADOR" && !resumo?.organizerPriceCents && isActiveEdition && (
+                  <Aviso tom="alerta" titulo="Preço de organizador não configurado">Configure o preço na página do financeiro antes de gerar códigos de organizador.</Aviso>
                 )}
-              </div>
-              <button
-                className="codigos-button codigos-button--primary"
-                type="submit"
-                disabled={!isActiveEdition || mutating || (discountProfile === "ORGANIZADOR" && !organizerPriceCents)}
-              >
-                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-                Gerar {Number(discountQuantity) > 1 ? `${discountQuantity} descontos` : "desconto"}
-              </button>
-            </form>
-          ) : (
-            <form className="codigos-panel codigos-create-form" onSubmit={createTracking}>
-              <div className="codigos-panel-title">
-                <UserRound size={22} />
                 <div>
-                  <h2>Novo rastreio</h2>
-                  <p>Reutilizável, legível e sem alteração no preço ou no perfil.</p>
+                  <Botao type="submit" carregando={acaoAtiva === "gerar"} disabled={bloqueioForm || (discountProfile === "ORGANIZADOR" && !resumo?.organizerPriceCents)}>
+                    <Plus className="size-4" aria-hidden="true" />Gerar {Number(discountQuantity) > 1 ? `${discountQuantity} descontos` : "desconto"}
+                  </Botao>
                 </div>
-              </div>
-              <div className="codigos-form-grid codigos-form-grid--tracking">
-                <label>
-                  Pessoa responsável
-                  <input
-                    id="trackingName"
-                    value={trackingName}
-                    onChange={(event) => setTrackingName(event.target.value)}
-                    minLength={2}
-                    maxLength={120}
-                    placeholder="Ana Lívia"
-                    required
-                  />
-                </label>
-                <label>
-                  E-mail (opcional)
-                  <input
-                    id="trackingEmail"
-                    type="email"
-                    value={trackingEmail}
-                    onChange={(event) => setTrackingEmail(event.target.value)}
-                    maxLength={254}
-                  />
-                </label>
-                <div className="codigos-tracking-example">
-                  <span>Formato gerado</span>
-                  <code>AnaLivia-CIEPS2026</code>
-                </div>
-              </div>
-              <button className="codigos-button codigos-button--primary" type="submit" disabled={!isActiveEdition || mutating}>
-                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-                Gerar rastreio
-              </button>
-            </form>
+              </form>
+            </Secao>
           )}
-        </section>
 
-        <section className="codigos-panel codigos-list-panel">
-          <div className="codigos-list-heading">
-            <div>
-              <h2>{activeTab === "SAUDE" ? "Profissionais da saúde" : activeTab === "DESCONTO" ? "Descontos" : "Rastreios"} da edição {editionId || "—"}</h2>
-              <p>{pagination.total} resultado(s) para os filtros aplicados.</p>
-            </div>
-            <form onSubmit={applySearch} className="codigos-search-form">
-              <Search size={18} />
-              <input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder={activeTab !== "RASTREIO" ? "Buscar código" : "Código, nome ou e-mail"}
-              />
-              <button type="submit">Buscar</button>
-            </form>
-          </div>
+          {activeTab === "RASTREIO" && (
+            <Secao titulo="Novo rastreio" descricao="Reutilizável, legível e sem alteração no preço ou no perfil.">
+              <form onSubmit={createTracking} className="grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Campo rotulo="Pessoa responsável" value={trackingName} onChange={(e) => setTrackingName(e.target.value)} minLength={2} maxLength={120} placeholder="Ana Lívia" required />
+                  <Campo rotulo="E-mail (opcional)" type="email" value={trackingEmail} onChange={(e) => setTrackingEmail(e.target.value)} maxLength={254} />
+                  <div className="rounded-xl bg-recuo/60 px-4 py-3 text-sm">
+                    <p className="text-xs text-sutil">Formato gerado</p>
+                    <code className="num font-semibold">AnaLivia-CIEPS2026</code>
+                  </div>
+                </div>
+                <div><Botao type="submit" carregando={acaoAtiva === "gerar"} disabled={bloqueioForm}><Plus className="size-4" aria-hidden="true" />Gerar rastreio</Botao></div>
+              </form>
+            </Secao>
+          )}
 
-          <div className="codigos-filters">
-            <label>
-              Status
-              <select
-                value={statusFilter}
-                onChange={(event) => {
-                  setStatusFilter(event.target.value);
-                  setPage(1);
-                }}
-              >
+          <Secao
+            titulo={rotuloLista}
+            descricao={listaVisivel ? `${formatarNumero(listaVisivel.pagination.total)} resultado(s) para os filtros aplicados.` : undefined}
+          >
+            <div className="flex flex-wrap items-end gap-3">
+              <form onSubmit={applySearch} className="flex min-w-0 flex-1 basis-72 gap-2" role="search">
+                <CampoBusca
+                  rotulo="Buscar código"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder={activeTab === "RASTREIO" ? "Código, nome ou e-mail" : "Buscar código"}
+                  className="min-w-0 flex-1"
+                />
+                <Botao type="submit" estilo="contorno">Buscar</Botao>
+              </form>
+              <Escolha rotulo="Estado" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} className="w-full sm:w-56">
                 <option value="">Todos</option>
                 <option value="ATIVO">Ativo</option>
                 <option value="INATIVO">Inativo</option>
                 <option value="RESERVADO">Reservado</option>
-                <option value="USADO">Usado</option>
-                <option value="CONSUMIDO">Consumido/histórico</option>
-              </select>
-            </label>
-          </div>
+                <option value="USADO">Usado ou esgotado</option>
+                <option value="CONSUMIDO">Histórico (consumido)</option>
+              </Escolha>
+            </div>
 
-          {loading ? (
-            <div className="codigos-loading" role="status">
-              <Loader2 className="codigos-spin" /> Carregando códigos...
-            </div>
-          ) : items.length === 0 ? (
-            <div className="codigos-empty">
-              <Tag size={36} />
-              <p>Nenhum código encontrado.</p>
-            </div>
-          ) : (
-            <>
-            {isActiveEdition && (
-              <div className="codigos-bulk-bar">
-                <span>
-                  {selectedIds.length
-                    ? `${selectedIds.length} código(s) selecionado(s)`
-                    : "Nenhum código selecionado"}
-                </span>
-                <button
-                  className="codigos-button"
-                  type="button"
-                  disabled={mutating}
-                  onClick={() => void selectAllDeletable()}
-                >
-                  Selecionar todos
-                </button>
-                <button
-                  className="codigos-button"
-                  type="button"
-                  disabled={mutating || selectedIds.length === 0}
-                  onClick={() => setSelectedIds([])}
-                >
-                  Limpar seleção
-                </button>
-                <button
-                  className="codigos-button codigos-button--danger"
-                  type="button"
-                  disabled={mutating || selectedIds.length === 0}
-                  onClick={() => setBulkDeletionPending(true)}
-                >
-                  <Trash2 size={16} /> Excluir selecionados
-                </button>
-              </div>
+            {activeTab === "SAUDE" && <p className="text-xs text-sutil">Inativo = suspenso pelo repasse ou desativado à mão: a lista ainda não separa os dois. Esgotado = todos os usos do limite foram feitos.</p>}
+
+            {!listaVisivel ? (
+              carregando ? <Estado tipo="carregando" titulo="Carregando códigos…" linhas={3} />
+              : <Estado tipo="erro" titulo="Não foi possível carregar os códigos" texto={erroLista ?? undefined} aoTentar={() => void loadCodes()} />
+            ) : (
+              <>
+                {erroLista && (
+                  <Aviso tom="erro" titulo="Não foi possível atualizar a lista">
+                    <p>{erroLista} A lista abaixo é a última que carregou e pode estar desatualizada.</p>
+                    <Botao className="mt-2" estilo="contorno" carregando={carregando} onClick={() => void loadCodes()}>Tentar de novo</Botao>
+                  </Aviso>
+                )}
+                <Atualizando ativo={carregando} />
+
+                {listaVisivel.items.length === 0 ? (
+                  search || statusFilter ? (
+                    <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={limparFiltros}>Limpar busca e filtros</Botao>} />
+                  ) : (
+                    <Estado tipo="vazio" titulo="Nenhum código nesta aba ainda" texto={isActiveEdition ? "Use o formulário acima para gerar o primeiro." : "Esta edição não tem códigos desta aba."} />
+                  )
+                ) : (
+                  <>
+                    {isActiveEdition && (
+                      <div className="grid gap-3 rounded-2xl bg-recuo/60 p-4">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                          <p role="status" aria-live="polite" className="text-sm">
+                            <strong className={`num ${excedeLimite ? "text-alerta" : ""}`}>{formatarNumero(selectedIds.length)}</strong> selecionado(s) · a exclusão aceita até <strong className="num">{LIMITE_EXCLUSAO_LOTE}</strong> por vez
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Botao estilo="contorno" carregando={acaoAtiva === "selecionar"} disabled={ocupado && acaoAtiva !== "selecionar"} onClick={() => void selectAllDeletable()}>Selecionar todos os excluíveis</Botao>
+                            <Botao estilo="contorno" disabled={ocupado || selectedIds.length === 0} onClick={() => setSelectedIds([])}>Limpar seleção</Botao>
+                            <Botao
+                              estilo="perigo"
+                              carregando={acaoAtiva === "excluir-lote"}
+                              disabled={(ocupado && acaoAtiva !== "excluir-lote") || selectedIds.length === 0 || excedeLimite}
+                              aria-describedby={excedeLimite ? "aviso-limite-lote" : undefined}
+                              onClick={() => void deleteSelectedCodes()}
+                            >
+                              <Trash2 className="size-4" aria-hidden="true" />Excluir selecionados
+                            </Botao>
+                          </div>
+                        </div>
+                        {progressoSelecao && <p role="status" aria-live="polite" className="text-sm text-sutil">{progressoSelecao}</p>}
+                        {excedeLimite && (
+                          <div id="aviso-limite-lote">
+                            <Aviso tom="alerta" titulo={`Mais de ${LIMITE_EXCLUSAO_LOTE} códigos selecionados`}>
+                              <p>O servidor recusaria o lote inteiro. A exclusão está desabilitada até a seleção ter no máximo {LIMITE_EXCLUSAO_LOTE}.</p>
+                              <Botao className="mt-2" estilo="contorno" disabled={ocupado} onClick={() => setSelectedIds((ids) => ids.slice(0, LIMITE_EXCLUSAO_LOTE))}>
+                                Selecionar só os primeiros {LIMITE_EXCLUSAO_LOTE}
+                              </Botao>
+                            </Aviso>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {resultadoExclusao && (
+                      <Aviso tom={ignorados.length ? "alerta" : "ok"} titulo={`${formatarNumero(resultadoExclusao.excluidos)} código(s) excluído(s)${ignorados.length ? `; ${formatarNumero(ignorados.length)} não puderam ser excluídos` : ""}`}>
+                        {ignorados.length > 0 && (
+                          <>
+                            <p>
+                              {selectedIds.length > 0 ? `${formatarNumero(selectedIds.length)} código(s) continuam selecionados porque a exclusão foi recusada para eles. ` : ""}
+                              Veja o motivo de cada um antes de tentar de novo.
+                            </p>
+                            <Botao className="mt-2" estilo="contorno" onClick={() => setVerIgnorados(true)}>Ver todos os ignorados ({formatarNumero(ignorados.length)})</Botao>
+                          </>
+                        )}
+                      </Aviso>
+                    )}
+
+                    <TabelaCodigos
+                      key={`${listaVisivel.contexto}|${listaVisivel.pagination.page}`}
+                      itens={listaVisivel.items}
+                      aba={activeTab}
+                      edicaoAtiva={isActiveEdition}
+                      organizerPriceCents={resumo?.organizerPriceCents ?? null}
+                      selecionados={selectedIds}
+                      ocupado={ocupado}
+                      acaoAtiva={acaoAtiva}
+                      aoAlternarSelecao={toggleSelected}
+                      aoAlternarPagina={togglePageSelection}
+                      aoAlternarStatus={(item) => void toggleCode(item)}
+                      aoExcluir={(item) => void deleteUnusedCode(item)}
+                      aoSalvarLimite={saveHealthLimit}
+                    />
+
+                    {listaVisivel.pagination.totalPages > 1 && (
+                      <nav aria-label="Paginação dos códigos" className="flex flex-wrap items-center justify-between gap-3">
+                        <Botao estilo="contorno" disabled={page <= 1 || carregando} onClick={() => setPage((p) => Math.max(1, p - 1))}>Anterior</Botao>
+                        <span className="num text-sm text-sutil" aria-current="page">Página {listaVisivel.pagination.page} de {listaVisivel.pagination.totalPages}</span>
+                        <Botao estilo="contorno" disabled={page >= listaVisivel.pagination.totalPages || carregando} onClick={() => setPage((p) => p + 1)}>Próxima</Botao>
+                      </nav>
+                    )}
+                  </>
+                )}
+              </>
             )}
-            <div className="codigos-table-wrap">
-              <table className="codigos-table">
-                <thead>
-                  <tr>
-                    <th>
-                      {(() => {
-                        const pageIds = items
-                          .filter((item) => canDeleteCode(item, isActiveEdition))
-                          .map((item) => item.id as string);
-                        return (
-                          <input
-                            type="checkbox"
-                            aria-label="Selecionar todos os códigos excluíveis desta página"
-                            title="Selecionar esta página"
-                            disabled={pageIds.length === 0 || mutating}
-                            checked={pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id))}
-                            onChange={() => togglePageSelection(pageIds)}
-                          />
-                        );
-                      })()}
-                    </th>
-                    <th>Código</th>
-                    <th>{activeTab !== "RASTREIO" ? "Benefício" : "Responsável"}</th>
-                    <th>Status</th>
-                    <th>Atividade</th>
-                    <th>Valor líquido</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => {
-                    const used = usageCount(item) > 0;
-                    const canToggle =
-                      isActiveEdition &&
-                      !item.historico &&
-                      item.status !== "RESERVADO" &&
-                      (item.tipo === "RASTREIO" || !used) &&
-                      Boolean(item.id);
-                    const canDelete = canDeleteCode(item, isActiveEdition);
-
-                    const itemKey = `${item.tipo}-${item.codigoNormalizado}`;
-                    const isExpanded = expandedCode === itemKey;
-                    return (
-                      <Fragment key={itemKey}>
-                      <tr>
-                        <td data-label="Selecionar">
-                          <input
-                            type="checkbox"
-                            aria-label={`Selecionar ${item.codigo}`}
-                            disabled={!canDelete || mutating}
-                            checked={Boolean(item.id && selectedIds.includes(item.id))}
-                            onChange={() => item.id && toggleSelected(item.id)}
-                          />
-                        </td>
-                        <td data-label="Código">
-                          <div className="codigos-code-cell">
-                            <code>{item.codigo}</code>
-                            <button
-                              type="button"
-                              aria-label={`Copiar ${item.codigo}`}
-                              onClick={() => void copyCode(item.codigo)}
-                            >
-                              <Clipboard size={15} />
-                            </button>
-                          </div>
-                          <small>Criado em {formatDate(item.createdAt)}</small>
-                        </td>
-                        <td data-label={activeTab !== "RASTREIO" ? "Benefício" : "Responsável"}>
-                          <strong>
-                            {item.tipo === "DESCONTO"
-                              ? item.perfilUtilizador === "ORGANIZADOR"
-                                ? "Organizador"
-                                : item.perfilUtilizador === "PROFISSIONAL_SAUDE"
-                                  ? "Profissional da saúde"
-                                  : `${item.percentualDesconto ?? "—"}% de desconto`
-                              : item.responsavel?.nome ?? "Responsável não informado"}
-                          </strong>
-                          <small>
-                            {item.tipo === "DESCONTO"
-                              ? item.perfilUtilizador === "ORGANIZADOR"
-                                ? organizerPriceCents ? moneyFromCents(organizerPriceCents) : "Preço da edição indisponível"
-                                : item.perfilUtilizador === "PROFISSIONAL_SAUDE"
-                                  ? item.limiteUsos !== undefined
-                                    ? `Inscrição gratuita · ${item.usosRealizados ?? 0}/${item.limiteUsos} usos`
-                                    : "Inscrição gratuita"
-                                  : "Congressista"
-                              : item.responsavel?.email ?? "Sem e-mail"}
-                          </small>
-                        </td>
-                        <td data-label="Status">
-                          <span className={`codigos-status codigos-status--${item.status.toLowerCase()}`}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td data-label="Atividade">
-                          <strong>{item.metrics.confirmadas} confirmada(s)</strong>
-                          <small>{item.metrics.pendentes} pendente(s) · {item.metrics.emRevisaoFinanceira} em revisão</small>
-                        </td>
-                        <td data-label="Valor líquido"><strong>{moneyFromCents(item.metrics.valorLiquidoCentavos)}</strong></td>
-                        <td data-label="Ações">
-                          <div className="codigos-actions">
-                            <button
-                              type="button"
-                              aria-expanded={isExpanded}
-                              aria-label={`${isExpanded ? "Ocultar" : "Mostrar"} detalhes de ${item.codigo}`}
-                              title="Ver indicadores detalhados"
-                              onClick={() => setExpandedCode(isExpanded ? null : itemKey)}
-                            >
-                              <ChevronDown className={isExpanded ? "is-expanded" : ""} size={16} />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={
-                                item.status === "ATIVO"
-                                  ? `Desativar código ${item.codigo}`
-                                  : `Ativar código ${item.codigo}`
-                              }
-                              title={
-                                canToggle
-                                  ? item.status === "ATIVO"
-                                    ? "Desativar"
-                                    : "Ativar"
-                                  : "Somente rastreios ou descontos sem uso da edição ativa podem ser alterados"
-                              }
-                              disabled={!canToggle || mutating}
-                              onClick={() => void toggleCode(item)}
-                            >
-                              {item.status === "ATIVO" ? <Ban size={16} /> : <CheckCircle2 size={16} />}
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Excluir código ${item.codigo}`}
-                              className="is-danger"
-                              title={
-                                canDelete
-                                  ? "Excluir código não utilizado"
-                                  : "Rastreios precisam estar inativos e nenhum código pode ter uso"
-                              }
-                              disabled={!canDelete || mutating}
-                              onClick={() => setCodePendingDeletion(item)}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr className="codigos-detail-row">
-                          <td colSpan={7}>
-                            <dl className="codigos-detail-grid">
-                              <div><dt>Vendas brutas</dt><dd>{item.metrics.confirmadasBrutas}</dd></div>
-                              <div><dt>Estornadas</dt><dd>{item.metrics.estornadas}</dd></div>
-                              <div><dt>Canceladas/expiradas</dt><dd>{item.metrics.canceladasOuExpiradas}</dd></div>
-                              <div><dt>Valor bruto</dt><dd>{moneyFromCents(item.metrics.valorBrutoConfirmadoCentavos)}</dd></div>
-                              <div><dt>Refund DONE</dt><dd>{moneyFromCents(item.metrics.valorEstornadoDoneCentavos)}</dd></div>
-                              <div><dt>Valor em risco</dt><dd>{moneyFromCents(item.metrics.valorEmRiscoCentavos)}</dd></div>
-                            </dl>
-                            {item.id && item.limiteUsos !== undefined && isActiveEdition && (
-                              <div className="codigos-form-grid">
-                                <label>
-                                  Limite de usos ({item.usosRealizados ?? 0} já usados; igualar aos usos fecha o código)
-                                  <input
-                                    type="number"
-                                    min={Math.max(1, item.usosRealizados ?? 0)}
-                                    max="5000"
-                                    step="1"
-                                    value={limitDrafts[item.id] ?? String(item.limiteUsos)}
-                                    onChange={(event) =>
-                                      setLimitDrafts((drafts) => ({ ...drafts, [item.id as string]: event.target.value }))
-                                    }
-                                  />
-                                </label>
-                                <button
-                                  className="codigos-button codigos-button--primary"
-                                  type="button"
-                                  disabled={mutating}
-                                  onClick={() => void saveHealthLimit(item)}
-                                >
-                                  Salvar limite
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            </>
-          )}
-
-          {pagination.totalPages > 1 && (
-            <nav className="codigos-pagination" aria-label="Paginação dos códigos">
-              <button
-                type="button"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                Anterior
-              </button>
-              <span>
-                Página {pagination.page} de {pagination.totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={page >= pagination.totalPages || loading}
-                onClick={() => setPage((current) => current + 1)}
-              >
-                Próxima
-              </button>
-            </nav>
-          )}
-        </section>
-
-        <section className="codigos-panel codigos-cleanup-panel">
-          <div className="codigos-panel-title">
-            <History size={22} />
-            <div>
-              <h2>Limpeza anual do histórico</h2>
-              <p>
-                Disponível apenas para edição encerrada, não ativa e sem atividade há mais de
-                365 dias. Usuários, pagamentos e comprovantes não são apagados.
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={previewCleanup} className="codigos-cleanup-form">
-            <label htmlFor="cleanupEdition">Edição que será avaliada</label>
-            <div>
-              <input
-                id="cleanupEdition"
-                value={cleanupEdition}
-                onChange={(event) => setCleanupEdition(event.target.value)}
-                placeholder="COEPS-2025"
-                required
-              />
-              <button
-                className="codigos-button codigos-button--secondary"
-                type="submit"
-                disabled={mutating}
-              >
-                Gerar prévia
-              </button>
-            </div>
-          </form>
-
-          {cleanupPreview && (
-            <div className="codigos-cleanup-preview">
-              <h3>Prévia de {cleanupPreview.edicaoId}</h3>
-              <dl>
-                <div>
-                  <dt>Códigos</dt>
-                  <dd>{cleanupPreview.counts.codigos}</dd>
-                </div>
-                <div>
-                  <dt>Atribuições</dt>
-                  <dd>{cleanupPreview.counts.atribuicoes}</dd>
-                </div>
-                <div>
-                  <dt>Registro mais recente</dt>
-                  <dd>{formatDate(cleanupPreview.latestRelevantDate)}</dd>
-                </div>
-              </dl>
-
-              {!cleanupPreview.eligible ? (
-                <div className="codigos-warning">
-                  <ShieldAlert size={20} /> {cleanupPreview.reason}
-                </div>
-              ) : (
-                <div className="codigos-danger-zone">
-                  <p>
-                    Para confirmar, digite <code>{cleanupPreview.expectedConfirmation}</code>.
-                  </p>
-                  <input
-                    value={cleanupConfirmation}
-                    onChange={(event) => setCleanupConfirmation(event.target.value)}
-                    aria-label="Confirmação da limpeza anual"
-                  />
-                  <button
-                    type="button"
-                    className="codigos-button codigos-button--danger"
-                    disabled={
-                      mutating || cleanupConfirmation !== cleanupPreview.expectedConfirmation
-                    }
-                    onClick={() => void executeCleanup()}
-                  >
-                    <Trash2 size={17} /> Apagar histórico da edição
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
+          </Secao>
+        </div>
       </div>
 
-      <ConfirmationModal
-        isOpen={Boolean(codePendingDeletion)}
-        onClose={() => setCodePendingDeletion(null)}
-        onConfirm={() => {
-          if (codePendingDeletion) void deleteUnusedCode(codePendingDeletion);
-        }}
-        title="Excluir código não utilizado?"
-        confirmText="Excluir código"
-      >
-        <p className="codigos-confirmation-copy">
-          O código <code>{codePendingDeletion?.codigo}</code> será removido permanentemente.
-          Essa ação não pode ser desfeita.
-        </p>
-      </ConfirmationModal>
+      <Diagnostico ledger={resumo?.ledger ?? null} />
+      <Manutencao
+        bloqueado={acaoAtiva !== null}
+        aoOcupar={setOcupadoPainel}
+        aoApagar={async (edicao) => { if (editionId === edicao) await atualizar(); }}
+      />
 
-      <ConfirmationModal
-        isOpen={bulkDeletionPending}
-        onClose={() => setBulkDeletionPending(false)}
-        onConfirm={() => void deleteSelectedCodes()}
-        title={`Excluir ${selectedIds.length} código(s)?`}
-        confirmText="Excluir selecionados"
+      <Dialogo
+        aberto={verIgnorados}
+        titulo={`Códigos que não foram excluídos (${formatarNumero(ignorados.length)})`}
+        descricao="Cada código mostra o motivo da recusa e o que fazer."
+        rotuloConfirmar="Copiar lista"
+        rotuloCancelar="Fechar"
+        onConfirmar={() => void copiar(textoIgnorados, "Lista copiada")}
+        onCancelar={() => setVerIgnorados(false)}
       >
-        <p className="codigos-confirmation-copy">
-          Os códigos selecionados serão removidos permanentemente. Códigos com compra vinculada,
-          reservados ou rastreios ativos são ignorados. Essa ação não pode ser desfeita.
-        </p>
-      </ConfirmationModal>
-    </main>
+        <ul className="grid max-h-[50vh] gap-2 overflow-y-auto text-sm">
+          {ignorados.map((item, i) => (
+            <li key={`${item.id}-${i}`} className="rounded-xl bg-recuo/60 px-3 py-2">
+              <p className="num font-semibold">{item.codigo ?? "Vários códigos"}</p>
+              <p>{item.motivo}</p>
+              <p className="text-sutil">O que fazer: {orientacaoParaMotivo(item.motivo)}</p>
+            </li>
+          ))}
+        </ul>
+      </Dialogo>
+    </Pagina>
   );
 }
