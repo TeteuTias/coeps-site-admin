@@ -6,6 +6,7 @@ import { Download, Mail, RefreshCw } from "lucide-react";
 import { Botao, BotaoLink, Cabecalho, CampoBusca, Escolha, Metrica, Pagina } from "@/app/components/ui";
 import { Atualizando, Estado } from "@/app/components/Estado";
 import { useAvisos } from "@/app/components/Avisos";
+import { useUser } from "@/app/lib/auth0-client";
 import { formatarNumero } from "@/app/lib/formatar";
 import type { IAcademicWorks } from "@/app/lib/types/academicWorks/academicWorks.t";
 import type { IUser } from "@/app/lib/types/user/user.t";
@@ -30,6 +31,8 @@ function PainelTrabalhos() {
   const { avisar, confirmar } = useAvisos();
   const pathname = usePathname();
   const params = useSearchParams();
+  const { user } = useUser();
+  const dono = user?.sub;
 
   const [trabalhos, setTrabalhos] = useState<IAcademicWorks[]>([]);
   const [users, setUsers] = useState<IUser[]>([]);
@@ -50,9 +53,9 @@ function PainelTrabalhos() {
   const [exportando, setExportando] = useState<"zip" | "planilha" | null>(null);
   const [progresso, setProgresso] = useState("");
 
-  // Rascunhos: lidos da sessão depois da montagem (evita divergência com o HTML do servidor) e gravados a cada mudança
-  useEffect(() => { setRascunhos(lerRascunhos()); setRascunhosLidos(true); }, []);
-  useEffect(() => { if (rascunhosLidos) gravarRascunhos(rascunhos); }, [rascunhos, rascunhosLidos]);
+  // Rascunhos: lidos da sessão do navegador depois da montagem, por conta (evita divergência com o HTML do servidor), e gravados a cada mudança
+  useEffect(() => { if (dono) { setRascunhos(lerRascunhos(dono)); setRascunhosLidos(true); } }, [dono]);
+  useEffect(() => { if (dono && rascunhosLidos) gravarRascunhos(dono, rascunhos); }, [dono, rascunhos, rascunhosLidos]);
 
   // Filtros na URL sem navegar: replaceState não refaz a requisição da página a cada tecla
   useEffect(() => {
@@ -126,6 +129,11 @@ function PainelTrabalhos() {
     const id = `${t._id}`;
     const apiStatus = SITUACOES[r?.situacao ?? situacaoDe(t.status)].api;
     if (!apiStatus) { avisar("erro", "Escolha a situação do trabalho"); return false; }
+
+    // Nota apagada na tela não pode enviar a nota antiga: pede o valor antes de gravar
+    const pedeNota = r?.situacao === "aceito" || r?.situacao === "recusado" || (!r?.situacao && ["aceito", "recusado"].includes(situacaoDe(t.status)));
+    const semNota = pedeNota ? fichasDe(t).find((item) => r?.fichas?.[`${item._id}`]?.nota === "") : undefined;
+    if (semNota) { avisar("erro", "Preencha a nota", `Critério: ${semNota.nome}. Seu texto continua guardado.`); return false; }
 
     const ficha: Ficha[] = fichasDe(t).map((item) => {
       const d = r?.fichas?.[`${item._id}`];

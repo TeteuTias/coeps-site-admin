@@ -9,23 +9,24 @@ export interface Rascunho {
 }
 export type Rascunhos = Record<string, Rascunho>;
 
-const CHAVE = "cieps:trabalhos:rascunhos";
+// A chave leva o dono: outra conta que entre na mesma aba não vê (nem envia) o rascunho de quem saiu.
+const chave = (dono: string) => `cieps:trabalhos:rascunhos:${dono}`;
 
 export const textoDe = (html?: string) => (html ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
 
-export function lerRascunhos(): Rascunhos {
+export function lerRascunhos(dono: string): Rascunhos {
   try {
-    const v = JSON.parse(sessionStorage.getItem(CHAVE) ?? "{}");
+    const v = JSON.parse(sessionStorage.getItem(chave(dono)) ?? "{}");
     return v && typeof v === "object" && !Array.isArray(v) ? v : {};
   } catch {
     return {};
   }
 }
 
-export function gravarRascunhos(r: Rascunhos) {
+export function gravarRascunhos(dono: string, r: Rascunhos) {
   try {
-    if (Object.keys(r).length) sessionStorage.setItem(CHAVE, JSON.stringify(r));
-    else sessionStorage.removeItem(CHAVE);
+    if (Object.keys(r).length) sessionStorage.setItem(chave(dono), JSON.stringify(r));
+    else sessionStorage.removeItem(chave(dono));
   } catch {
     // armazenamento bloqueado: o rascunho continua só em memória
   }

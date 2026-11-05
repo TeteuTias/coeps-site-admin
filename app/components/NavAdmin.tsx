@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarDays, ClipboardList, CreditCard, FileText, House, LogOut, Menu, UserCheck, Users, X } from "lucide-react";
 import { ehRotaDeImpressao, itemAtivo, type IconeMenu, type ItemMenu } from "@/app/lib/menu-admin";
 
@@ -35,6 +35,8 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
   const [abertoEm, setAbertoEm] = useState<string | null>(null);
   const aberto = abertoEm === atual;
   const botao = useRef<HTMLButtonElement>(null);
+  // voltar ao mesmo caminho pelo histórico não pode reabrir o menu
+  useEffect(() => { setAbertoEm(null); }, [atual]);
 
   if (ehRotaDeImpressao(atual)) return null;
 
@@ -49,6 +51,7 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
               <Link
                 href={item.href}
                 aria-current={ativo ? "page" : undefined}
+                onClick={() => setAbertoEm(null)}
                 className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-[14.5px] font-medium transition-colors ${ativo ? "bg-tinta text-white" : "text-sutil hover:bg-recuo hover:text-tinta"}`}
               >
                 <Icone className="size-[18px] shrink-0" aria-hidden="true" />

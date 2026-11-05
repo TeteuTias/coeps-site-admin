@@ -63,6 +63,15 @@ test("etapas já salvas mantêm quem fala e quem passou, mesmo que o formulário
   assert.deepEqual(col.doc!.timeline[0].presence_list, ["u1"]);
 });
 
+test("etapas antigas sem _id não herdam speakers de outra etapa", async () => {
+  const doc = { ...storedCourse(), timeline: [{ speakers: ["s1"], presence_list: ["u1"] }, { _id: stepId, speakers: ["s2"], presence_list: [] }] };
+  const col = fakeCollection(doc);
+  const novo = form({ timeline: [{ name: "A", date_init: "2026-11-05T09:00", date_end: "2026-11-05T10:00" }, { _id: stepId, date_init: "2026-11-05T11:00", date_end: "2026-11-05T12:00" }] });
+  await updateCourseEditorial(col, novo);
+  assert.deepEqual(col.doc!.timeline[0].speakers, []);
+  assert.deepEqual(col.doc!.timeline[1].speakers, ["s2"]);
+});
+
 test("campo ausente no formulário não vira null no banco", async () => {
   const col = fakeCollection(storedCourse());
   await updateCourseEditorial(col, form());

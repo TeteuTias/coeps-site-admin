@@ -43,12 +43,13 @@ function buildTimeline(raw: unknown, previous: TimelineItem[] = []) {
   if (!Array.isArray(raw)) {
     throw new CourseValidationError("A programação da atividade é inválida.", "timeline");
   }
-  const byId = new Map(previous.map((item) => [String(item._id), item]));
+  // etapas antigas sem _id não casam com nada: sem isso todas herdariam a lista da última
+  const byId = new Map(previous.filter((item) => item._id != null).map((item) => [String(item._id), item]));
   return raw.map((item: TimelineItem, index) => {
     if (!item || typeof item !== "object") {
       throw new CourseValidationError("A programação da atividade é inválida.", `timeline.${index}`);
     }
-    const stored = byId.get(String(item._id));
+    const stored = item._id != null ? byId.get(String(item._id)) : undefined;
     return {
       ...item,
       date_init: formatEventDate(item.date_init, `timeline.${index}.date_init`),

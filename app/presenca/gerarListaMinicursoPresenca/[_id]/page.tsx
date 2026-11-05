@@ -158,7 +158,8 @@ export default function ChamadaMinicurso() {
         )
     }
 
-    const lotado = inscritos.size >= curso.vagas
+    // vagas 0 = limite não definido (o catálogo também trata assim): nunca "lotado"
+    const lotado = curso.vagas > 0 && inscritos.size >= curso.vagas
     const primeiro = curso.encontros[0]
     const sub = [
         primeiro?.date_init ? formatarDataHora(primeiro.date_init) : null,
@@ -313,19 +314,20 @@ export default function ChamadaMinicurso() {
                         classeTabela="[&_table]:min-w-[44rem]"
                         colunas={[colunaSituacao]}
                         extraNome={(u) => <MarcasPessoa u={u} />}
-                        acoes={podeGerir ? (u) => {
+                        acoes={(u) => {
                             const nome = displayUserName(u)
                             return (
                                 <>
-                                    {incertos.has(u._id)
+                                    {podeGerir && (incertos.has(u._id)
                                         ? <Botao estilo="contorno" carregando={ocupados.has(u._id)} onClick={() => void conferir(u)} aria-label={`Conferir a situação de ${nome}`}>Conferir</Botao>
                                         : presentes.has(u._id)
                                             ? <Botao estilo="contorno" carregando={ocupados.has(u._id)} onClick={() => void executar({ pessoa: u, quer: 'retirar' })} aria-label={`Retirar a presença de ${nome}`}>Retirar presença</Botao>
-                                            : <Botao carregando={ocupados.has(u._id)} onClick={() => void darPresenca(u)} aria-label={`Dar presença a ${nome}`}>Dar presença</Botao>}
+                                            : <Botao carregando={ocupados.has(u._id)} onClick={() => void darPresenca(u)} aria-label={`Dar presença a ${nome}`}>Dar presença</Botao>)}
+                                    {/* como no original, remover inscrição não depende do gate de presença */}
                                     <Botao estilo="perigo" disabled={ocupados.has(u._id)} onClick={() => void removerInscricao(u)} aria-label={`Remover a inscrição de ${nome}`}>Remover inscrição</Botao>
                                 </>
                             )
-                        } : undefined}
+                        }}
                     />
                 )}
             </Secao>

@@ -102,6 +102,7 @@ export function useCatalogo({ palestras }: { palestras: boolean }) {
 
   const carregar = useCallback(async () => {
     setCarregando(true);
+    if (!temDados.current) setErro(false); // "Tentar de novo" volta ao esqueleto em vez de parecer parado
     try {
       const [rc, rp] = await Promise.all([fetch("/api/get/listaMinicursos"), palestras ? fetch("/api/get/listaPalestras") : null]);
       if (!rc.ok || (rp && !rp.ok)) throw new Error("resposta com erro");
@@ -181,7 +182,7 @@ function CartaoAtividade({ item, acoes, mostrarSituacao, mostrarPresentes }: {
       <div className="mt-auto flex flex-wrap gap-2 pt-1">
         {acoes.map((a) => {
           const Icone = a.icone;
-          const rotuloAria = `${a.rotulo}: ${item.nome}`;
+          const rotuloAria = `${a.rotulo}: ${item.nome}${a.novaAba ? " (abre em nova aba)" : ""}`;
           const conteudo = <>{Icone && <Icone className="size-4" aria-hidden="true" />}{a.rotulo}{a.novaAba && <span className="sr-only"> (abre em nova aba)</span>}</>;
           return a.href ? (
             <BotaoLink key={a.rotulo} href={a.href} prefetch={false} target={a.novaAba ? "_blank" : undefined} rel={a.novaAba ? "noopener" : undefined} estilo={a.estilo ?? "contorno"} aria-label={rotuloAria}>{conteudo}</BotaoLink>

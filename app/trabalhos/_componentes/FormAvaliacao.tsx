@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import "react-quill-new/dist/quill.snow.css";
 import { Area, Aviso, Botao, Campo } from "@/app/components/ui";
@@ -28,6 +28,8 @@ export function FormAvaliacao({ trabalho, rascunho, aoMudar, aoEnviar }: {
   const nome = useId();
   const idParecer = useId();
   const [enviando, setEnviando] = useState(false);
+  // trava síncrona: o estado só muda no próximo render, e dois Enter seguidos enviariam duas avaliações
+  const emEnvio = useRef(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const atual = situacaoDe(trabalho.status);
@@ -40,18 +42,26 @@ export function FormAvaliacao({ trabalho, rascunho, aoMudar, aoEnviar }: {
     aoMudar({ fichas: { ...rascunho?.fichas, [id]: { ...rascunho?.fichas?.[id], [campo]: valor } } });
 
   async function enviar() {
+    if (emEnvio.current) return;
     if (!textoDe(parecer)) { setErro("Escreva o parecer antes de enviar."); return; }
     setErro(null);
+    emEnvio.current = true;
     setEnviando(true);
     try {
       await aoEnviar();
     } finally {
+      emEnvio.current = false;
       setEnviando(false);
     }
   }
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); void enviar(); }} className="grid gap-5">
+    <form
+      onSubmit={(e) => { e.preventDefault(); void enviar(); }}
+      // Enter dentro de um campo de nota não pode gravar a avaliação: só o botão envia
+      onKeyDown={(e) => { if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") e.preventDefault(); }}
+      className="grid gap-5"
+    >
       <fieldset className="grid gap-2">
         <legend className="text-sm font-medium">Nova situação do trabalho</legend>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

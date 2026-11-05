@@ -119,6 +119,7 @@ export default function PaymentCodesPage() {
       return true;
     } catch (error) {
       if (ehAbortError(error) || pedido !== pedidoRef.current) return false;
+      carregadaRef.current = ""; // sem isso, voltar a esta mesma página não pediria de novo e o erro ficaria na tela
       setErroLista(mensagemErro(error, "Não foi possível carregar os códigos."));
       return false;
     } finally {
@@ -148,6 +149,13 @@ export default function PaymentCodesPage() {
 
   const isActiveEdition = Boolean(resumo?.activeEditionId && editionId && resumo.activeEditionId === editionId);
   const listaVisivel = lista && lista.contexto === contexto ? lista : null;
+
+  // Excluir tudo da última página deixa a API devolvendo vazio: volta para a última página que existe
+  useEffect(() => {
+    if (!listaVisivel) return;
+    const ultima = Math.max(1, listaVisivel.pagination.totalPages);
+    if (page > ultima) setPage(ultima);
+  }, [listaVisivel, page]);
   const abaAtual = ABAS.find((a) => a.id === activeTab) ?? ABAS[0];
   const metrics = resumo?.metrics ?? null;
   const contagemAba = (n: number | undefined) => (n === undefined ? "" : formatarNumero(n));
@@ -374,14 +382,18 @@ export default function PaymentCodesPage() {
     });
     if (!confirmou) return;
 
+    const contextoDoPedido = contextoDe(filtrosRef.current);
     const dados = await executar("excluir-lote", "Não foi possível excluir os códigos", async () => {
       const data = await requestJson<{ message: string; excluidos: number; ignorados: CodigoIgnorado[] }>("/api/delete/pagamentos/codigos", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids }),
       });
-      setSelectedIds(data.ignorados.map((item) => item.id).filter(Boolean));
-      setResultadoExclusao({ excluidos: data.excluidos, ignorados: data.ignorados });
+      // Se a pessoa trocou de aba, filtro ou edição durante o pedido, ids e resultado não pertencem mais a esta tela
+      if (contextoDe(filtrosRef.current) === contextoDoPedido) {
+        setSelectedIds(data.ignorados.map((item) => item.id).filter(Boolean));
+        setResultadoExclusao({ excluidos: data.excluidos, ignorados: data.ignorados });
+      }
       await loadCodes();
       return data;
     });
