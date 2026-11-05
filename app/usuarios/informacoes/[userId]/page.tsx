@@ -287,7 +287,7 @@ export default function Page() {
                         <span>Cadastro pendente: alguns dados pessoais ainda não foram informados.</span>
                     </div>
                 )}
-                <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg shadow-xs overflow-hidden">
                     <div className="p-6 border-b border-gray-200">
                         <div className="flex items-start gap-4">
                             <div className="flex-1 min-w-0">
@@ -305,19 +305,19 @@ export default function Page() {
                             <label htmlFor="id_api" className="block text-sm font-medium text-gray-700">Identificação Assas</label>
                             <span className="text-red-500 font-bold text-[10px]">* CUIDADO AO TROCAR ESSA INFORMAÇÃO *</span>
                             <p className="text-red-500 font-bold text-[10px] cursor-pointer">* COMO ALTERAR COM SEGURANÇA? *</p>
-                            <input type="text" name="id_api" id="id_api" value={formData.id_api} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
+                            <input type="text" name="id_api" id="id_api" value={formData.id_api} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
                         </div>
                         <div>
                             <label htmlFor="nome" className="block text-sm font-medium text-gray-700">Nome Completo</label>
-                            <input type="text" name="nome" id="nome" value={formData.nome} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
+                            <input type="text" name="nome" id="nome" value={formData.nome} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
                         </div>
                         <div>
                             <label htmlFor="email" className="block text-sm font-medium text-gray-700">E-mail</label>
-                            <input type="email" name="email" id="email" value={formData.email} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
+                            <input type="email" name="email" id="email" value={formData.email} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
                         </div>
                         <div>
                             <label htmlFor="numero_telefone" className="block text-sm font-medium text-gray-700">Telefone</label>
-                            <input type="tel" name="numero_telefone" id="numero_telefone" value={formData.numero_telefone} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
+                            <input type="tel" name="numero_telefone" id="numero_telefone" value={formData.numero_telefone} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
                         </div>
                         <div>
                             {/* Somente leitura: preenchida pelo congressista formado no cadastro do site. */}
@@ -330,7 +330,7 @@ export default function Page() {
                         <h2 className="text-lg font-medium text-gray-800">Status e Configurações</h2>
                         <div>
                             <label htmlFor="situacao" className="block text-sm font-medium text-gray-700">Situação do Pagamento</label>
-                            <select id="situacao" name="situacao" value={formData.situacao} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
+                            <select id="situacao" name="situacao" value={formData.situacao} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5">
                                 <option value="" disabled>Status não informado</option>
                                 <option value="1">Pago</option>
                                 <option value="2">Pagamento Pendente</option>
@@ -342,7 +342,7 @@ export default function Page() {
                         {/* ## CAMPO CORRIGIDO ## */}
                         <div>
                             <label htmlFor="tipo_pagamento" className="block text-sm font-medium text-gray-700">Tipo de Pagamento</label>
-                            <input type="text" name="tipo_pagamento" id="tipo_pagamento" value={formData.tipo_pagamento} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
+                            <input type="text" name="tipo_pagamento" id="tipo_pagamento" value={formData.tipo_pagamento} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2.5" />
                         </div>
 
                         <div>
@@ -372,7 +372,7 @@ export default function Page() {
                     </div>
 
                     <div className="p-6 flex justify-end gap-4 border-t border-gray-200">
-                        <button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed">
+                        <button type="submit" disabled={isSaving} className="inline-flex items-center gap-2 px-4 py-2 border border-transparent rounded-md shadow-xs text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed">
                             <Save className="h-5 w-5" />
                             {isSaving ? "Salvando..." : "Salvar Alterações"}
                         </button>
@@ -397,7 +397,7 @@ export default function Page() {
             </div>
             {canViewModernPayments && (
                 <section className="w-full max-w-4xl mx-auto space-y-4" aria-labelledby="modern-payments-heading">
-                    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-xs">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <h2 id="modern-payments-heading" className="text-xl font-bold text-gray-900">Compras modernas</h2>
@@ -460,7 +460,7 @@ const RemoteParticipationPanel: React.FC<{
             : "bg-amber-100 text-amber-800"
 
     return (
-        <section className="w-full max-w-4xl mx-auto rounded-lg border border-gray-200 bg-white p-6 shadow-sm" aria-labelledby="remote-participation-heading">
+        <section className="w-full max-w-4xl mx-auto rounded-lg border border-gray-200 bg-white p-6 shadow-xs" aria-labelledby="remote-participation-heading">
             <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <div className="flex items-center gap-2">
@@ -617,7 +617,7 @@ const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
                             const dataFormatada = `${dataInicio.toLocaleDateString('pt-BR')} das ${dataInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} às ${dataFim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
                             return (
                                 <div className="flex flex-row space-x-1" key={`${time._id}`}>
-                                    <Calendar className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                                    <Calendar className="h-5 w-5 text-indigo-500 shrink-0" />
                                     <span className="text-gray-700 font-medium">{dataFormatada}</span>
                                 </div>
                             )
@@ -628,7 +628,7 @@ const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
                     {
                         timeline.map((line) =>
                             <div className="flex flex-row space-x-1" key={`${line._id}`}>
-                                <MapPin className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                                <MapPin className="h-5 w-5 text-indigo-500 shrink-0" />
                                 <span className="text-gray-700 font-medium">{line?.local || "---"}</span>
                                 <span className="font-extrabold">-</span>
                                 <span className="">{new Date(line.date_init).toDateString()}</span>
@@ -641,7 +641,7 @@ const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
                 <div>
                     <div className="flex items-center justify-between mb-1 text-sm">
                         <div className="flex items-center gap-3">
-                            <Users className="h-5 w-5 text-indigo-500 flex-shrink-0" />
+                            <Users className="h-5 w-5 text-indigo-500 shrink-0" />
                             <span className="text-gray-700 font-medium">Vagas</span>
                         </div>
                         <span className="font-semibold text-indigo-600">{participantsCount} / {maxParticipants}</span>
@@ -716,7 +716,7 @@ const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment 
     ].filter((entry): entry is [string, string] => Boolean(entry[1]))
 
     return (
-        <article className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <article className="rounded-lg border border-gray-200 bg-white p-5 shadow-xs">
             <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -798,7 +798,7 @@ const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment 
                     ) : (
                         <ul className="mt-2 space-y-2">
                             {payment.installmentPlan.observedPayments.map((observed) => (
-                                <li key={observed.paymentId} className="rounded bg-white/80 p-3 text-xs text-gray-800">
+                                <li key={observed.paymentId} className="rounded-sm bg-white/80 p-3 text-xs text-gray-800">
                                     <div className="flex flex-wrap justify-between gap-2">
                                         <strong>Parcela {observed.installmentNumber ?? "—"} · {observed.status}</strong>
                                         <span>{formatPaymentCents(observed.valueCentavos)}</span>
@@ -819,7 +819,7 @@ const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment 
                             <h4 className="mt-4 text-sm font-bold text-blue-950">Estornos por cobrança</h4>
                             <ul className="mt-2 space-y-2">
                                 {payment.installmentPlan.refundsByPayment.map((refund) => (
-                                    <li key={refund.paymentId} className="rounded bg-white/80 p-3 text-xs text-gray-800">
+                                    <li key={refund.paymentId} className="rounded-sm bg-white/80 p-3 text-xs text-gray-800">
                                         <p className="break-all">Payment ID: <code>{refund.paymentId}</code></p>
                                         <p className="mt-1 font-semibold">
                                             DONE: {formatPaymentCents(refund.refundsSnapshot.totalDoneCentavos)}
@@ -874,7 +874,7 @@ const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment 
                             </p>
                             <ul className="mt-3 space-y-2">
                                 {payment.refundsSnapshot.items.map((refund, index) => (
-                                    <li key={`${refund.dateCreated ?? "refund"}-${index}`} className="rounded bg-white/80 p-3 text-sm text-gray-800">
+                                    <li key={`${refund.dateCreated ?? "refund"}-${index}`} className="rounded-sm bg-white/80 p-3 text-sm text-gray-800">
                                         <div className="flex flex-wrap justify-between gap-2">
                                             <strong>{refund.status}</strong>
                                             <span>{formatPaymentCents(refund.valueCentavos)}</span>
@@ -929,7 +929,7 @@ const ModernPaymentCard: React.FC<{ payment: AdminModernPayment }> = ({ payment 
                     <p className="mt-1 text-xs text-amber-800">Somente metadados operacionais seguros são exibidos.</p>
                     <ul className="mt-3 space-y-2">
                         {payment.webhookIssues.map((issue) => (
-                            <li key={issue.eventId} className="rounded bg-white/80 p-3 text-xs text-gray-800">
+                            <li key={issue.eventId} className="rounded-sm bg-white/80 p-3 text-xs text-gray-800">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <strong>{issue.status} · {issue.eventType}</strong>
                                     <span>{issue.attempts} tentativa(s)</span>
@@ -978,7 +978,7 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
         <div className="">
 
             {/* Card de conteúdo */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-5">
+            <div className="bg-white border border-gray-200 rounded-lg shadow-xs p-5">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-3">
                     {/* Status e Descrição */}
                     <div className="flex-1">
@@ -1001,10 +1001,10 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                         {/* IDs */}
                         <div className="text-xs text-gray-500 space-y-2">
-                            <p>ID Pag.: <span className="font-mono bg-gray-100 p-1 rounded">{pagamento.id}</span></p>
+                            <p>ID Pag.: <span className="font-mono bg-gray-100 p-1 rounded-sm">{pagamento.id}</span></p>
                             {
                                 ObjectId.isValid(pagamento?._eventID) &&
-                                <p> ID Event.: <span className="font-mono bg-gray-100 p-1 rounded">{pagamento._eventID}</span></p>
+                                <p> ID Event.: <span className="font-mono bg-gray-100 p-1 rounded-sm">{pagamento._eventID}</span></p>
                             }
                         </div>
                         {/* Botão de Recibo */}
@@ -1045,7 +1045,7 @@ const UserComponent: React.FC<{ pagamento: IPayment["lista_pagamentos"][0] }> = 
                                     <Hash className="h-4 w-4 mr-2" />
                                     <span>ID do Evento:</span>
                                 </p>
-                                <p className="font-mono text-xs bg-gray-100 p-1 rounded">{event?._id || "Não encontrado"}</p>
+                                <p className="font-mono text-xs bg-gray-100 p-1 rounded-sm">{event?._id || "Não encontrado"}</p>
                             </div>
                         </div>
                     </div>

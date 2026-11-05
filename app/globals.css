@@ -1,138 +1,189 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
+/* CIEPS Admin · tokens e base.
+   Paleta e tipografia do CIEPS (papel, tinta, vermelho/azul/amarelo, Georgia nos títulos), com a construção do painel
+   do Confera: cartões limpos no papel, ação principal em pílula de tinta, estados explícitos.
+   Todas as cores passam por variável: um tema escuro entra depois redefinindo só este bloco. */
 :root {
-  --cieps-paper: #f4f1ea;
+  --papel: #f4f1ea;
+  --cartao: #fffefb;
+  --tinta: #1a1a1a;
+  --sutil: #5a5148; /* 6,7:1 no papel */
+  --linha: #e3dccd;
+  --recuo: #ece6d9;
+
+  --acao: #a32d2d; /* vermelho CIEPS: marca e seleção */
+  --info: #185fa5; /* azul CIEPS */
+  --destaque: #ef9f27; /* amarelo CIEPS: só assinatura, nunca texto */
+  --info-fundo: #e6eff8;
+
+  --ok: #23633a;
+  --ok-fundo: #e7f3ea;
+  --alerta: #7a5200;
+  --alerta-fundo: #fbf0d6;
+  --erro: #a3261b;
+  --erro-fundo: #fbe9e7;
+
+  --sai: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --fonte-ui: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fonte-titulo: Georgia, "Times New Roman", Times, serif;
+
+  accent-color: var(--tinta);
+
+  /* Nomes antigos, usados pelas folhas de estilo que ainda não foram migradas. Saem junto com elas. */
+  --cieps-paper: var(--papel);
   --cieps-paper-deep: #e5ded0;
-  --cieps-surface: #fffdf8;
+  --cieps-surface: var(--cartao);
   --cieps-surface-muted: #f8f3e8;
-  --cieps-ink: #1a1a1a;
-  --cieps-ink-soft: #50483f;
-  --cieps-red: #a32d2d;
-  --cieps-blue: #185fa5;
-  --cieps-yellow: #ef9f27;
+  --cieps-ink: var(--tinta);
+  --cieps-ink-soft: var(--sutil);
+  --cieps-red: var(--acao);
+  --cieps-blue: var(--info);
+  --cieps-yellow: var(--destaque);
   --cieps-line: rgba(26, 26, 26, 0.14);
   --cieps-line-strong: rgba(26, 26, 26, 0.28);
   --cieps-shadow: 0 18px 50px rgba(26, 26, 26, 0.08);
   --cieps-shadow-soft: 0 10px 28px rgba(26, 26, 26, 0.06);
   --cieps-radius: 8px;
-  --cieps-sidebar-width: 272px;
-  --cieps-font-display: Georgia, "Times New Roman", Times, serif;
-  --cieps-font-ui: Inter, "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-
-  --carmin: var(--cieps-red);
-  --cinza: var(--cieps-ink-soft);
-  --azul: var(--cieps-blue);
+  --cieps-sidebar-width: 0px;
+  --cieps-font-display: var(--fonte-titulo);
+  --cieps-font-ui: var(--fonte-ui);
+  --carmin: var(--acao);
+  --cinza: var(--sutil);
+  --azul: var(--info);
 }
 
-* {
-  box-sizing: border-box;
+@theme inline {
+  --color-papel: var(--papel);
+  --color-cartao: var(--cartao);
+  --color-tinta: var(--tinta);
+  --color-sutil: var(--sutil);
+  --color-linha: var(--linha);
+  --color-recuo: var(--recuo);
+  --color-acao: var(--acao);
+  --color-info: var(--info);
+  --color-info-fundo: var(--info-fundo);
+  --color-destaque: var(--destaque);
+  --color-ok: var(--ok);
+  --color-ok-fundo: var(--ok-fundo);
+  --color-alerta: var(--alerta);
+  --color-alerta-fundo: var(--alerta-fundo);
+  --color-erro: var(--erro);
+  --color-erro-fundo: var(--erro-fundo);
+  --font-sans: var(--fonte-ui);
+  --font-display: var(--fonte-titulo);
+  --ease-sai: var(--sai);
+  --background-image-gradient-radial: radial-gradient(var(--tw-gradient-stops));
+  --background-image-gradient-conic: conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops));
 }
 
-html {
-  width: 100%;
-  min-height: 100%;
-  scroll-behavior: smooth;
-  background: var(--cieps-paper);
-}
+/* No Tailwind 4 as utilidades ficam em camada e perdem para qualquer regra sem camada: a base vai em @layer base. */
+@layer base {
+  /* As telas antigas usam `border` sem cor e esperam o cinza do Tailwind 3. */
+  *, ::after, ::before, ::backdrop, ::file-selector-button { border-color: var(--color-gray-200, currentcolor); }
 
-body {
-  width: 100%;
-  min-height: 100vh;
-  margin: 0;
-  overflow-x: hidden;
-  color: var(--cieps-ink);
-  background:
-    radial-gradient(circle at 8% 0%, rgba(239, 159, 39, 0.18), transparent 25rem),
-    radial-gradient(circle at 96% 10%, rgba(24, 95, 165, 0.14), transparent 24rem),
-    linear-gradient(180deg, var(--cieps-paper) 0%, #eee7d8 100%);
-  font-family: var(--cieps-font-ui);
-  text-rendering: geometricPrecision;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.32;
-  background:
-    linear-gradient(90deg, transparent 0 47%, rgba(163, 45, 45, 0.16) 47% 47.35%, transparent 47.35% 100%),
-    repeating-linear-gradient(90deg, rgba(26, 26, 26, 0.045) 0 1px, transparent 1px 96px),
-    repeating-linear-gradient(0deg, rgba(26, 26, 26, 0.035) 0 1px, transparent 1px 96px);
-}
-
-::selection {
-  color: var(--cieps-surface);
-  background: var(--cieps-red);
-}
-
-a {
-  color: inherit;
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
-
-button {
-  letter-spacing: 0;
-}
-
-input,
-textarea,
-select {
-  max-width: 100%;
-}
-
-img,
-svg,
-video,
-canvas {
-  max-width: 100%;
-}
-
-:focus-visible {
-  outline: 3px solid rgba(239, 159, 39, 0.65);
-  outline-offset: 2px;
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(26, 26, 26, 0.06);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(163, 45, 45, 0.46);
-  border: 2px solid var(--cieps-paper);
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(163, 45, 45, 0.72);
-}
-
-@media (max-width: 1024px) {
-  :root {
-    --cieps-sidebar-width: 0px;
+  html {
+    -webkit-text-size-adjust: 100%;
+    background: var(--papel);
+    scrollbar-width: thin;
+    scrollbar-color: #a39a8c var(--papel);
   }
-
-  body::before {
-    opacity: 0.18;
-  }
-}
-
-@media (max-width: 640px) {
   body {
-    font-size: 15px;
+    min-height: 100vh;
+    margin: 0;
+    color: var(--tinta);
+    background: var(--papel);
+    font-family: var(--fonte-ui);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
+  /* rolagens internas (tabelas, listas, abas): finas, trilho transparente */
+  body * { scrollbar-width: thin; scrollbar-color: rgba(90, 81, 72, 0.45) transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #a39a8c; border-radius: 999px; }
+
+  a { color: inherit; }
+  button, input, textarea, select { font: inherit; }
+  input, textarea, select { max-width: 100%; }
+  img, svg, video, canvas { max-width: 100%; }
+  ::selection { color: #fff; background: var(--acao); }
+
+  /* Anel de foco em tinta: o amarelo antigo ficava abaixo de 3:1 no papel. */
+  :focus-visible { outline: 2px solid var(--tinta); outline-offset: 2px; border-radius: 6px; }
+
+  /* Item de grid encolhe (texto longo sem quebra não estoura a tela no celular) */
+  .grid > * { min-width: 0; }
+
+  /* Números alinhados em colunas e métricas */
+  table, .num { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+@utility titulo {
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+/* Régua tricolor CIEPS: assinatura da marca, sempre fina */
+@utility regua {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--acao) 0 40%, var(--destaque) 40% 70%, var(--info) 70% 100%);
+}
+
+/* Esqueletos no formato do conteúdo */
+@keyframes esq-brilho { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@layer components {
+  .esq {
+    border-radius: 12px;
+    background: linear-gradient(90deg, #e9e3d6 0%, #e9e3d6 35%, #f4f0e6 50%, #e9e3d6 65%, #e9e3d6 100%);
+    background-size: 200% 100%;
+    animation: esq-brilho 1.4s linear infinite;
+  }
+}
+
+/* Entrada suave da página (app/template.tsx) e dos blocos */
+@keyframes pag-entra { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.pag-entra { animation: pag-entra 0.4s var(--sai) both; }
+@keyframes aviso-entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.aviso-entra { animation: aviso-entra 0.25s var(--sai) both; }
+
+/* "Pular para o conteúdo": invisível até receber foco pelo teclado */
+.pular {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--tinta);
+  font-size: 14px;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+.pular:focus { transform: none; }
+
+/* Diálogo nativo: fundo escurecido e entrada curta */
+dialog.dialogo::backdrop { background: rgba(26, 26, 26, 0.5); }
+dialog.dialogo[open] { animation: aviso-entra 0.2s var(--sai) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms; animation-iteration-count: 1; transition-duration: 0.01ms; scroll-behavior: auto; }
+}
+
+@media print {
+  [data-nao-imprimir] { display: none; }
+  body { background: #fff; }
+}
+
+/* iPhone: o Safari dá zoom ao focar campo com letra menor que 16px */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px; }
 }

@@ -156,13 +156,13 @@ export default function Page() {
                                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                                     <Search className="h-5 w-5 text-gray-400" />
                                 </div>
-                                <input id="search" type="text" placeholder="Buscar por nome ou ID da atividade..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full rounded-md pl-10 shadow-sm sm:text-sm p-2.5" />
+                                <input id="search" type="text" placeholder="Buscar por nome ou ID da atividade..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full rounded-md pl-10 shadow-xs sm:text-sm p-2.5" />
                             </div>
                         </div>
                         {/* Filtro showToUser */}
                         <div className="">
                             <label htmlFor="filterShowToUser" className="block text-sm font-medium text-white mb-1">Aberto ao público?</label>
-                            <select id="filterShowToUser" value={filterShowToUser} onChange={e => setFilterShowToUser(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
+                            <select id="filterShowToUser" value={filterShowToUser} onChange={e => setFilterShowToUser(e.target.value)} className="block w-full rounded-md shadow-xs sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Fechado</option>
                                 <option value="false">Aberto</option>
@@ -171,7 +171,7 @@ export default function Page() {
                         {/* Filtro Status */}
                         <div>
                             <label htmlFor="filterIsOpen" className="block text-sm font-medium text-white mb-1">Status</label>
-                            <select id="filterIsOpen" value={filterIsOpen} onChange={e => setFilterIsOpen(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
+                            <select id="filterIsOpen" value={filterIsOpen} onChange={e => setFilterIsOpen(e.target.value)} className="block w-full rounded-md shadow-xs sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Inscrições Abertas</option>
                                 <option value="false">Inscrições Encerradas</option>
@@ -180,7 +180,7 @@ export default function Page() {
                         {/* Filtro Preço */}
                         <div>
                             <label htmlFor="filterIsFree" className="block text-sm font-medium text-white mb-1">Preço</label>
-                            <select id="filterIsFree" value={filterIsFree} onChange={e => setFilterIsFree(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
+                            <select id="filterIsFree" value={filterIsFree} onChange={e => setFilterIsFree(e.target.value)} className="block w-full rounded-md shadow-xs sm:text-sm p-2.5">
                                 <option value="all">Todos</option>
                                 <option value="true">Gratuito</option>
                                 <option value="false">Pago</option>
@@ -189,7 +189,7 @@ export default function Page() {
                         {/* Filtro Tipo */}
                         <div>
                             <label htmlFor="filterType" className="block text-sm font-medium text-white mb-1">Tipo</label>
-                            <select id="filterType" value={filterType} onChange={e => setFilterType(e.target.value)} className="block w-full rounded-md shadow-sm sm:text-sm p-2.5">
+                            <select id="filterType" value={filterType} onChange={e => setFilterType(e.target.value)} className="block w-full rounded-md shadow-xs sm:text-sm p-2.5">
                                 <option value="all">Todos os Tipos</option>
                                 {courseTypes.map(type => <option key={type} value={type}>{type}</option>)}
                             </select>
@@ -226,7 +226,7 @@ export default function Page() {
                                                     <p className="gm-badge gm-badge--info">ABERTO AO USUÁRIO</p>
                                             }
                                         </div>
-                                        <div className='gm-card-body flex-grow'>
+                                        <div className='gm-card-body grow'>
                                             <div className="gm-divider"></div>
                                             <h2 className='text-xl font-bold text-gray-800 truncate' title={value.name}>{value.name}</h2>
                                             <p className="text-xs text-gray-400 font-mono mt-1 mb-6 truncate">ID: {value._id}</p>

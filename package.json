@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:academic-works": "node --experimental-strip-types --test \"app/lib/__tests__/academic-work-*.test.ts\"",
     "test:admin-users": "node --experimental-strip-types --test \"app/lib/users/__tests__/*.test.ts\"",
+    "test:formatar": "node --experimental-strip-types --test \"app/lib/__tests__/formatar.test.ts\"",
     "test:minicursos": "node --experimental-strip-types --test \"app/lib/minicursos/__tests__/*.test.ts\"",
     "test:payments-admin": "node --experimental-strip-types --test \"app/lib/payments/__tests__/*.test.ts\"",
     "test:trabalhos-email": "node --experimental-strip-types --test \"app/lib/trabalhos/__tests__/*.test.ts\""
@@ -33,13 +34,14 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.4",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^9.10.0",
     "eslint-config-next": "^16.1.6",
     "postcss": "^8",
-    "tailwindcss": "^3.4.1",
+    "tailwindcss": "^4.3.4",
     "typescript": "^5",
     "typescript-eslint": "^8.0.0"
   }
