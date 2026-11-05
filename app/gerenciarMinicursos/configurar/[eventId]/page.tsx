@@ -109,11 +109,12 @@ export default function Page() {
                 buttonText="Atualizar atividade"
                 initialForms={{
                     ...dataCourse,
-                    dateOpen: dataCourse.dateOpen.slice(0, -6),
+                    // datetime-local mostra "AAAA-MM-DDTHH:mm": tira segundos e fuso salvos
+                    dateOpen: dataCourse.dateOpen.slice(0, 16),
                     timeline: dataCourse.timeline.map((time) => ({
                         ...time,
-                        date_init: time.date_init.slice(0, -6),
-                        date_end: time.date_end.slice(0, -6),
+                        date_init: time.date_init.slice(0, 16),
+                        date_end: time.date_end.slice(0, 16),
                     })),
                 }}
                 isOpen
