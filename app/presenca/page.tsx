@@ -5,32 +5,7 @@ import './style.css';
 import { Users, ClipboardList, UserPlus, UserMinus, CheckCircle, Loader2 } from 'lucide-react';
 import { ICourse, ILecture } from '../lib/types/events/event.t';
 import { parseDataArrayPayload } from '../lib/api-data-contract';
-
-const isRecord = (value: unknown): value is Record<string, unknown> => (
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-)
-
-const isCourseSummary = (value: unknown): value is ICourse => {
-  if (!isRecord(value)) return false
-  return (
-    typeof value._id === 'string' &&
-    typeof value.name === 'string' &&
-    typeof value.type === 'string' &&
-    typeof value.maxParticipants === 'number' &&
-    Number.isFinite(value.maxParticipants) &&
-    Array.isArray(value.participants) &&
-    value.participants.every((id) => typeof id === 'string')
-  )
-}
-
-const isLectureSummary = (value: unknown): value is ILecture => {
-  if (!isRecord(value)) return false
-  return (
-    typeof value._id === 'string' &&
-    typeof value.name === 'string' &&
-    typeof value.type === 'string'
-  )
-}
+import { isRawActivity, toCourseSummary, toLectureSummary } from '../lib/presenca/activity-summary-contract';
 
 const MyComponent = () => {
   const [dataLecture, setDataLecture] = useState<ILecture[]>([])
@@ -53,14 +28,15 @@ const MyComponent = () => {
           response.json().catch(() => null),
           response2.json().catch(() => null),
         ])
-        const parsedCourses = parseDataArrayPayload(coursePayload, isCourseSummary)
-        const parsedLectures = parseDataArrayPayload(lecturePayload, isLectureSummary)
+        const parsedCourses = parseDataArrayPayload(coursePayload, isRawActivity)
+        const parsedLectures = parseDataArrayPayload(lecturePayload, isRawActivity)
         if (!parsedCourses || !parsedLectures) {
           throw new Error('As listas de atividades estão em formato inválido')
         }
-        setDataLecture(parsedLectures)
-        setCourses(parsedCourses);
+        setDataLecture(parsedLectures.map(toLectureSummary))
+        setCourses(parsedCourses.map(toCourseSummary));
       } catch (error) {
+        console.error('Falha ao carregar atividades de presença:', error)
         setError("OCORREU ALGO ERRADO. RECARREGUE");
       } finally {
         setLoading(false);
