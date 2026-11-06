@@ -1,9 +1,10 @@
-const DEFAULT_FINANCE_ADMIN_ID = "67098341f7397b370e9cb8ba";
+// Mesma conta administradora de userPermissionsServerSide (a de 2024 deixou de existir em 25/08/2026).
+const DEFAULT_FINANCE_ADMIN_ID = "6a8799078ecd649be9bdb061";
 
 function configuredAdminIds(rawConfigured: string) {
   const configured = rawConfigured
     .split(/[;,\s]+/)
-    .map((value) => value.trim())
+    .map((value) => value.trim().replace(/^auth0\|/, ""))
     .filter(Boolean);
 
   return new Set(
@@ -19,5 +20,5 @@ export function isFinanceAdminSubject(
   const normalizedSubject = subject.trim();
   const userId = normalizedSubject.replace(/^auth0\|/, "");
   const allowedIds = configuredAdminIds(rawConfigured);
-  return allowedIds.has(normalizedSubject) || allowedIds.has(userId);
+  return allowedIds.has(userId);
 }
