@@ -1,16 +1,22 @@
 @import "tailwindcss";
 
 /* CIEPS Admin · tokens e base.
-   Paleta e tipografia do CIEPS (papel, tinta, vermelho/azul/amarelo, Georgia nos títulos), com a construção do painel
-   do Confera: cartões limpos no papel, ação principal em pílula de tinta, estados explícitos.
+   Paleta e tipografia do CIEPS (papel, tinta, vermelho/azul/amarelo, Georgia nos títulos). O contraste vem da moldura
+   escura (barra lateral e faixa de cabeçalho em azul-noite) contra cartões brancos sobre papel mais fundo.
    Todas as cores passam por variável: um tema escuro entra depois redefinindo só este bloco. */
 :root {
-  --papel: #f4f1ea;
-  --cartao: #fffefb;
+  --papel: #e6dfd0;
+  --cartao: #ffffff;
   --tinta: #1a1a1a;
-  --sutil: #5a5148; /* 6,7:1 no papel */
-  --linha: #e3dccd;
-  --recuo: #ece6d9;
+  --sutil: #4a423a; /* 7,6:1 no papel */
+  --linha: #cfc5b0;
+  --recuo: #f0eadc;
+
+  /* Moldura escura: barra lateral e faixa de cabeçalho. Texto claro ≥ 8:1 sobre --moldura. */
+  --moldura: #0f1e33;
+  --moldura-2: #1b2f50;
+  --moldura-texto: #e8edf5;
+  --moldura-sutil: #a9b8cf;
 
   --acao: #a32d2d; /* vermelho CIEPS: marca e seleção */
   --info: #185fa5; /* azul CIEPS */
@@ -60,6 +66,10 @@
   --color-sutil: var(--sutil);
   --color-linha: var(--linha);
   --color-recuo: var(--recuo);
+  --color-moldura: var(--moldura);
+  --color-moldura-2: var(--moldura-2);
+  --color-moldura-texto: var(--moldura-texto);
+  --color-moldura-sutil: var(--moldura-sutil);
   --color-acao: var(--acao);
   --color-info: var(--info);
   --color-info-fundo: var(--info-fundo);
@@ -86,7 +96,7 @@
     -webkit-text-size-adjust: 100%;
     background: var(--papel);
     scrollbar-width: thin;
-    scrollbar-color: #a39a8c var(--papel);
+    scrollbar-color: #8f8575 var(--papel);
   }
   body {
     min-height: 100vh;
@@ -111,6 +121,7 @@
 
   /* Anel de foco em tinta: o amarelo antigo ficava abaixo de 3:1 no papel. */
   :focus-visible { outline: 2px solid var(--tinta); outline-offset: 2px; border-radius: 6px; }
+  [data-moldura] :focus-visible, [data-faixa] :focus-visible { outline-color: #fff; }
 
   /* Item de grid encolhe (texto longo sem quebra não estoura a tela no celular) */
   .grid > * { min-width: 0; }
@@ -142,7 +153,7 @@
 @layer components {
   .esq {
     border-radius: 12px;
-    background: linear-gradient(90deg, #e9e3d6 0%, #e9e3d6 35%, #f4f0e6 50%, #e9e3d6 65%, #e9e3d6 100%);
+    background: linear-gradient(90deg, #d9d1bf 0%, #d9d1bf 35%, #ebe5d6 50%, #d9d1bf 65%, #d9d1bf 100%);
     background-size: 200% 100%;
     animation: esq-brilho 1.4s linear infinite;
   }

@@ -12,26 +12,23 @@ const MODO = { automatico: "Automático", manual: "Manual" } as const;
 
 interface Props {
   config: IPaymentConfig;
-  /** null = a lista ainda não foi lida (ou a leitura falhou): o total aparece como indisponível, nunca 0. */
-  totalInscritos: number | null;
   ocupacao: IAutomaticLotOccupancy | null;
   ocupacaoCarregando: boolean;
   ocupacaoErro: string | null;
+  /** A conta não é administradora financeira (403): explicar, sem oferecer nova tentativa. */
+  ocupacaoSemPermissao: boolean;
   aoAtualizarOcupacao: () => void;
 }
 
-export function VisaoGeral({ config, totalInscritos, ocupacao, ocupacaoCarregando, ocupacaoErro, aoAtualizarOcupacao }: Props) {
+export function VisaoGeral({ config, ocupacao, ocupacaoCarregando, ocupacaoErro, ocupacaoSemPermissao, aoAtualizarOcupacao }: Props) {
   const automatico = config.modo === "automatico";
   const lotes = hasValidAutomaticStructure(config.configuracaoLotesAutomaticos?.lotes) ? config.configuracaoLotesAutomaticos!.lotes : null;
   const edicaoDivergente = ocupacao && config.edicaoId && ocupacao.edicaoId !== config.edicaoId.trim().toUpperCase();
-  const saldo = ocupacao ? Math.max(0, ocupacao.capacidadeTotal - ocupacao.ocupadasEfetivas) : null;
 
   return (
     <Secao
-      id="visao-geral"
-      className="scroll-mt-4"
       titulo="Visão geral e ocupação"
-      descricao="Resumo da configuração em uso e das vagas dos lotes."
+      descricao="Resumo da configuração em uso e das vagas dos lotes. Os totais da edição ficam na faixa acima."
     >
       <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div><dt className="text-xs font-semibold uppercase tracking-wide text-sutil">Edição em uso</dt><dd className="mt-0.5 font-semibold">{config.edicaoId ?? "Não configurada"}</dd></div>
@@ -43,18 +40,9 @@ export function VisaoGeral({ config, totalInscritos, ocupacao, ocupacaoCarregand
         <div><dt className="text-xs font-semibold uppercase tracking-wide text-sutil">Documento da configuração</dt><dd className="mt-0.5"><Copiavel texto={config._id} rotulo="identificador da configuração" /></dd></div>
       </dl>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metrica
-          rotulo="Pessoas inscritas"
-          valor={totalInscritos === null ? null : formatarNumero(totalInscritos)}
-          detalhe="Pessoas com inscrição confirmada, não transações"
-        />
-        <Metrica rotulo="Formas de pagamento aceitas" valor={formatarNumero(config.pagamentosAceitos?.length ?? 0)} />
-        <Metrica
-          rotulo={automatico ? "Lotes automáticos" : "Parcelamentos legados"}
-          valor={automatico ? (lotes ? formatarNumero(lotes.length) : null) : formatarNumero(config.parcelamentos?.length ?? 0)}
-        />
-      </div>
+      <p className="text-xs text-sutil">
+        A tela usa a configuração marcada como ativa no servidor, que pode fixar a edição por variável de ambiente (a API não informa qual regra valeu).
+      </p>
 
       {!automatico ? (
         <Aviso tom="info">A ocupação por lote só existe no modo automático. Esta configuração não usa lotes automáticos.</Aviso>
@@ -70,22 +58,24 @@ export function VisaoGeral({ config, totalInscritos, ocupacao, ocupacaoCarregand
             </div>
           </div>
 
-          {ocupacaoErro && (
+          {ocupacaoErro && !ocupacaoSemPermissao && (
             <Aviso tom="erro" titulo="Não foi possível atualizar a ocupação">
               {ocupacaoErro}{ocupacao ? " Os últimos números calculados continuam na tela." : ""}
             </Aviso>
           )}
 
           {!ocupacao && ocupacaoCarregando && <Estado tipo="carregando" titulo="Calculando vendas e vagas disponíveis…" linhas={1} />}
-          {!ocupacao && !ocupacaoCarregando && ocupacaoErro && <Estado tipo="erro" titulo="Ocupação indisponível" texto="Tente atualizar os números." aoTentar={aoAtualizarOcupacao} />}
+          {!ocupacao && !ocupacaoCarregando && ocupacaoSemPermissao && (
+            <Estado tipo="semPermissao" titulo="Ocupação restrita a administradores financeiros" texto={ocupacaoErro ?? undefined} />
+          )}
+          {!ocupacao && !ocupacaoCarregando && ocupacaoErro && !ocupacaoSemPermissao && <Estado tipo="erro" titulo="Ocupação indisponível" texto="Tente atualizar os números." aoTentar={aoAtualizarOcupacao} />}
 
           {ocupacao && (
             <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <Metrica rotulo="Vendas confirmadas" valor={formatarNumero(ocupacao.confirmadas.total)} detalhe={`${formatarNumero(ocupacao.confirmadas.legadas)} em registro antigo · ${formatarNumero(ocupacao.confirmadas.modernas)} em registro atual`} />
                 <Metrica rotulo="Reservas em pagamento" valor={formatarNumero(ocupacao.reservasAtivas)} detalhe="Vagas seguradas por quem ainda está pagando" />
-                <Metrica rotulo="Vagas ocupadas" valor={formatarNumero(ocupacao.ocupadasEfetivas)} detalhe="Vendas confirmadas + reservas" />
-                <Metrica rotulo="Saldo de vagas" valor={formatarNumero(saldo)} detalhe={`Capacidade total: ${formatarNumero(ocupacao.capacidadeTotal)}`} />
+                <Metrica rotulo="Vagas ocupadas" valor={formatarNumero(ocupacao.ocupadasEfetivas)} detalhe={`Vendas + reservas, de ${formatarNumero(ocupacao.capacidadeTotal)} no total`} />
               </div>
               <p className="text-xs text-sutil">
                 Números da edição <strong>{ocupacao.edicaoId}</strong>, calculados às {formatarHora(ocupacao.calculadoEm)}. Só ingresso ocupa vaga:

@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { FilterX, RefreshCw, UserX } from "lucide-react";
-import { Aviso, Botao, Campo, CampoBusca, Escolha, Secao, Selo, TabelaRolavel, classeBotao, classeTd, classeTh } from "@/app/components/ui";
+import { Aviso, Botao, Campo, CampoBusca, Escolha, Paginacao, Secao, Selo, TabelaRolavel, classeBotao, classeTd, classeTh } from "@/app/components/ui";
 import { Atualizando, Estado } from "@/app/components/Estado";
 import { useAvisos } from "@/app/components/Avisos";
 import { formatarNumero } from "@/app/lib/formatar";
 import { type AdminUserSummary, adminUserLotKey, adminUserLotLabel, displayUserField, displayUserName, filterAdminUsers } from "@/app/lib/users/admin-user-contract";
 import { enviar, relatarFalha, rotuloTipo } from "./util";
+
+const POR_PAGINA = 25;
 
 interface Props {
   /** null = ainda não lida (carregando ou falha na primeira leitura). */
@@ -27,12 +29,17 @@ export function Inscritos({ inscritos, carregando, erro, aoTentar, aoRemovido }:
   const [de, setDe] = useState("");
   const [ate, setAte] = useState("");
   const [removendo, setRemovendo] = useState<string | null>(null);
+  const [pagina, setPagina] = useState(1);
   const lista = useMemo(() => inscritos ?? [], [inscritos]);
 
   const filtrados = useMemo(
     () => filterAdminUsers(lista, { searchTerm: busca, selectedPaymentType: tipo, selectedLot: lote, startDate: de, endDate: ate }),
     [lista, busca, tipo, lote, de, ate],
   );
+  // Filtrar volta à primeira página; remover alguém da última página não deixa a tela numa página que deixou de existir.
+  const filtrar = (definir: (v: string) => void) => (v: string) => { definir(v); setPagina(1); };
+  const paginaAtual = Math.min(pagina, Math.max(1, Math.ceil(filtrados.length / POR_PAGINA)));
+  const visiveis = filtrados.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
 
   // Opções do filtro vêm dos próprios inscritos, com contagem, inclusive lotes que já saíram da configuração.
   const opcoesLote = useMemo(() => {
@@ -49,7 +56,7 @@ export function Inscritos({ inscritos, carregando, erro, aoTentar, aoRemovido }:
 
   const tipos = useMemo(() => Array.from(new Set(lista.map((u) => u.pagamento.tipo_pagamento).filter((t): t is string => Boolean(t)))), [lista]);
   const filtrando = Boolean(busca || tipo || lote || de || ate);
-  const limpar = () => { setBusca(""); setTipo(""); setLote(""); setDe(""); setAte(""); };
+  const limpar = () => { setBusca(""); setTipo(""); setLote(""); setDe(""); setAte(""); setPagina(1); };
 
   async function remover(u: AdminUserSummary) {
     const ok = await confirmar({
@@ -85,7 +92,7 @@ export function Inscritos({ inscritos, carregando, erro, aoTentar, aoRemovido }:
           </tr>
         </thead>
         <tbody>
-          {filtrados.map((u) => (
+          {visiveis.map((u) => (
             <tr key={u._id}>
               <td className={classeTd}>
                 <p className="font-medium">{displayUserName(u)}</p>
@@ -116,8 +123,6 @@ export function Inscritos({ inscritos, carregando, erro, aoTentar, aoRemovido }:
 
   return (
     <Secao
-      id="inscritos"
-      className="scroll-mt-4"
       titulo="Inscritos"
       descricao="Esta lista mostra pessoas inscritas (inscrição confirmada), uma linha por pessoa. Não é uma lista de transações: pagamentos, parcelas e estornos ficam no perfil de cada pessoa."
       acoes={
@@ -131,17 +136,17 @@ export function Inscritos({ inscritos, carregando, erro, aoTentar, aoRemovido }:
 
       {inscritos !== null && lista.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <CampoBusca className="sm:col-span-2" rotulo="Buscar pessoa" rotuloOculto={false} placeholder="Nome, e-mail, ID ou telefone" value={busca} onChange={(e) => setBusca(e.target.value)} />
-          <Escolha rotulo="Forma de pagamento" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+          <CampoBusca className="sm:col-span-2" rotulo="Buscar pessoa" rotuloOculto={false} placeholder="Nome, e-mail, ID ou telefone" value={busca} onChange={(e) => filtrar(setBusca)(e.target.value)} />
+          <Escolha rotulo="Forma de pagamento" value={tipo} onChange={(e) => filtrar(setTipo)(e.target.value)}>
             <option value="">Todas</option>
             {tipos.map((t) => <option key={t} value={t}>{rotuloTipo(t)}</option>)}
           </Escolha>
-          <Escolha rotulo="Lote" value={lote} onChange={(e) => setLote(e.target.value)}>
+          <Escolha rotulo="Lote" value={lote} onChange={(e) => filtrar(setLote)(e.target.value)}>
             <option value="">Todos os lotes</option>
             {opcoesLote.map((o) => <option key={o.chave} value={o.chave}>{o.rotulo} — {formatarNumero(o.total)}</option>)}
           </Escolha>
-          <Campo type="date" rotulo="Cadastrado desde" ajuda="Data de cadastro da conta" value={de} onChange={(e) => setDe(e.target.value)} />
-          <Campo type="date" rotulo="Cadastrado até" ajuda="Data de cadastro da conta" value={ate} onChange={(e) => setAte(e.target.value)} />
+          <Campo type="date" rotulo="Cadastrado desde" ajuda="Data de cadastro da conta" value={de} onChange={(e) => filtrar(setDe)(e.target.value)} />
+          <Campo type="date" rotulo="Cadastrado até" ajuda="Data de cadastro da conta" value={ate} onChange={(e) => filtrar(setAte)(e.target.value)} />
         </div>
       )}
 
@@ -155,6 +160,8 @@ export function Inscritos({ inscritos, carregando, erro, aoTentar, aoRemovido }:
       )}
 
       {corpo}
+
+      <Paginacao pagina={paginaAtual} total={filtrados.length} porPagina={POR_PAGINA} aoMudar={setPagina} rotulo="pessoas" />
 
       <p className="text-sm text-sutil">
         Para outras ações sobre uma pessoa, use <Link href="/usuarios" className="font-medium text-tinta underline">Usuários</Link>.

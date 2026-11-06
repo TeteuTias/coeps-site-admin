@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { useId } from "react";
-import type { ComponentProps, ReactNode } from "react";
-import { ArrowLeft, LoaderCircle, Search } from "lucide-react";
+import type { ComponentProps, CSSProperties, ReactNode } from "react";
+import { ArrowLeft, ChevronLeft, ChevronRight, LoaderCircle, Search } from "lucide-react";
 
 // Peças do painel. Ação principal em pílula de tinta, as demais em contorno; cartões claros sobre o papel.
 // Toda cor vem de token (app/globals.css), então um tema escuro depois não pede mexer aqui.
 
+// Dentro da faixa escura do Cabecalho ([data-faixa]) o principal inverte para branco e o contorno vira vidro.
+// As classes com variante ficam escritas por inteiro: o Tailwind só enxerga o que aparece literal no código.
 const BOTAO = {
-  principal: "bg-tinta text-white hover:bg-black",
-  contorno: "border border-linha bg-cartao text-tinta hover:border-tinta/40",
-  fantasma: "text-tinta hover:bg-recuo",
+  principal: "bg-tinta text-white hover:bg-black [[data-faixa]_&]:bg-white [[data-faixa]_&]:text-tinta [[data-faixa]_&]:hover:bg-recuo",
+  contorno: "border border-linha bg-cartao text-tinta hover:border-tinta/40 [[data-faixa]_&]:border-white/25 [[data-faixa]_&]:bg-white/10 [[data-faixa]_&]:text-white [[data-faixa]_&]:hover:bg-white/20 [[data-faixa]_&]:hover:border-white/40",
+  fantasma: "text-tinta hover:bg-recuo [[data-faixa]_&]:text-white [[data-faixa]_&]:hover:bg-white/10",
   perigo: "border border-erro/30 bg-cartao text-erro hover:bg-erro-fundo",
   perigoSolido: "bg-erro text-white hover:bg-[#8c1f15]",
 } as const;
@@ -40,7 +42,8 @@ export function BotaoLink({ estilo, tamanho, className, ...p }: ComponentProps<t
 }
 
 export function Pagina({ largura = "normal", className = "", children, ...p }: ComponentProps<"main"> & { largura?: "estreita" | "normal" | "ampla" }) {
-  const max = { estreita: "max-w-3xl", normal: "max-w-[1240px]", ampla: "max-w-[1500px]" }[largura];
+  // "normal" e "ampla" têm a mesma largura: o conteúdo não muda de tamanho de uma tela para outra
+  const max = { estreita: "max-w-3xl", normal: "max-w-[1400px]", ampla: "max-w-[1400px]" }[largura];
   return (
     <main {...p} className={`mx-auto grid w-full content-start gap-6 px-4 py-6 sm:px-8 sm:py-10 ${max} ${className}`}>
       {children}
@@ -48,31 +51,45 @@ export function Pagina({ largura = "normal", className = "", children, ...p }: C
   );
 }
 
-export function Cabecalho({ titulo, sub, etiqueta, acoes, voltar }: {
+// Brilho suave no canto da faixa: cada área tem o seu acento CIEPS
+const ACENTO = { vermelho: "#e5534b", azul: "#3b82d6", ouro: "#ef9f27" } as const;
+export type AcentoFaixa = keyof typeof ACENTO;
+
+/** Faixa escura do topo da página: título, ações e, como filhos, as métricas da tela (que ficam em vidro sobre o azul-noite). */
+export function Cabecalho({ titulo, sub, etiqueta, acoes, voltar, acento = "ouro", children }: {
   titulo: ReactNode; sub?: ReactNode; etiqueta?: string; acoes?: ReactNode; voltar?: { href: string; rotulo: string };
+  acento?: AcentoFaixa; children?: ReactNode;
 }) {
   return (
-    <header className="grid gap-3">
-      {voltar && (
-        <Link href={voltar.href} className="inline-flex w-fit items-center gap-1.5 text-sm text-sutil hover:text-tinta">
-          <ArrowLeft className="size-4" aria-hidden="true" />{voltar.rotulo}
-        </Link>
-      )}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          {etiqueta && <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-acao">{etiqueta}</p>}
-          <h1 className="titulo text-[clamp(1.7rem,3.6vw,2.4rem)] leading-tight">{titulo}</h1>
-          {sub && <p className="mt-1.5 max-w-3xl text-[15px] text-sutil">{sub}</p>}
+    <header
+      data-faixa=""
+      style={{ "--brilho": ACENTO[acento] } as CSSProperties}
+      className="relative grid gap-5 overflow-hidden rounded-3xl bg-moldura p-5 text-moldura-texto shadow-[0_12px_32px_-16px_rgb(15_30_51/.7)] sm:p-7"
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_120%_at_100%_0%,color-mix(in_srgb,var(--brilho)_30%,transparent),transparent)]" aria-hidden="true" />
+      <div className="relative grid gap-3">
+        {voltar && (
+          <Link href={voltar.href} className="inline-flex w-fit items-center gap-1.5 text-sm text-moldura-sutil hover:text-white">
+            <ArrowLeft className="size-4" aria-hidden="true" />{voltar.rotulo}
+          </Link>
+        )}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0">
+            {etiqueta && <p className="mb-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-destaque">{etiqueta}</p>}
+            <h1 className="titulo text-[clamp(1.7rem,3.6vw,2.4rem)] leading-tight text-white">{titulo}</h1>
+            {sub && <p className="mt-1.5 max-w-3xl text-[15px] text-moldura-sutil">{sub}</p>}
+          </div>
+          {acoes && <div className="flex flex-wrap gap-2">{acoes}</div>}
         </div>
-        {acoes && <div className="flex flex-wrap gap-2">{acoes}</div>}
+        <div className="regua w-24" aria-hidden="true" />
       </div>
-      <div className="regua w-24" aria-hidden="true" />
+      {children && <div className="relative">{children}</div>}
     </header>
   );
 }
 
 export function Cartao({ className = "", children, ...p }: ComponentProps<"section">) {
-  return <section {...p} className={`rounded-2xl bg-cartao p-5 shadow-[0_1px_0_var(--linha)] ring-1 ring-linha/60 sm:p-6 ${className}`}>{children}</section>;
+  return <section {...p} className={`rounded-2xl border border-linha bg-cartao p-5 shadow-[0_1px_2px_rgb(26_20_10/.06),0_10px_24px_-14px_rgb(26_20_10/.28)] sm:p-6 ${className}`}>{children}</section>;
 }
 
 /** Cartão com título de seção (h2). */
@@ -129,10 +146,10 @@ export function Aviso({ tom = "neutro", titulo, children }: { tom?: "neutro" | "
 export function Metrica({ rotulo, valor, detalhe, className = "" }: { rotulo: string; valor?: ReactNode | null; detalhe?: ReactNode; className?: string }) {
   const semValor = valor === null || valor === undefined;
   return (
-    <div className={`rounded-2xl bg-cartao p-4 shadow-[0_1px_0_var(--linha)] ring-1 ring-linha/60 ${className}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide text-sutil">{rotulo}</p>
-      <p className={`num mt-1 ${semValor ? "text-base italic text-sutil" : "titulo text-3xl leading-none"}`}>{semValor ? "Indisponível" : valor}</p>
-      {detalhe && <p className="mt-1.5 text-xs text-sutil">{detalhe}</p>}
+    <div className={`rounded-2xl border border-linha bg-cartao p-4 shadow-[0_1px_2px_rgb(26_20_10/.06)] [[data-faixa]_&]:border-white/15 [[data-faixa]_&]:bg-white/[.08] [[data-faixa]_&]:shadow-none ${className}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-sutil [[data-faixa]_&]:text-moldura-sutil">{rotulo}</p>
+      <p className={`num mt-1 ${semValor ? "text-base italic text-sutil [[data-faixa]_&]:text-moldura-sutil" : "titulo text-3xl leading-none [[data-faixa]_&]:text-white"}`}>{semValor ? "Indisponível" : valor}</p>
+      {detalhe && <p className="mt-1.5 text-xs text-sutil [[data-faixa]_&]:text-moldura-sutil">{detalhe}</p>}
     </div>
   );
 }
@@ -211,8 +228,33 @@ export const classeTd = "px-4 py-3 align-middle";
 /** Tabela com rolagem interna e foco por teclado: a página nunca ganha rolagem horizontal. */
 export function TabelaRolavel({ rotulo, className = "", children }: { rotulo: string; className?: string; children: ReactNode }) {
   return (
-    <div role="region" aria-label={rotulo} tabIndex={0} className={`overflow-x-auto rounded-2xl bg-cartao ring-1 ring-linha/60 ${className}`}>
-      <table className="w-full min-w-[40rem] border-collapse text-sm [&_tbody_tr]:border-t [&_tbody_tr]:border-linha [&_thead_tr]:bg-recuo/60">{children}</table>
+    <div role="region" aria-label={rotulo} tabIndex={0} className={`overflow-x-auto rounded-2xl border border-linha bg-cartao shadow-[0_1px_2px_rgb(26_20_10/.06)] ${className}`}>
+      <table className="w-full min-w-[40rem] border-collapse text-sm [&_tbody_tr]:border-t [&_tbody_tr]:border-linha [&_tbody_tr:nth-child(even)]:bg-recuo/50 [&_thead_tr]:bg-recuo">{children}</table>
     </div>
+  );
+}
+
+/** Paginação controlada: "1–50 de 663" e Anterior/Próxima. Some quando tudo cabe numa página. */
+export function Paginacao({ pagina, total, porPagina, aoMudar, rotulo = "itens", className = "" }: {
+  pagina: number; total: number; porPagina: number; aoMudar: (pagina: number) => void; rotulo?: string; className?: string;
+}) {
+  const paginas = Math.max(1, Math.ceil(total / porPagina));
+  if (paginas <= 1) return null;
+  const atual = Math.min(Math.max(pagina, 1), paginas);
+  const de = (atual - 1) * porPagina + 1;
+  const ate = Math.min(atual * porPagina, total);
+  return (
+    <nav aria-label="Paginação" className={`flex flex-wrap items-center justify-between gap-3 ${className}`}>
+      <p className="num text-sm text-sutil">{de}–{ate} de {total} {rotulo}</p>
+      <div className="flex items-center gap-2">
+        <Botao estilo="contorno" tamanho="pequeno" disabled={atual <= 1} onClick={() => aoMudar(atual - 1)}>
+          <ChevronLeft className="size-4" aria-hidden="true" />Anterior
+        </Botao>
+        <span className="num px-1 text-sm text-sutil" aria-current="page">Página {atual} de {paginas}</span>
+        <Botao estilo="contorno" tamanho="pequeno" disabled={atual >= paginas} onClick={() => aoMudar(atual + 1)}>
+          Próxima<ChevronRight className="size-4" aria-hidden="true" />
+        </Botao>
+      </div>
+    </nav>
   );
 }
