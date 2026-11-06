@@ -51,22 +51,16 @@ export function Pagina({ largura = "normal", className = "", children, ...p }: C
   );
 }
 
-// Brilho suave no canto da faixa: cada área tem o seu acento CIEPS
-const ACENTO = { vermelho: "#e5534b", azul: "#3b82d6", ouro: "#ef9f27" } as const;
-export type AcentoFaixa = keyof typeof ACENTO;
-
-/** Faixa escura do topo da página: título, ações e, como filhos, as métricas da tela (que ficam em vidro sobre o azul-noite). */
-export function Cabecalho({ titulo, sub, etiqueta, acoes, voltar, acento = "ouro", children }: {
+/** Faixa bordô do topo da página: título, ações e, como filhos, as métricas da tela (que ficam em vidro sobre o bordô). */
+export function Cabecalho({ titulo, sub, etiqueta, acoes, voltar, children }: {
   titulo: ReactNode; sub?: ReactNode; etiqueta?: string; acoes?: ReactNode; voltar?: { href: string; rotulo: string };
-  acento?: AcentoFaixa; children?: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <header
       data-faixa=""
-      style={{ "--brilho": ACENTO[acento] } as CSSProperties}
-      className="relative grid gap-5 overflow-hidden rounded-3xl bg-moldura p-5 text-moldura-texto shadow-[0_12px_32px_-16px_rgb(15_30_51/.7)] sm:p-7"
+      className="relative grid gap-5 overflow-hidden rounded-3xl bg-moldura p-5 text-moldura-texto shadow-[0_12px_32px_-16px_rgb(74_14_18/.7)] sm:p-7"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_120%_at_100%_0%,color-mix(in_srgb,var(--brilho)_30%,transparent),transparent)]" aria-hidden="true" />
       <div className="relative grid gap-3">
         {voltar && (
           <Link href={voltar.href} className="inline-flex w-fit items-center gap-1.5 text-sm text-moldura-sutil hover:text-white">

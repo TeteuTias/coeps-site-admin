@@ -74,7 +74,6 @@ function Ficha({ userId }: { userId: string }) {
     return (
         <Pagina>
             <Cabecalho
-                acento="azul"
                 etiqueta="Ficha da pessoa"
                 titulo={u ? u.informacoes_usuario.nome ?? "Cadastro pendente" : usuario.carregando ? "Carregando ficha…" : "Ficha indisponível"}
                 sub={u ? <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full bg-cartao py-0.5 pl-3 pr-1 text-sm text-tinta">ID <Copiavel texto={u._id} rotulo="ID da pessoa" /></span> : undefined}

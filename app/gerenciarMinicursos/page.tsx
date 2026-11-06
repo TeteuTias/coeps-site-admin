@@ -85,7 +85,6 @@ export default function Page() {
         titulo="Gerenciar atividades"
         sub="Configure minicursos, visibilidade, vagas e programação."
         acoes={botaoCriar}
-        acento="vermelho"
       >
         {estado === "ok" && itens.length > 0 && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

@@ -151,7 +151,6 @@ function Financeiro() {
       <Cabecalho
         etiqueta="CIEPS"
         titulo="Financeiro"
-        acento="ouro"
         sub={<>Edição em uso: <strong className="text-white">{config.edicaoId ?? "não configurada"}</strong>. Valores, lotes, formas de pagamento e inscritos.</>}
         acoes={acoes}
       >

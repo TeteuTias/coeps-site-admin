@@ -429,7 +429,6 @@ export default function EmailTrabalhosPage() {
         titulo="Enviar e-mails"
         sub="Escreva uma mensagem para quem submeteu trabalhos, em quatro etapas: quem recebe, mensagem, teste e envio."
         voltar={{ href: '/trabalhos', rotulo: 'Voltar para o painel de avaliação' }}
-        acento="vermelho"
       >
         {carga === 'ok' && works.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-3" aria-live="polite">

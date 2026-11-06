@@ -16,7 +16,6 @@ export default function Page() {
         etiqueta="Operação"
         titulo="Controle de presença"
         sub="Abra uma atividade para registrar entradas e saídas e acompanhar os participantes."
-        acento="ouro"
       >
         {ok && (
           <div className="grid gap-3 sm:grid-cols-3">

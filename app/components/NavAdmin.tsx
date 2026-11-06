@@ -19,10 +19,10 @@ const ICONES: Record<IconeMenu, typeof House> = {
 function Marca() {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="titulo grid size-9 place-items-center rounded-xl bg-white text-lg text-moldura" aria-hidden="true">C</span>
+      <span className="titulo grid size-10 place-items-center rounded-lg bg-acao text-xl text-[#f4f1ea] ring-1 ring-white/25" aria-hidden="true">C</span>
       <span className="leading-tight">
-        <span className="titulo block text-[17px] text-white">CIEPS</span>
-        <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-moldura-sutil">Admin</span>
+        <span className="titulo block text-[19px] text-[#f4f1ea]">CIEPS Admin</span>
+        <span className="block text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#f4f1ea]/60">Painel administrativo</span>
       </span>
     </span>
   );
@@ -42,7 +42,8 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
 
   const lista = (
     <nav aria-label="Navegação principal">
-      <ul className="grid gap-0.5">
+      <p className="px-3 pb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.12em] text-[#f4f1ea]/50" aria-hidden="true">Navegação</p>
+      <ul className="grid gap-1.5">
         {itens.map((item) => {
           const Icone = ICONES[item.icone];
           const ativo = itemAtivo(atual, item.href);
@@ -52,9 +53,11 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
                 href={item.href}
                 aria-current={ativo ? "page" : undefined}
                 onClick={() => setAbertoEm(null)}
-                className={`relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[14.5px] font-medium transition-colors ${ativo ? "bg-moldura-2 text-white before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-destaque" : "text-moldura-sutil hover:bg-white/10 hover:text-white"}`}
+                className={`flex min-h-11 items-center gap-3 rounded-lg border px-2.5 py-1.5 text-[14px] font-bold transition-colors ${ativo ? "border-white/20 bg-moldura text-[#f4f1ea] shadow-[0_10px_24px_rgb(74_14_18/.5)]" : "border-transparent text-[#f4f1ea]/75 hover:border-white/10 hover:bg-white/10 hover:text-[#f4f1ea]"}`}
               >
-                <Icone className="size-[18px] shrink-0" aria-hidden="true" />
+                <span className={`grid size-8 shrink-0 place-items-center rounded-md border ${ativo ? "border-white/40 bg-white/10 text-[#f4f1ea]" : "border-white/10 bg-white/5 text-destaque"}`} aria-hidden="true">
+                  <Icone className="size-[17px]" />
+                </span>
                 {item.rotulo}
               </Link>
             </li>
@@ -65,11 +68,11 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
   );
 
   const rodape = (
-    <div className="grid gap-1 border-t border-white/10 pt-3">
-      <p className="truncate px-3 text-sm font-medium text-white" title={nome}>{nome}</p>
-      {email && email !== nome && <p className="truncate px-3 text-xs text-moldura-sutil" title={email}>{email}</p>}
+    <div className="relative grid gap-1 border-t border-white/15 pt-3">
+      <p className="truncate px-3 text-sm font-medium text-[#f4f1ea]" title={nome}>{nome}</p>
+      {email && email !== nome && <p className="truncate px-3 text-xs text-[#f4f1ea]/60" title={email}>{email}</p>}
       {/* <a>, não <Link>: o prefetch do Link chamaria a saída sozinho */}
-      <a href="/auth/logout" className="mt-1 flex min-h-11 items-center gap-3 rounded-xl px-3 text-[14.5px] font-medium text-moldura-sutil hover:bg-white/10 hover:text-white">
+      <a href="/auth/logout" className="mt-1 flex min-h-11 items-center gap-3 rounded-lg px-3 text-[14px] font-bold text-[#f4f1ea]/75 hover:bg-white/10 hover:text-[#f4f1ea]">
         <LogOut className="size-[18px] shrink-0" aria-hidden="true" />
         Sair
       </a>
@@ -78,11 +81,12 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
 
   return (
     <>
-      <aside data-nao-imprimir="" data-moldura="" className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col justify-between overflow-y-auto bg-moldura p-4 lg:flex">
-        <div className="grid content-start gap-5">
-          <Link href="/" aria-label="CIEPS Admin, ir para o início" className="grid gap-3 px-3 pt-1">
+      <aside data-nao-imprimir="" data-moldura="" className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col justify-between overflow-y-auto border-r border-white/15 bg-lateral p-4 shadow-[16px_0_48px_rgb(26_26_26/.14)] lg:flex">
+        {/* textura da barra: brilhos e hachura bem discretos */}
+        <div className="pointer-events-none absolute inset-0 opacity-[.18] bg-[radial-gradient(circle_at_16%_9%,rgb(239_159_39/.75),transparent_8rem),radial-gradient(circle_at_90%_24%,rgb(24_95_165/.85),transparent_10rem),repeating-linear-gradient(135deg,rgb(244_241_234/.08)_0_1px,transparent_1px_22px)]" aria-hidden="true" />
+        <div className="relative grid content-start gap-5">
+          <Link href="/" aria-label="CIEPS Admin, ir para o início" className="grid gap-4 border-b border-white/15 px-1 pb-5 pt-1">
             <Marca />
-            <span className="regua" aria-hidden="true" />
           </Link>
           {lista}
         </div>
@@ -92,7 +96,7 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
       <header
         data-nao-imprimir=""
         data-moldura=""
-        className="sticky top-0 z-30 bg-moldura lg:hidden"
+        className="sticky top-0 z-30 border-b border-white/15 bg-lateral lg:hidden"
         onKeyDown={(e) => {
           if (e.key === "Escape" && aberto) { setAbertoEm(null); botao.current?.focus(); }
         }}
@@ -113,7 +117,7 @@ export function NavAdmin({ itens, nome, email }: { itens: ItemMenu[]; nome: stri
         </div>
         <div className="regua" aria-hidden="true" />
         {aberto && (
-          <div id="menu-mobile" className="aviso-entra absolute inset-x-0 top-full grid max-h-[calc(100dvh-4rem)] gap-3 overflow-y-auto border-t border-white/10 bg-moldura p-4 shadow-lg">
+          <div id="menu-mobile" className="aviso-entra absolute inset-x-0 top-full grid max-h-[calc(100dvh-4rem)] gap-3 overflow-y-auto border-t border-white/10 bg-lateral p-4 shadow-lg">
             {lista}
             {rodape}
           </div>

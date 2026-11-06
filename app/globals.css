@@ -12,11 +12,13 @@
   --linha: #cfc5b0;
   --recuo: #f0eadc;
 
-  /* Moldura escura: barra lateral e faixa de cabeçalho. Texto claro ≥ 8:1 sobre --moldura. */
-  --moldura: #0f1e33;
-  --moldura-2: #1b2f50;
-  --moldura-texto: #e8edf5;
-  --moldura-sutil: #a9b8cf;
+  /* Moldura: barra lateral e faixa de cabeçalho em vinho escuro (#4a0e12), derivado do vermelho do congresso (--acao). Texto branco ≥ 15:1; --moldura-sutil ≥ 10:1 sobre --moldura. */
+  --moldura: #4a0e12;
+  --moldura-2: #6b1a20;
+  --moldura-texto: #fdf1f1;
+  --moldura-sutil: #ecc9cb;
+  /* Barra lateral: cinza grafite, como na versão anterior; só o item ativo usa o bordô. */
+  --lateral: #1d1b1a;
 
   --acao: #a32d2d; /* vermelho CIEPS: marca e seleção */
   --info: #185fa5; /* azul CIEPS */
@@ -70,6 +72,7 @@
   --color-moldura-2: var(--moldura-2);
   --color-moldura-texto: var(--moldura-texto);
   --color-moldura-sutil: var(--moldura-sutil);
+  --color-lateral: var(--lateral);
   --color-acao: var(--acao);
   --color-info: var(--info);
   --color-info-fundo: var(--info-fundo);

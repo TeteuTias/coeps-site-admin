@@ -21,7 +21,6 @@ export default function Page() {
         etiqueta="Relatórios"
         titulo="Listas de participantes"
         sub="Gere listas prontas para conferência ou impressão. Cada lista abre em uma nova aba."
-        acento="azul"
       >
         {ok && (
           <div className="grid gap-3 sm:grid-cols-3">

@@ -340,7 +340,6 @@ function PainelTrabalhos() {
         etiqueta="CIEPS / Trabalhos"
         titulo="Painel de avaliação"
         sub="Revise, filtre e avalie os trabalhos acadêmicos submetidos."
-        acento="vermelho"
         acoes={<BotaoLink href="/trabalhos/email" estilo="contorno"><Mail className="size-4" aria-hidden="true" />Enviar e-mails</BotaoLink>}
       >
         {carregou && (

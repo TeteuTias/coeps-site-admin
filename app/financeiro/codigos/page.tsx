@@ -446,7 +446,6 @@ export default function PaymentCodesPage() {
         <Cabecalho
           etiqueta="CIEPS · Financeiro"
           titulo="Códigos de pagamento"
-          acento="ouro"
           sub="Gere descontos de uso único, acompanhe rastreios e consulte as vendas ligadas a cada código."
           voltar={{ href: "/financeiro", rotulo: "Voltar ao financeiro" }}
         />
@@ -460,7 +459,6 @@ export default function PaymentCodesPage() {
       <Cabecalho
         etiqueta="CIEPS · Financeiro"
         titulo="Códigos de pagamento"
-        acento="ouro"
         sub={<>Edição em uso: <strong className="text-white">{edicaoEmUso ?? "carregando…"}</strong>. Gere descontos de uso único, acompanhe rastreios e consulte as vendas de cada código.</>}
         voltar={{ href: "/financeiro", rotulo: "Voltar ao financeiro" }}
         acoes={acoesCabecalho}
