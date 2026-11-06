@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarClock, MapPin } from "lucide-react";
+import { CalendarClock, LayoutGrid, List, MapPin } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Botao, BotaoLink, CampoBusca, Escolha, Selo } from "./ui";
-import type { EstiloBotao } from "./ui";
+import { Botao, BotaoLink, CampoBusca, Escolha, Paginacao, Selo } from "./ui";
+import type { EstiloBotao, TamanhoBotao } from "./ui";
 import { Atualizando, Estado } from "./Estado";
 import { Copiavel } from "./Copiavel";
 import { useAvisos } from "./Avisos";
@@ -125,6 +125,76 @@ export function useCatalogo({ palestras }: { palestras: boolean }) {
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
+const POR_PAGINA = 24;
+
+function BotoesAcao({ item, acoes, tamanho }: { item: ItemCatalogo; acoes: AcaoCartao[]; tamanho?: TamanhoBotao }) {
+  return acoes.map((a) => {
+    const Icone = a.icone;
+    const rotuloAria = `${a.rotulo}: ${item.nome}${a.novaAba ? " (abre em nova aba)" : ""}`;
+    const conteudo = <>{Icone && <Icone className="size-4" aria-hidden="true" />}{a.rotulo}{a.novaAba && <span className="sr-only"> (abre em nova aba)</span>}</>;
+    return a.href ? (
+      <BotaoLink key={a.rotulo} href={a.href} prefetch={false} target={a.novaAba ? "_blank" : undefined} rel={a.novaAba ? "noopener" : undefined} estilo={a.estilo ?? "contorno"} tamanho={tamanho} aria-label={rotuloAria}>{conteudo}</BotaoLink>
+    ) : (
+      <Botao key={a.rotulo} estilo={a.estilo ?? "contorno"} tamanho={tamanho} onClick={a.onClick} carregando={a.carregando} aria-label={rotuloAria}>{conteudo}</Botao>
+    );
+  });
+}
+
+function SelosAtividade({ item, mostrarSituacao }: { item: ItemCatalogo; mostrarSituacao?: boolean }) {
+  const vagas = item.vagas ?? 0;
+  return (
+    <>
+      <Selo>{item.tipo || "Sem tipo"}</Selo>
+      {mostrarSituacao && item.natureza === "minicurso" && (
+        <>
+          <Selo tom={item.visivel ? "ok" : "neutro"}>{item.visivel ? "Visível ao usuário" : "Oculta ao usuário"}</Selo>
+          <Selo tom={item.abertas ? "info" : "neutro"}>{item.abertas ? "Inscrições abertas" : "Inscrições encerradas"}</Selo>
+          <Selo tom={item.gratuita ? "ok" : "alerta"}>{item.gratuita ? "Gratuita" : `Paga · ${formatarMoeda(item.valor)}`}</Selo>
+        </>
+      )}
+      {vagas > 0 && (item.inscritos ?? 0) > vagas && <Selo tom="alerta">Acima do limite de vagas</Selo>}
+    </>
+  );
+}
+
+/** Uma linha por atividade: no desktop vira colunas (atividade, quando, vagas, ações); no celular empilha. */
+function LinhaAtividade({ item, acoes, mostrarSituacao, mostrarPresentes }: {
+  item: ItemCatalogo; acoes: AcaoCartao[]; mostrarSituacao?: boolean; mostrarPresentes?: boolean;
+}) {
+  const vagas = item.vagas ?? 0;
+  const inscritos = item.inscritos ?? 0;
+  return (
+    <li className="grid gap-x-5 gap-y-2 px-4 py-3 md:grid-cols-[minmax(0,1fr)_13rem_11rem_auto] md:items-center">
+      <div className="grid min-w-0 gap-1">
+        <h2 className="break-words text-[15px] font-semibold leading-snug">{item.nome}</h2>
+        <div className="flex flex-wrap items-center gap-1.5"><SelosAtividade item={item} mostrarSituacao={mostrarSituacao} /></div>
+        {item.nota && <p className="text-xs text-info">{item.nota}</p>}
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-sutil">Código <Copiavel texto={item.id} rotulo={`código de ${item.nome}`} /></p>
+      </div>
+      <div className="grid gap-0.5 text-sm text-sutil">
+        {item.periodo
+          ? <p className="num flex items-start gap-1.5"><CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span>{item.periodo}</span></p>
+          : <p>Sem horário definido</p>}
+        {item.local && <p className="flex items-start gap-1.5"><MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" /><span className="break-words">{item.local}</span></p>}
+      </div>
+      <div className="num text-sm">
+        {item.natureza === "minicurso" ? (
+          <>
+            <p><strong>{formatarNumero(inscritos)}</strong>{vagas > 0 ? ` / ${formatarNumero(vagas)} vagas` : " inscritos"}</p>
+            <p className="text-xs text-sutil">
+              {vagas > 0 ? `${formatarNumero(Math.max(0, vagas - inscritos))} restantes` : "limite de vagas não definido"}
+              {mostrarPresentes && item.presentes !== undefined && ` · ${formatarNumero(item.presentes)} com presença`}
+            </p>
+          </>
+        ) : (
+          <p className="text-xs text-sutil">Todos os congressistas confirmados</p>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2 md:justify-end"><BotoesAcao item={item} acoes={acoes} tamanho="pequeno" /></div>
+    </li>
+  );
+}
+
 function CartaoAtividade({ item, acoes, mostrarSituacao, mostrarPresentes }: {
   item: ItemCatalogo; acoes: AcaoCartao[]; mostrarSituacao?: boolean; mostrarPresentes?: boolean;
 }) {
@@ -133,17 +203,7 @@ function CartaoAtividade({ item, acoes, mostrarSituacao, mostrarPresentes }: {
   const pct = vagas > 0 ? Math.min(100, Math.round((inscritos / vagas) * 100)) : 0;
   return (
     <li className="grid content-start gap-3 rounded-2xl bg-cartao p-5 shadow-[0_1px_0_var(--linha)] ring-1 ring-linha/60">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Selo>{item.tipo || "Sem tipo"}</Selo>
-        {mostrarSituacao && item.natureza === "minicurso" && (
-          <>
-            <Selo tom={item.visivel ? "ok" : "neutro"}>{item.visivel ? "Visível ao usuário" : "Oculta ao usuário"}</Selo>
-            <Selo tom={item.abertas ? "info" : "neutro"}>{item.abertas ? "Inscrições abertas" : "Inscrições encerradas"}</Selo>
-            <Selo tom={item.gratuita ? "ok" : "alerta"}>{item.gratuita ? "Gratuita" : `Paga · ${formatarMoeda(item.valor)}`}</Selo>
-          </>
-        )}
-        {vagas > 0 && inscritos > vagas && <Selo tom="alerta">Acima do limite de vagas</Selo>}
-      </div>
+      <div className="flex flex-wrap items-center gap-1.5"><SelosAtividade item={item} mostrarSituacao={mostrarSituacao} /></div>
 
       <h2 className="titulo break-words text-lg leading-snug">{item.nome}</h2>
 
@@ -174,18 +234,7 @@ function CartaoAtividade({ item, acoes, mostrarSituacao, mostrarPresentes }: {
 
       <p className="flex flex-wrap items-center gap-1.5 text-xs text-sutil">Código <Copiavel texto={item.id} rotulo={`código de ${item.nome}`} /></p>
 
-      <div className="mt-auto flex flex-wrap gap-2 pt-1">
-        {acoes.map((a) => {
-          const Icone = a.icone;
-          const rotuloAria = `${a.rotulo}: ${item.nome}${a.novaAba ? " (abre em nova aba)" : ""}`;
-          const conteudo = <>{Icone && <Icone className="size-4" aria-hidden="true" />}{a.rotulo}{a.novaAba && <span className="sr-only"> (abre em nova aba)</span>}</>;
-          return a.href ? (
-            <BotaoLink key={a.rotulo} href={a.href} prefetch={false} target={a.novaAba ? "_blank" : undefined} rel={a.novaAba ? "noopener" : undefined} estilo={a.estilo ?? "contorno"} aria-label={rotuloAria}>{conteudo}</BotaoLink>
-          ) : (
-            <Botao key={a.rotulo} estilo={a.estilo ?? "contorno"} onClick={a.onClick} carregando={a.carregando} aria-label={rotuloAria}>{conteudo}</Botao>
-          );
-        })}
-      </div>
+      <div className="mt-auto flex flex-wrap gap-2 pt-1"><BotoesAcao item={item} acoes={acoes} /></div>
     </li>
   );
 }
@@ -206,6 +255,9 @@ export function CatalogoAtividades({ itens, estado, atualizando, aoTentar, acoes
   const [tipo, setTipo] = useState("");
   const [natureza, setNatureza] = useState("");
   const [extras, setExtras] = useState<Record<string, string>>({});
+  const [modo, setModo] = useState<"lista" | "grade">("lista");
+  const [pagina, setPagina] = useState(1);
+  const topo = useRef<HTMLDivElement>(null);
 
   const tipos = useMemo(() => [...new Set(itens.map((i) => i.tipo).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR")), [itens]);
   const temAmbas = itens.some((i) => i.natureza === "minicurso") && itens.some((i) => i.natureza === "palestra");
@@ -220,29 +272,33 @@ export function CatalogoAtividades({ itens, estado, atualizando, aoTentar, acoes
   }, [itens, busca, tipo, natureza, extras, filtros]);
 
   const filtrando = !!(busca || tipo || natureza || Object.values(extras).some(Boolean));
-  const limpar = () => { setBusca(""); setTipo(""); setNatureza(""); setExtras({}); };
+  const limpar = () => { setBusca(""); setTipo(""); setNatureza(""); setExtras({}); setPagina(1); };
+  // a lista pode encolher (filtro, exclusão, recarga): a página nunca passa da última
+  const atual = Math.min(pagina, Math.max(1, Math.ceil(visiveis.length / POR_PAGINA)));
+  const daPagina = visiveis.slice((atual - 1) * POR_PAGINA, atual * POR_PAGINA);
+  const irPara = (p: number) => { setPagina(p); topo.current?.scrollIntoView({ block: "start" }); };
 
   if (estado === "carregando") return <Estado tipo="carregando" titulo="Carregando atividades…" />;
   if (estado === "erro") return <Estado tipo="erro" titulo="Não foi possível carregar as atividades" texto="Verifique sua conexão e tente de novo." aoTentar={aoTentar} />;
   if (itens.length === 0) return <Estado tipo="vazio" titulo="Nenhuma atividade cadastrada" texto={textoVazio} acao={acaoVazio} />;
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <CampoBusca rotulo="Buscar atividade por nome ou código" placeholder="Buscar por nome ou código…" value={busca} onChange={(e) => setBusca(e.target.value)} className="sm:col-span-2 lg:col-span-4" />
+    <div ref={topo} className="grid scroll-mt-4 gap-4">
+      <div className="grid gap-3 rounded-2xl border border-linha bg-cartao p-4 shadow-[0_1px_2px_rgb(26_20_10/.06)] sm:grid-cols-2 lg:grid-cols-4">
+        <CampoBusca rotulo="Buscar atividade por nome ou código" placeholder="Buscar por nome ou código…" value={busca} onChange={(e) => { setBusca(e.target.value); setPagina(1); }} className="sm:col-span-2 lg:col-span-4" />
         {temAmbas && (
-          <Escolha rotulo="Modalidade" value={natureza} onChange={(e) => setNatureza(e.target.value)}>
+          <Escolha rotulo="Modalidade" value={natureza} onChange={(e) => { setNatureza(e.target.value); setPagina(1); }}>
             <option value="">Todas</option>
             <option value="minicurso">Minicursos</option>
             <option value="palestra">Palestras</option>
           </Escolha>
         )}
-        <Escolha rotulo="Tipo" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+        <Escolha rotulo="Tipo" value={tipo} onChange={(e) => { setTipo(e.target.value); setPagina(1); }}>
           <option value="">Todos os tipos</option>
           {tipos.map((t) => <option key={t} value={t}>{t}</option>)}
         </Escolha>
         {filtros.map((f) => (
-          <Escolha key={f.chave} rotulo={f.rotulo} value={extras[f.chave] ?? ""} onChange={(e) => setExtras((a) => ({ ...a, [f.chave]: e.target.value }))}>
+          <Escolha key={f.chave} rotulo={f.rotulo} value={extras[f.chave] ?? ""} onChange={(e) => { setExtras((a) => ({ ...a, [f.chave]: e.target.value })); setPagina(1); }}>
             <option value="">Todas</option>
             {f.opcoes.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
           </Escolha>
@@ -253,20 +309,39 @@ export function CatalogoAtividades({ itens, estado, atualizando, aoTentar, acoes
         <p role="status" aria-live="polite" className="text-sm text-sutil">
           {visiveis.length === itens.length ? `${formatarNumero(itens.length)} atividades` : `${formatarNumero(visiveis.length)} de ${formatarNumero(itens.length)} atividades`}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Atualizando ativo={!!atualizando} />
           {filtrando && <Botao estilo="fantasma" tamanho="pequeno" onClick={limpar}>Limpar filtros</Botao>}
+          <div role="group" aria-label="Modo de exibição" className="flex gap-1.5">
+            <Botao tamanho="pequeno" estilo={modo === "lista" ? "principal" : "contorno"} aria-pressed={modo === "lista"} onClick={() => setModo("lista")}>
+              <List className="size-4" aria-hidden="true" />Lista compacta
+            </Botao>
+            <Botao tamanho="pequeno" estilo={modo === "grade" ? "principal" : "contorno"} aria-pressed={modo === "grade"} onClick={() => setModo("grade")}>
+              <LayoutGrid className="size-4" aria-hidden="true" />Grade
+            </Botao>
+          </div>
         </div>
       </div>
 
       {visiveis.length === 0 ? (
         <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={limpar}>Limpar filtros</Botao>} />
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {visiveis.map((item) => (
-            <CartaoAtividade key={`${item.natureza}-${item.id}`} item={item} acoes={acoes(item)} mostrarSituacao={mostrarSituacao} mostrarPresentes={mostrarPresentes} />
-          ))}
-        </ul>
+        <>
+          {modo === "lista" ? (
+            <ul aria-label="Atividades" className="divide-y divide-linha overflow-hidden rounded-2xl border border-linha bg-cartao shadow-[0_1px_2px_rgb(26_20_10/.06)]">
+              {daPagina.map((item) => (
+                <LinhaAtividade key={`${item.natureza}-${item.id}`} item={item} acoes={acoes(item)} mostrarSituacao={mostrarSituacao} mostrarPresentes={mostrarPresentes} />
+              ))}
+            </ul>
+          ) : (
+            <ul aria-label="Atividades" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {daPagina.map((item) => (
+                <CartaoAtividade key={`${item.natureza}-${item.id}`} item={item} acoes={acoes(item)} mostrarSituacao={mostrarSituacao} mostrarPresentes={mostrarPresentes} />
+              ))}
+            </ul>
+          )}
+          <Paginacao pagina={atual} total={visiveis.length} porPagina={POR_PAGINA} aoMudar={irPara} rotulo="atividades" />
+        </>
       )}
     </div>
   );

@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Download, Mail, RefreshCw } from "lucide-react";
-import { Botao, BotaoLink, Cabecalho, CampoBusca, Escolha, Metrica, Pagina } from "@/app/components/ui";
+import { Botao, BotaoLink, Cabecalho, CampoBusca, Cartao, Escolha, Metrica, Pagina, Paginacao } from "@/app/components/ui";
 import { Atualizando, Estado } from "@/app/components/Estado";
 import { useAvisos } from "@/app/components/Avisos";
 import { useUser } from "@/app/lib/auth0-client";
@@ -16,6 +16,7 @@ import { gravarRascunhos, lerRascunhos, type Rascunho, type Rascunhos } from "./
 import { ORDEM_AVALIACAO, SITUACOES, situacaoDe, type SituacaoId } from "./_componentes/situacao";
 
 type Filtro = SituacaoId | "todas";
+const POR_PAGINA = 20;
 const MSG_SEM_RESPOSTA = "Sem resposta do servidor.";
 
 export default function AvaliarTrabalhoPage() {
@@ -46,6 +47,9 @@ function PainelTrabalhos() {
     const s = params.get("situacao");
     return s && (ORDEM_AVALIACAO as readonly string[]).includes(s) ? (s as Filtro) : "todas";
   });
+
+  const [pagina, setPagina] = useState(1);
+  const inicioLista = useRef<HTMLDivElement>(null);
 
   const [rascunhos, setRascunhos] = useState<Rascunhos>({});
   const [rascunhosLidos, setRascunhosLidos] = useState(false);
@@ -111,7 +115,12 @@ function PainelTrabalhos() {
   const filtrosAtivos = busca.trim() !== "" || situacao !== "todas";
   const n = filtrados.length;
   const escopo = `${formatarNumero(n)} ${n === 1 ? "trabalho" : "trabalhos"}${filtrosAtivos ? (n === 1 ? " filtrado" : " filtrados") : ""}`;
-  const limparFiltros = () => { setBusca(""); setSituacao("todas"); };
+  // Filtrar volta à primeira página; a página exibida nunca passa da última (a lista encolhe ao filtrar ou ao salvar uma avaliação).
+  const paginaAtual = Math.min(pagina, Math.max(1, Math.ceil(n / POR_PAGINA)));
+  const mudarBusca = (v: string) => { setBusca(v); setPagina(1); };
+  const mudarSituacao = (v: Filtro) => { setSituacao(v); setPagina(1); };
+  const limparFiltros = () => { setBusca(""); setSituacao("todas"); setPagina(1); };
+  const irParaPagina = (p: number) => { setPagina(p); inicioLista.current?.scrollIntoView({ block: "start" }); };
 
   const mudarRascunho = useCallback((id: string, patch: Partial<Rascunho> | null) => {
     setRascunhos((prev) => {
@@ -331,24 +340,27 @@ function PainelTrabalhos() {
         etiqueta="CIEPS / Trabalhos"
         titulo="Painel de avaliação"
         sub="Revise, filtre e avalie os trabalhos acadêmicos submetidos."
+        acento="vermelho"
         acoes={<BotaoLink href="/trabalhos/email" estilo="contorno"><Mail className="size-4" aria-hidden="true" />Enviar e-mails</BotaoLink>}
-      />
+      >
+        {carregou && (
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Metrica rotulo="Total de trabalhos" valor={formatarNumero(trabalhos.length)} />
+            {ORDEM_AVALIACAO.map((id) => <Metrica key={id} rotulo={SITUACOES[id].plural} valor={formatarNumero(contagem[id])} />)}
+            {contagem["sem-situacao"] > 0 && <Metrica rotulo={SITUACOES["sem-situacao"].plural} valor={formatarNumero(contagem["sem-situacao"])} />}
+          </div>
+        )}
+      </Cabecalho>
 
       {carregando && <Estado tipo="carregando" titulo="Carregando trabalhos…" linhas={4} />}
       {falhouCarga && <Estado tipo="erro" titulo="Não foi possível carregar os trabalhos" aoTentar={() => void carregar()} />}
 
       {carregou && (
         <>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Metrica rotulo="Total de trabalhos" valor={formatarNumero(trabalhos.length)} />
-            {ORDEM_AVALIACAO.map((id) => <Metrica key={id} rotulo={SITUACOES[id].plural} valor={formatarNumero(contagem[id])} />)}
-            {contagem["sem-situacao"] > 0 && <Metrica rotulo={SITUACOES["sem-situacao"].plural} valor={formatarNumero(contagem["sem-situacao"])} />}
-          </div>
-
-          <section aria-label="Filtros e exportação" className="grid gap-4 rounded-2xl bg-cartao p-4 ring-1 ring-linha/60 sm:p-5">
+          <Cartao aria-label="Filtros e exportação" className="grid gap-4">
             <div className="grid gap-3 md:grid-cols-[1fr_16rem_auto] md:items-end">
-              <CampoBusca rotulo="Buscar por título, autor ou titular" rotuloOculto={false} placeholder="Título do trabalho, autor ou titular da conta…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-              <Escolha rotulo="Situação" value={situacao} onChange={(e) => setSituacao(e.target.value as Filtro)}>
+              <CampoBusca rotulo="Buscar por título, autor ou titular" rotuloOculto={false} placeholder="Título do trabalho, autor ou titular da conta…" value={busca} onChange={(e) => mudarBusca(e.target.value)} />
+              <Escolha rotulo="Situação" value={situacao} onChange={(e) => mudarSituacao(e.target.value as Filtro)}>
                 <option value="todas">Todas as situações</option>
                 {ORDEM_AVALIACAO.map((id) => <option key={id} value={id}>{SITUACOES[id].rotulo}</option>)}
               </Escolha>
@@ -364,11 +376,11 @@ function PainelTrabalhos() {
                 {exportando !== "planilha" && <Download className="size-4" aria-hidden="true" />}Baixar informações de {escopo}
               </Botao>
             </div>
-            <p className="text-xs text-sutil">Os dois botões usam a lista exibida abaixo, com a busca e a situação escolhidas. A planilha traz o titular que submeteu e os autores, sem CPF.</p>
+            <p className="text-xs text-sutil">Os dois botões usam toda a lista filtrada (todas as páginas), com a busca e a situação escolhidas. A planilha traz o titular que submeteu e os autores, sem CPF.</p>
             {progresso && <p role="status" aria-live="polite" className="text-sm text-sutil">{progresso}</p>}
-          </section>
+          </Cartao>
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div ref={inicioLista} className="flex scroll-mt-4 flex-wrap items-center justify-between gap-2">
             <p role="status" aria-live="polite" className="text-sm font-medium">
               {n === 0 ? "Nenhum trabalho com os filtros atuais." : `${formatarNumero(n)} ${n === 1 ? "trabalho encontrado" : "trabalhos encontrados"}.`}
             </p>
@@ -378,19 +390,26 @@ function PainelTrabalhos() {
           {trabalhos.length === 0 && <Estado tipo="vazio" titulo="Nenhum trabalho submetido ainda" texto="Quando alguém submeter um trabalho, ele aparece aqui." />}
           {trabalhos.length > 0 && n === 0 && <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={limparFiltros}>Limpar busca e filtros</Botao>} />}
 
+          {n > 0 && <Paginacao pagina={paginaAtual} total={n} porPagina={POR_PAGINA} aoMudar={irParaPagina} rotulo="trabalhos" />}
+
+          {/* Todos os cartões da lista filtrada ficam montados e só a página atual aparece: paginar não descarta o que está
+              em edição (parecer, notas, correção de autor, detalhes abertos, envio em andamento). */}
           <div className="grid gap-4">
-            {filtrados.map((t) => (
-              <CartaoTrabalho
-                key={`${t._id}`}
-                trabalho={t}
-                titular={usuarioPorId.get(`${t.userId}`)}
-                rascunho={rascunhos[`${t._id}`]}
-                aoMudarRascunho={mudarRascunho}
-                aoEnviarAvaliacao={enviarAvaliacao}
-                aoSalvarAutor={salvarAutor}
-              />
+            {filtrados.map((t, i) => (
+              <div key={`${t._id}`} hidden={Math.floor(i / POR_PAGINA) + 1 !== paginaAtual}>
+                <CartaoTrabalho
+                  trabalho={t}
+                  titular={usuarioPorId.get(`${t.userId}`)}
+                  rascunho={rascunhos[`${t._id}`]}
+                  aoMudarRascunho={mudarRascunho}
+                  aoEnviarAvaliacao={enviarAvaliacao}
+                  aoSalvarAutor={salvarAutor}
+                />
+              </div>
             ))}
           </div>
+
+          {n > 0 && <Paginacao pagina={paginaAtual} total={n} porPagina={POR_PAGINA} aoMudar={irParaPagina} rotulo="trabalhos" />}
         </>
       )}
     </Pagina>

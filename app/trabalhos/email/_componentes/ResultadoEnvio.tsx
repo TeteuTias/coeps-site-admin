@@ -139,7 +139,7 @@ export function ResultadoEnvioPainel({ resultados, tituloDoTrabalho, ocupado, co
       )}
 
       {enviados.length > 0 && (
-        <details className="rounded-2xl bg-cartao px-4 py-3 ring-1 ring-linha/60">
+        <details className="rounded-2xl border border-linha bg-cartao px-4 py-3">
           <summary className="cursor-pointer text-sm font-semibold">Ver os {plural(enviados.length, 'enviado', 'enviados')}</summary>
           <div className="mt-3">
             <TabelaRolavel rotulo="Destinatários com envio confirmado" className="max-h-96 overflow-y-auto">

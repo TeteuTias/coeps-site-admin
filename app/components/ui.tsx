@@ -146,9 +146,9 @@ export function Aviso({ tom = "neutro", titulo, children }: { tom?: "neutro" | "
 export function Metrica({ rotulo, valor, detalhe, className = "" }: { rotulo: string; valor?: ReactNode | null; detalhe?: ReactNode; className?: string }) {
   const semValor = valor === null || valor === undefined;
   return (
-    <div className={`rounded-2xl border border-linha bg-cartao p-4 shadow-[0_1px_2px_rgb(26_20_10/.06)] [[data-faixa]_&]:border-white/15 [[data-faixa]_&]:bg-white/[.08] [[data-faixa]_&]:shadow-none ${className}`}>
+    <div className={`min-w-0 rounded-2xl border border-linha bg-cartao p-4 shadow-[0_1px_2px_rgb(26_20_10/.06)] [[data-faixa]_&]:border-white/15 [[data-faixa]_&]:bg-white/[.08] [[data-faixa]_&]:shadow-none ${className}`}>
       <p className="text-xs font-semibold uppercase tracking-wide text-sutil [[data-faixa]_&]:text-moldura-sutil">{rotulo}</p>
-      <p className={`num mt-1 ${semValor ? "text-base italic text-sutil [[data-faixa]_&]:text-moldura-sutil" : "titulo text-3xl leading-none [[data-faixa]_&]:text-white"}`}>{semValor ? "Indisponível" : valor}</p>
+      <p className={`num mt-1 ${semValor ? "text-base italic text-sutil [[data-faixa]_&]:text-moldura-sutil" : "titulo break-words text-2xl leading-none sm:text-3xl [[data-faixa]_&]:text-white"}`}>{semValor ? "Indisponível" : valor}</p>
       {detalhe && <p className="mt-1.5 text-xs text-sutil [[data-faixa]_&]:text-moldura-sutil">{detalhe}</p>}
     </div>
   );

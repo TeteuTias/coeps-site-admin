@@ -47,8 +47,8 @@ export default function ChamadaPalestra() {
     const { _id } = useParams<{ _id: string }>()
     const user = useUser()
     const { avisar } = useAvisos()
-    // o código do usuário que pode editar a lista é o mesmo da versão anterior da tela
-    const podeGerir = Boolean(user?.user?.sub?.includes('67098341f7397b370e9cb8ba'))
+    // conta administradora atual (a mesma de userPermissionsServerSide); o servidor também valida
+    const podeGerir = Boolean(user?.user?.sub?.includes('6a8799078ecd649be9bdb061'))
 
     const [carga, setCarga] = useState<'carregando' | 'erro' | 'ok'>('carregando')
     const [atualizando, setAtualizando] = useState(false)
@@ -242,7 +242,14 @@ export default function ChamadaPalestra() {
                         />
                     </>
                 )}
-            />
+            >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <Metrica rotulo="Inscritos" valor={formatarNumero(lista.length)} />
+                    <Metrica rotulo="Com entrada" valor={formatarNumero(totais.entrada)} />
+                    <Metrica rotulo="Com saída" valor={formatarNumero(totais.saida)} />
+                    <Metrica rotulo={`Sem ${nomeTurno}`} valor={formatarNumero(lista.length - (turno === 'init' ? totais.entrada : totais.saida))} />
+                </div>
+            </Cabecalho>
 
             <section
                 aria-label="Turno ativo"
@@ -263,13 +270,6 @@ export default function ChamadaPalestra() {
                 </div>
                 <p className="text-sm">Toda presença dada ou retirada nesta tela vale para a <strong>{nomeTurno}</strong>. A tela só registra: a regra de frequência para certificado é definida pela comissão.</p>
             </section>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Metrica rotulo="Inscritos" valor={formatarNumero(lista.length)} />
-                <Metrica rotulo="Com entrada" valor={formatarNumero(totais.entrada)} />
-                <Metrica rotulo="Com saída" valor={formatarNumero(totais.saida)} />
-                <Metrica rotulo={`Sem ${nomeTurno}`} valor={formatarNumero(lista.length - (turno === 'init' ? totais.entrada : totais.saida))} />
-            </div>
 
             <Secao titulo="Credenciamento" descricao={`Leia o QR da credencial ou busque a pessoa. Cada registro vale para a ${nomeTurno}.`}>
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">

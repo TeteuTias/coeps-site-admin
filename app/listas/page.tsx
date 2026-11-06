@@ -21,13 +21,16 @@ export default function Page() {
         etiqueta="Relatórios"
         titulo="Listas de participantes"
         sub="Gere listas prontas para conferência ou impressão. Cada lista abre em uma nova aba."
-      />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Metrica rotulo="Minicursos" valor={ok ? cursos.length : null} />
-        <Metrica rotulo="Palestras" valor={ok ? palestras.length : null} />
-        <Metrica rotulo="Inscritos em minicursos" valor={ok ? cursos.reduce((soma, c) => soma + c.participants.length, 0) : null} />
-      </div>
+        acento="azul"
+      >
+        {ok && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Metrica rotulo="Minicursos" valor={cursos.length} />
+            <Metrica rotulo="Palestras" valor={palestras.length} />
+            <Metrica rotulo="Inscritos em minicursos" valor={cursos.reduce((soma, c) => soma + c.participants.length, 0)} />
+          </div>
+        )}
+      </Cabecalho>
 
       <CatalogoAtividades
         itens={itens}

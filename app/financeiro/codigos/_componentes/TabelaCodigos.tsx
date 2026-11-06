@@ -173,7 +173,7 @@ export function TabelaCodigos(props: Props) {
             const u = usos(item);
             const idDetalhe = `${idPagina}-m-${item.codigoNormalizado}`;
             return (
-              <li key={chaveDe(item)} className="grid gap-3 rounded-2xl bg-cartao p-4 ring-1 ring-linha/60">
+              <li key={chaveDe(item)} className="grid gap-3 rounded-2xl bg-cartao p-4 border border-linha shadow-[0_1px_2px_rgb(26_20_10/.06)]">
                 <div className="flex items-start gap-3">
                   <input
                     type="checkbox"

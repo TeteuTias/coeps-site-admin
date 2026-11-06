@@ -47,8 +47,8 @@ export default function ChamadaMinicurso() {
     const { _id } = useParams<{ _id: string }>()
     const user = useUser()
     const { avisar, confirmar } = useAvisos()
-    // o código do usuário que pode editar a lista é o mesmo da versão anterior da tela
-    const podeGerir = Boolean(user?.user?.sub?.includes('67098341f7397b370e9cb8ba'))
+    // conta administradora atual (a mesma de userPermissionsServerSide); o servidor também valida
+    const podeGerir = Boolean(user?.user?.sub?.includes('6a8799078ecd649be9bdb061'))
 
     const [carga, setCarga] = useState<'carregando' | 'erro' | 'ok'>('carregando')
     const [atualizando, setAtualizando] = useState(false)
@@ -267,14 +267,14 @@ export default function ChamadaMinicurso() {
                         />
                     </>
                 )}
-            />
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Metrica rotulo="Inscritos" valor={formatarNumero(lista.length)} />
-                <Metrica rotulo="Vagas" valor={formatarNumero(curso.vagas)} detalhe={lotado ? 'Lotado' : `${formatarNumero(Math.max(curso.vagas - inscritos.size, 0))} livres`} />
-                <Metrica rotulo="Presentes" valor={formatarNumero(totalPresentes)} />
-                <Metrica rotulo="Ainda não chegaram" valor={formatarNumero(lista.length - totalPresentes)} />
-            </div>
+            >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <Metrica rotulo="Inscritos" valor={formatarNumero(lista.length)} />
+                    <Metrica rotulo="Vagas" valor={formatarNumero(curso.vagas)} detalhe={lotado ? 'Lotado' : `${formatarNumero(Math.max(curso.vagas - inscritos.size, 0))} livres`} />
+                    <Metrica rotulo="Presentes" valor={formatarNumero(totalPresentes)} />
+                    <Metrica rotulo="Ainda não chegaram" valor={formatarNumero(lista.length - totalPresentes)} />
+                </div>
+            </Cabecalho>
 
             <Secao titulo="Credenciamento" descricao="Leia o QR da credencial ou busque a pessoa. A busca também filtra a lista abaixo.">
                 <Aviso tom="info" titulo="Presença e inscrição andam juntas">

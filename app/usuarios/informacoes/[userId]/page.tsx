@@ -1,10 +1,12 @@
 "use client"
 
 import { useParams } from "next/navigation"
-import { Cabecalho, Pagina, Selo, type TomSelo } from "@/app/components/ui"
+import { Cabecalho, Metrica, Pagina } from "@/app/components/ui"
 import { Copiavel } from "@/app/components/Copiavel"
 import { parseAdminUserDetailsHttpResponse, type AdminUserDetails } from "@/app/lib/users/admin-user-contract"
 import type { AdminUserPaymentsResponse } from "@/app/lib/types/payments/payment-admin.t"
+import { participationModeLabel } from "@/app/lib/users/admin-remote-work"
+import { formatarData } from "@/app/lib/formatar"
 import type { ICourse } from "@/app/lib/types/events/event.t"
 import { mensagemDe, pedirJson, useCarga } from "./_componentes/carga"
 import { CadastroSecao } from "./_componentes/CadastroSecao"
@@ -12,11 +14,11 @@ import { ParticipacaoRemotaSecao } from "./_componentes/ParticipacaoRemotaSecao"
 import { AtividadesSecao } from "./_componentes/AtividadesSecao"
 import { ComprasSecao, HistoricoLegadoSecao, SituacaoPagamentoSecao, type ComprasAtuais } from "./_componentes/FinanceiroSecoes"
 
-const SITUACAO: Record<number, { rotulo: string; tom: TomSelo }> = {
-    1: { rotulo: "Pago", tom: "ok" },
-    2: { rotulo: "Pagamento pendente", tom: "alerta" },
-    0: { rotulo: "Não pago", tom: "neutro" },
-    3: { rotulo: "Suspenso", tom: "erro" },
+const SITUACAO: Record<number, string> = {
+    1: "Pago",
+    2: "Pagamento pendente",
+    0: "Não pago",
+    3: "Suspenso",
 }
 
 const SECOES = [
@@ -72,18 +74,21 @@ function Ficha({ userId }: { userId: string }) {
     return (
         <Pagina>
             <Cabecalho
+                acento="azul"
                 etiqueta="Ficha da pessoa"
                 titulo={u ? u.informacoes_usuario.nome ?? "Cadastro pendente" : usuario.carregando ? "Carregando ficha…" : "Ficha indisponível"}
-                sub={u ? <span className="inline-flex flex-wrap items-center gap-1.5">ID <Copiavel texto={u._id} rotulo="ID da pessoa" /></span> : undefined}
+                sub={u ? <span className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full bg-cartao py-0.5 pl-3 pr-1 text-sm text-tinta">ID <Copiavel texto={u._id} rotulo="ID da pessoa" /></span> : undefined}
                 voltar={{ href: "/usuarios", rotulo: "Voltar para a lista" }}
-            />
-
-            {u && (
-                <div className="flex flex-wrap gap-2">
-                    {situacao ? <Selo tom={situacao.tom}>{situacao.rotulo}</Selo> : <Selo>Situação não informada</Selo>}
-                    {u.cadastroPendente && <Selo tom="alerta">Cadastro incompleto</Selo>}
-                </div>
-            )}
+            >
+                {u && (
+                    <section aria-label="Resumo da pessoa" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <Metrica rotulo="Situação" valor={situacao ?? "Não informada"} detalhe={u.pagamento.tipo_pagamento ?? "Tipo não informado"} />
+                        <Metrica rotulo="Participação" valor={participationModeLabel(u.participacao.mode)} detalhe={u.participacao.remoteWorkCount > 0 ? `${u.participacao.remoteWorkCount} trabalho(s) remoto(s)` : undefined} />
+                        <Metrica rotulo="Cadastro" valor={u.cadastroPendente ? "Incompleto" : "Completo"} detalhe={`Criado em ${formatarData(u.informacoes_usuario.data_criacao, "data não informada")}`} />
+                        <Metrica rotulo="Lote" valor={u.lote?.organizador ? "Organizador" : u.lote?.nome ?? "Sem lote"} />
+                    </section>
+                )}
+            </Cabecalho>
 
             <nav aria-label="Seções da ficha" className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
                 {SECOES.map(([id, rotulo]) => (

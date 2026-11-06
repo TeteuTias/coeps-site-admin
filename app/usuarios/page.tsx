@@ -1,7 +1,7 @@
 "use client"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import {
     Botao,
     BotaoLink,
@@ -12,6 +12,7 @@ import {
     Escolha,
     Metrica,
     Pagina,
+    Paginacao,
     Selo,
     TabelaRolavel,
     classeTd,
@@ -196,15 +197,15 @@ function Lista() {
                         Atualizar lista
                     </Botao>
                 }
-            />
-
-            <section aria-label="Resumo" className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                <Metrica rotulo="Total" valor={usuarios ? formatarNumero(usuarios.length) : null} />
-                <Metrica rotulo="Inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 1))} />
-                <Metrica rotulo="Não inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 0))} />
-                <Metrica rotulo="Pagamento em aberto" valor={formatarNullable(contar(u => u.pagamento.situacao === 2))} />
-                <Metrica rotulo="Acesso remoto" valor={formatarNullable(contar(u => ["REMOTE", "BOTH"].includes(u.participacao.mode)))} />
-            </section>
+            >
+                <section aria-label="Resumo" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                    <Metrica className="col-span-2 lg:col-span-1" rotulo="Total" valor={usuarios ? formatarNumero(usuarios.length) : null} />
+                    <Metrica rotulo="Inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 1))} />
+                    <Metrica rotulo="Não inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 0))} />
+                    <Metrica rotulo="Pagamento em aberto" valor={formatarNullable(contar(u => u.pagamento.situacao === 2))} />
+                    <Metrica rotulo="Acesso remoto" valor={formatarNullable(contar(u => ["REMOTE", "BOTH"].includes(u.participacao.mode)))} />
+                </section>
+            </Cabecalho>
 
             <Cartao className="grid gap-4" aria-label="Busca e filtros">
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
@@ -326,17 +327,7 @@ function Lista() {
                             </>
                         )}
 
-                        {totalPaginas > 1 && (
-                            <nav aria-label="Paginação" className="flex items-center justify-between gap-3">
-                                <Botao estilo="contorno" disabled={pagina <= 1} onClick={() => irParaPagina(pagina - 1)}>
-                                    <ChevronLeft className="size-4" aria-hidden="true" />Anterior
-                                </Botao>
-                                <span className="num text-sm text-sutil" aria-current="page">Página {pagina} de {totalPaginas}</span>
-                                <Botao estilo="contorno" disabled={pagina >= totalPaginas} onClick={() => irParaPagina(pagina + 1)}>
-                                    Próxima<ChevronRight className="size-4" aria-hidden="true" />
-                                </Botao>
-                            </nav>
-                        )}
+                        <Paginacao pagina={pagina} total={filtrados.length} porPagina={POR_PAGINA} aoMudar={irParaPagina} rotulo="usuários" />
                     </>
                 )}
             </div>

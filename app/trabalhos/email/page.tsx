@@ -429,7 +429,24 @@ export default function EmailTrabalhosPage() {
         titulo="Enviar e-mails"
         sub="Escreva uma mensagem para quem submeteu trabalhos, em quatro etapas: quem recebe, mensagem, teste e envio."
         voltar={{ href: '/trabalhos', rotulo: 'Voltar para o painel de avaliação' }}
-      />
+        acento="vermelho"
+      >
+        {carga === 'ok' && works.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-3" aria-live="polite">
+            <Metrica rotulo="Trabalhos" valor={formatarNumero(worksAtivos.length)} />
+            <Metrica
+              rotulo="Destinatários"
+              valor={formatarNumero(destinatarios.length)}
+              detalhe={`${plural(countUniqueEmails(destinatarios), 'endereço único', 'endereços únicos')}; um endereço em vários trabalhos recebe uma mensagem por trabalho`}
+            />
+            <Metrica
+              rotulo="Trabalhos sem e-mail"
+              valor={formatarNumero(semDestinatario)}
+              detalhe={semDestinatario > 0 ? 'Não têm e-mail válido para este público e não receberão' : 'Todos têm ao menos um e-mail válido'}
+            />
+          </div>
+        )}
+      </Cabecalho>
 
       <Secao
         titulo="Confirmação automática de recebimento"
@@ -458,7 +475,7 @@ export default function EmailTrabalhosPage() {
         </div>
       </Secao>
 
-      <Secao titulo="1. Quem recebe" descricao="Escolha o público e os trabalhos. A contagem abaixo mostra quantas mensagens serão enviadas antes de você enviar.">
+      <Secao titulo="1. Quem recebe" descricao="Escolha o público e os trabalhos. A contagem no topo da página mostra quantas mensagens serão enviadas antes de você enviar.">
         <fieldset className="grid gap-2 sm:grid-cols-2" disabled={enviando}>
           <legend className="sr-only">Modo de seleção</legend>
           {([
@@ -558,22 +575,6 @@ export default function EmailTrabalhosPage() {
               </ul>
             )}
           </>
-        )}
-
-        {carga === 'ok' && works.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-3" aria-live="polite">
-            <Metrica rotulo="Trabalhos" valor={formatarNumero(worksAtivos.length)} />
-            <Metrica
-              rotulo="Destinatários"
-              valor={formatarNumero(destinatarios.length)}
-              detalhe={`${plural(countUniqueEmails(destinatarios), 'endereço único', 'endereços únicos')}; um endereço em vários trabalhos recebe uma mensagem por trabalho`}
-            />
-            <Metrica
-              rotulo="Trabalhos sem e-mail"
-              valor={formatarNumero(semDestinatario)}
-              detalhe={semDestinatario > 0 ? 'Não têm e-mail válido para este público e não receberão' : 'Todos têm ao menos um e-mail válido'}
-            />
-          </div>
         )}
       </Secao>
 

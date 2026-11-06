@@ -93,6 +93,10 @@ export const LIMITE_USOS_MAX = 5000;
 /** Erro de rede (sem resposta) separado de recusa do servidor, para orientar "confira antes de repetir". */
 export class SemRespostaError extends Error {}
 
+/** 403: a conta não é administradora financeira. Tentar de novo não resolve, então a tela explica em vez de oferecer nova tentativa. */
+export class SemPermissaoError extends Error {}
+export const ehSemPermissao = (error: unknown) => error instanceof SemPermissaoError;
+
 export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -102,6 +106,7 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
     throw new SemRespostaError("Sem resposta do servidor. Confira a conexão e veja se a operação foi aplicada antes de repetir.");
   }
   const payload = (await response.json().catch(() => ({}))) as { message?: string; [key: string]: unknown };
+  if (response.status === 403) throw new SemPermissaoError(payload.message || "Sua conta não tem permissão para esta área.");
   if (!response.ok) throw new Error(payload.message || "Não foi possível concluir a operação.");
   return payload as T;
 }

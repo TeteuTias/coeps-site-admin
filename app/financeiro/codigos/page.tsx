@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { BadgePercent, Clipboard, Download, HeartPulse, Plus, RefreshCw, Trash2, UserRound } from "lucide-react";
 import {
-  Aviso, Botao, Cabecalho, Campo, CampoBusca, Escolha, Metrica, Pagina, Secao, Selo,
+  Aviso, Botao, Cabecalho, Campo, CampoBusca, Escolha, Metrica, Pagina, Paginacao, Secao, Selo,
 } from "@/app/components/ui";
 import { Atualizando, Estado } from "@/app/components/Estado";
 import { Dialogo } from "@/app/components/Dialogo";
@@ -21,6 +21,7 @@ import {
   buildCodeListParams,
   canDeleteCode,
   ehAbortError,
+  ehSemPermissao,
   mensagemErro,
   orientacaoParaMotivo,
   requestJson,
@@ -68,6 +69,8 @@ export default function PaymentCodesPage() {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erroLista, setErroLista] = useState<string | null>(null);
+  // 403: conta sem acesso financeiro. Nova tentativa não resolve; a tela explica e esconde as ações.
+  const [semPermissao, setSemPermissao] = useState(false);
 
   const [acaoAtiva, setAcaoAtiva] = useState<string | null>(null);
   const [ocupadoPainel, setOcupadoPainel] = useState(false);
@@ -102,6 +105,7 @@ export default function PaymentCodesPage() {
     abortRef.current = controller;
     setCarregando(true);
     setErroLista(null);
+    setSemPermissao(false);
     try {
       const params = buildCodeListParams({ ...f, limit: TAMANHO_PAGINA });
       const data = await requestJson<CodesResponse>(`/api/get/pagamentos/codigos?${params.toString()}`, { signal: controller.signal });
@@ -119,6 +123,7 @@ export default function PaymentCodesPage() {
       return true;
     } catch (error) {
       if (ehAbortError(error) || pedido !== pedidoRef.current) return false;
+      if (ehSemPermissao(error)) setSemPermissao(true);
       carregadaRef.current = ""; // sem isso, voltar a esta mesma página não pediria de novo e o erro ficaria na tela
       setErroLista(mensagemErro(error, "Não foi possível carregar os códigos."));
       return false;
@@ -428,22 +433,45 @@ export default function PaymentCodesPage() {
   const bloqueioForm = !isActiveEdition || ocupado;
   const rotuloLista = `${abaAtual.rotulo} da edição ${editionId || "consultada"}`;
 
+  const edicaoEmUso = resumo ? (resumo.activeEditionId ?? "não configurada") : null;
+  const acoesCabecalho = (
+    <Botao estilo="contorno" carregando={carregando && Boolean(listaVisivel)} disabled={carregando} onClick={() => void atualizar()}>
+      <RefreshCw className="size-4" aria-hidden="true" />Atualizar
+    </Botao>
+  );
+
+  if (semPermissao) {
+    return (
+      <Pagina largura="ampla">
+        <Cabecalho
+          etiqueta="CIEPS · Financeiro"
+          titulo="Códigos de pagamento"
+          acento="ouro"
+          sub="Gere descontos de uso único, acompanhe rastreios e consulte as vendas ligadas a cada código."
+          voltar={{ href: "/financeiro", rotulo: "Voltar ao financeiro" }}
+        />
+        <Estado tipo="semPermissao" titulo="Sem acesso aos códigos de pagamento" texto={erroLista ?? "Somente administradores financeiros podem ver e alterar estes códigos."} />
+      </Pagina>
+    );
+  }
+
   return (
     <Pagina largura="ampla">
       <Cabecalho
         etiqueta="CIEPS · Financeiro"
         titulo="Códigos de pagamento"
-        sub="Gere descontos de uso único, acompanhe rastreios e consulte as vendas ligadas a cada código."
+        acento="ouro"
+        sub={<>Edição em uso: <strong className="text-white">{edicaoEmUso ?? "carregando…"}</strong>. Gere descontos de uso único, acompanhe rastreios e consulte as vendas de cada código.</>}
         voltar={{ href: "/financeiro", rotulo: "Voltar ao financeiro" }}
-        acoes={
-          <>
-            <Selo tom="info">Edição ativa: {resumo ? (resumo.activeEditionId ?? "não configurada") : "carregando"}</Selo>
-            <Botao estilo="contorno" carregando={carregando && Boolean(listaVisivel)} disabled={carregando} onClick={() => void atualizar()}>
-              <RefreshCw className="size-4" aria-hidden="true" />Atualizar
-            </Botao>
-          </>
-        }
-      />
+        acoes={acoesCabecalho}
+      >
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Metrica rotulo="Códigos ativos" valor={metrics ? formatarNumero(metrics.ativos) : null} />
+          <Metrica rotulo="Vendas com código" valor={metrics ? formatarNumero(metrics.vendasBrutas) : null} detalhe="Brutas, antes de estornos" />
+          <Metrica rotulo="Vendas confirmadas" valor={metrics ? formatarNumero(metrics.vendasConfirmadas) : null} detalhe="Sem risco financeiro" />
+          <Metrica rotulo="Compras para revisar" valor={metrics ? formatarNumero(metrics.revisoesFinanceiras) : null} detalhe="Em revisão financeira" />
+        </div>
+      </Cabecalho>
 
       <Secao titulo="Edição consultada" descricao="Escolha qual edição você quer ver. Só a edição ativa aceita alterações.">
         <form onSubmit={applyEdition} className="flex flex-wrap items-end gap-3">
@@ -484,14 +512,8 @@ export default function PaymentCodesPage() {
         </Secao>
       )}
 
-      <Secao titulo={`Resumo da edição ${resumo?.edicaoId || editionId || ""}`.trim()} descricao="Vale para a edição inteira, não só para a aba aberta.">
+      <Secao titulo={`Valores da edição ${resumo?.edicaoId || editionId || ""}`.trim()} descricao="Vale para a edição inteira, não só para a aba aberta. Os totais de códigos e vendas estão no topo da página.">
         {!resumo && !carregando && <Aviso tom="erro" titulo="Os números não foram carregados">Os indicadores aparecem como indisponíveis até a lista carregar.</Aviso>}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metrica rotulo="Códigos ativos" valor={metrics ? formatarNumero(metrics.ativos) : null} />
-          <Metrica rotulo="Vendas com código" valor={metrics ? formatarNumero(metrics.vendasBrutas) : null} detalhe="Brutas, antes de estornos" />
-          <Metrica rotulo="Vendas confirmadas" valor={metrics ? formatarNumero(metrics.vendasConfirmadas) : null} detalhe="Sem risco financeiro" />
-          <Metrica rotulo="Compras para revisar" valor={metrics ? formatarNumero(metrics.revisoesFinanceiras) : null} detalhe="Em revisão financeira" />
-        </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Metrica rotulo="Valor bruto confirmado" valor={metrics ? formatarCentavos(metrics.valorBrutoConfirmadoCentavos) : null} />
           <Metrica rotulo="Estornos concluídos" valor={metrics ? formatarCentavos(metrics.valorEstornadoDoneCentavos) : null} />
@@ -653,7 +675,7 @@ export default function PaymentCodesPage() {
                 ) : (
                   <>
                     {isActiveEdition && (
-                      <div className="grid gap-3 rounded-2xl bg-recuo/60 p-4">
+                      <div className="grid gap-3 rounded-2xl border border-linha bg-recuo p-4">
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                           <p role="status" aria-live="polite" className="text-sm">
                             <strong className={`num ${excedeLimite ? "text-alerta" : ""}`}>{formatarNumero(selectedIds.length)}</strong> selecionado(s) · a exclusão aceita até <strong className="num">{LIMITE_EXCLUSAO_LOTE}</strong> por vez
@@ -716,13 +738,13 @@ export default function PaymentCodesPage() {
                       aoSalvarLimite={saveHealthLimit}
                     />
 
-                    {listaVisivel.pagination.totalPages > 1 && (
-                      <nav aria-label="Paginação dos códigos" className="flex flex-wrap items-center justify-between gap-3">
-                        <Botao estilo="contorno" disabled={page <= 1 || carregando} onClick={() => setPage((p) => Math.max(1, p - 1))}>Anterior</Botao>
-                        <span className="num text-sm text-sutil" aria-current="page">Página {listaVisivel.pagination.page} de {listaVisivel.pagination.totalPages}</span>
-                        <Botao estilo="contorno" disabled={page >= listaVisivel.pagination.totalPages || carregando} onClick={() => setPage((p) => p + 1)}>Próxima</Botao>
-                      </nav>
-                    )}
+                    <Paginacao
+                      pagina={listaVisivel.pagination.page}
+                      total={listaVisivel.pagination.total}
+                      porPagina={listaVisivel.pagination.limit || TAMANHO_PAGINA}
+                      aoMudar={setPage}
+                      rotulo="códigos"
+                    />
                   </>
                 )}
               </>

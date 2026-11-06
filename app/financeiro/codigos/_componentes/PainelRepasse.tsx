@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { HeartPulse } from "lucide-react";
 import { Aviso, Botao, Metrica, Secao, Selo } from "@/app/components/ui";
-import { Atualizando } from "@/app/components/Estado";
+import { Atualizando, Estado } from "@/app/components/Estado";
 import { useAvisos } from "@/app/components/Avisos";
 import { formatarDataHora, formatarNumero } from "@/app/lib/formatar";
-import { buildCodeListParams, mensagemErro, requestJson, SemRespostaError, type CodesResponse } from "./tipos";
+import { buildCodeListParams, ehSemPermissao, mensagemErro, requestJson, SemRespostaError, type CodesResponse } from "./tipos";
 
 interface Contagem { edicaoId: string; ativos: number; suspensos: number; codigosBloqueados: number }
 interface Resultado { acao: "SUSPENDER" | "REATIVAR"; edicaoId: string; usuarios: number; codigos: number; em: string }
@@ -29,6 +29,7 @@ export function PainelRepasse({ editionId, activeEditionId, isActiveEdition, blo
   const [contagem, setContagem] = useState<Contagem | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [semPermissao, setSemPermissao] = useState(false);
   const [acaoAtiva, setAcaoAtiva] = useState<"SUSPENDER" | "REATIVAR" | null>(null);
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
@@ -38,10 +39,12 @@ export function PainelRepasse({ editionId, activeEditionId, isActiveEdition, blo
       const dados = await requestJson<Contagem>("/api/post/pagamentos/profissionaisSaude/suspensao");
       setContagem(dados);
       setErro(null);
+      setSemPermissao(false);
       return dados;
     } catch (e) {
       // não mantém o número antigo: sem leitura, o painel diz "Indisponível" em vez de um valor que pode estar velho
       setContagem(null);
+      setSemPermissao(ehSemPermissao(e));
       setErro(mensagemErro(e, "Não foi possível consultar a suspensão."));
       return null;
     } finally {
@@ -148,12 +151,15 @@ export function PainelRepasse({ editionId, activeEditionId, isActiveEdition, blo
       {edicaoDiverge && (
         <Aviso tom="alerta" titulo="A edição ativa mudou">A página mostra {activeEditionId}, mas o servidor trabalha com {contagem?.edicaoId}. Recarregue a página antes de agir.</Aviso>
       )}
-      {erro && (
+      {erro && semPermissao && <Estado tipo="semPermissao" titulo="Sem permissão para o repasse" texto={erro} />}
+      {erro && !semPermissao && (
         <Aviso tom="erro" titulo="Não foi possível ler os números do repasse">
           <p>{erro}</p>
           <Botao className="mt-2" estilo="contorno" carregando={carregando} onClick={() => void carregar()}>Tentar de novo</Botao>
         </Aviso>
       )}
+      {!semPermissao && (
+      <>
       <div className="grid gap-3 sm:grid-cols-3">
         <Metrica rotulo="Inscritos ativos" valor={contagem ? formatarNumero(contagem.ativos) : null} detalhe={contagem ? `Edição ${contagem.edicaoId}` : undefined} />
         <Metrica rotulo="Inscritos suspensos" valor={contagem ? formatarNumero(contagem.suspensos) : null} detalhe={contagem ? `Edição ${contagem.edicaoId}` : undefined} />
@@ -166,6 +172,8 @@ export function PainelRepasse({ editionId, activeEditionId, isActiveEdition, blo
         </Botao>
         <Botao disabled={!podeAgir} carregando={acaoAtiva === "REATIVAR"} onClick={() => void alterar("REATIVAR")}>Reativar todos</Botao>
       </div>
+      </>
+      )}
       {resultado && (
         <Aviso tom="ok" titulo={`${resultado.acao === "SUSPENDER" ? "Última suspensão" : "Última reativação"} desta sessão, ${formatarDataHora(resultado.em)}`}>
           Edição {resultado.edicaoId}: {formatarNumero(resultado.usuarios)} inscrição(ões) {resultado.acao === "SUSPENDER" ? "suspensas" : "reativadas"} e {formatarNumero(resultado.codigos)} código(s) {resultado.acao === "SUSPENDER" ? "bloqueados" : "liberados"}.

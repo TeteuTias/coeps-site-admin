@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Settings, Trash2 } from "lucide-react";
-import { Botao, Cabecalho, Pagina } from "@/app/components/ui";
+import { Botao, Cabecalho, Metrica, Pagina } from "@/app/components/ui";
 import { useAvisos } from "@/app/components/Avisos";
 import CreateCourseModal from "@/app/components/CreateCourseModal";
 import { CatalogoAtividades, deMinicurso, useCatalogo } from "@/app/components/CatalogoAtividades";
@@ -85,7 +85,17 @@ export default function Page() {
         titulo="Gerenciar atividades"
         sub="Configure minicursos, visibilidade, vagas e programação."
         acoes={botaoCriar}
-      />
+        acento="vermelho"
+      >
+        {estado === "ok" && itens.length > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Metrica rotulo="Atividades" valor={formatarNumero(itens.length)} />
+            <Metrica rotulo="Visíveis ao usuário" valor={formatarNumero(itens.filter((i) => i.visivel).length)} />
+            <Metrica rotulo="Inscrições abertas" valor={formatarNumero(itens.filter((i) => i.abertas).length)} />
+            <Metrica rotulo="Inscritos" valor={formatarNumero(itens.reduce((s, i) => s + (i.inscritos ?? 0), 0))} />
+          </div>
+        )}
+      </Cabecalho>
 
       <CatalogoAtividades
         itens={itens}

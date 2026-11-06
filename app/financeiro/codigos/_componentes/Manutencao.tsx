@@ -4,10 +4,11 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { History, Trash2 } from "lucide-react";
 import { Aviso, Botao, Campo } from "@/app/components/ui";
+import { Estado } from "@/app/components/Estado";
 import { useAvisos } from "@/app/components/Avisos";
 import { formatarData, formatarNumero } from "@/app/lib/formatar";
 import { Recolhivel } from "./Recolhivel";
-import { mensagemErro, requestJson, SemRespostaError, type CleanupPreview } from "./tipos";
+import { ehSemPermissao, mensagemErro, requestJson, SemRespostaError, type CleanupPreview } from "./tipos";
 
 interface Props {
   bloqueado: boolean;
@@ -22,6 +23,7 @@ export function Manutencao({ bloqueado, aoOcupar, aoApagar }: Props) {
   const [edicao, setEdicao] = useState("");
   const [previa, setPrevia] = useState<CleanupPreview | null>(null);
   const [acao, setAcao] = useState<"previa" | "apagar" | null>(null);
+  const [semPermissao, setSemPermissao] = useState<string | null>(null);
 
   async function gerarPrevia(event: FormEvent) {
     event.preventDefault();
@@ -31,7 +33,8 @@ export function Manutencao({ bloqueado, aoOcupar, aoApagar }: Props) {
     try {
       setPrevia(await requestJson<CleanupPreview>(`/api/get/pagamentos/historico/preview?edicaoId=${encodeURIComponent(edicao.trim().toUpperCase())}`));
     } catch (e) {
-      avisar("erro", "Não foi possível gerar a prévia", mensagemErro(e, "Tente de novo."));
+      if (ehSemPermissao(e)) setSemPermissao(mensagemErro(e, "Sua conta não tem permissão para esta operação."));
+      else avisar("erro", "Não foi possível gerar a prévia", mensagemErro(e, "Tente de novo."));
     } finally {
       setAcao(null);
       aoOcupar(false);
@@ -69,6 +72,7 @@ export function Manutencao({ bloqueado, aoOcupar, aoApagar }: Props) {
 
   return (
     <Recolhivel
+      perigo
       titulo="Limpeza anual do histórico"
       resumo="Manutenção rara: só para edição encerrada, não ativa e sem atividade há mais de 365 dias."
     >
@@ -76,6 +80,9 @@ export function Manutencao({ bloqueado, aoOcupar, aoApagar }: Props) {
         <History className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         Apaga os códigos e os vínculos de venda da edição escolhida. Usuários, pagamentos e comprovantes não são apagados. Primeiro gere a prévia.
       </p>
+      {semPermissao ? (
+        <Estado tipo="semPermissao" titulo="Sem permissão para limpar o histórico" texto={semPermissao} />
+      ) : (
       <form onSubmit={gerarPrevia} className="flex flex-wrap items-end gap-3">
         <Campo
           rotulo="Edição que será avaliada"
@@ -87,9 +94,10 @@ export function Manutencao({ bloqueado, aoOcupar, aoApagar }: Props) {
         />
         <Botao type="submit" estilo="contorno" carregando={acao === "previa"} disabled={bloqueado || acao !== null}>Gerar prévia</Botao>
       </form>
+      )}
 
       {previa && (
-        <div className="grid gap-3 rounded-xl bg-recuo/60 p-4">
+        <div className="grid gap-3 rounded-xl border border-erro/30 bg-erro-fundo p-4">
           <h3 className="font-semibold">Prévia de <span className="num">{previa.edicaoId}</span></h3>
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <div><dt className="text-xs text-sutil">Códigos</dt><dd className="num font-semibold">{formatarNumero(previa.counts.codigos)}</dd></div>
