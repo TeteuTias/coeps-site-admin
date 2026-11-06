@@ -11,6 +11,7 @@ import { Copiavel } from "./Copiavel";
 import { useAvisos } from "./Avisos";
 import { formatarData, formatarDataHora, formatarHora, formatarMoeda, formatarNumero } from "@/app/lib/formatar";
 import { parseDataArrayPayload } from "@/app/lib/api-data-contract";
+import { isRawActivity, toCourseSummary, toLectureSummary } from "@/app/lib/presenca/activity-summary-contract";
 import type { ICourse, ILecture } from "@/app/lib/types/events/event.t";
 
 // Catálogo compartilhado de atividades (Presença, Listas e Gestão de atividades): carga, busca, filtros e cartão.
@@ -83,14 +84,6 @@ export function dePalestra(l: ILecture): ItemCatalogo {
   return { id: l._id, nome: l.name, tipo: l.type, natureza: "palestra", ...resumoEtapas(l.timeline) };
 }
 
-const ehRegistro = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const ehMinicurso = (v: unknown): v is ICourse =>
-  ehRegistro(v) && typeof v._id === "string" && typeof v.name === "string" && typeof v.type === "string"
-  && typeof v.maxParticipants === "number" && Number.isFinite(v.maxParticipants)
-  && Array.isArray(v.participants) && v.participants.every((id) => typeof id === "string");
-const ehPalestra = (v: unknown): v is ILecture =>
-  ehRegistro(v) && typeof v._id === "string" && typeof v.name === "string" && typeof v.type === "string";
-
 /** Carrega minicursos (e, se pedido, palestras) em paralelo. Atualização que falha mantém a última lista válida e avisa. */
 export function useCatalogo({ palestras }: { palestras: boolean }) {
   const { avisar } = useAvisos();
@@ -107,14 +100,16 @@ export function useCatalogo({ palestras }: { palestras: boolean }) {
       const [rc, rp] = await Promise.all([fetch("/api/get/listaMinicursos"), palestras ? fetch("/api/get/listaPalestras") : null]);
       if (!rc.ok || (rp && !rp.ok)) throw new Error("resposta com erro");
       const [pc, pp] = await Promise.all([rc.json().catch(() => null), rp ? rp.json().catch(() => null) : Promise.resolve({ data: [] })]);
-      const c = parseDataArrayPayload(pc, ehMinicurso);
-      const p = parseDataArrayPayload(pp, ehPalestra);
+      // regra do PR #41: só _id e name obrigatórios; um registro incompleto não derruba a lista
+      const c = parseDataArrayPayload(pc, isRawActivity);
+      const p = parseDataArrayPayload(pp, isRawActivity);
       if (!c || !p) throw new Error("formato inesperado");
-      setCursos(c);
-      setLista(p);
+      setCursos(c.map(toCourseSummary));
+      setLista(p.map(toLectureSummary));
       setErro(false);
       temDados.current = true;
-    } catch {
+    } catch (falha) {
+      console.error("[catalogo] falha ao carregar atividades", falha);
       if (temDados.current) avisar("erro", "Não foi possível atualizar a lista", "Estamos mostrando a última lista carregada. Tente de novo em instantes.");
       else setErro(true);
     } finally {
