@@ -10,7 +10,7 @@ import {
     parseAdminUserListHttpResponse,
 } from "../lib/users/admin-user-contract"
 import { participationModeLabel } from "../lib/users/admin-remote-work"
-import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2, Briefcase } from "lucide-react"
+import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2, Briefcase, IdCard, Building2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import './style.css'
 import QrCodeUserSearch from "../components/QrCodeUserSearch"
@@ -313,6 +313,20 @@ export default function Page() {
                                                 <Briefcase className="h-4 w-4" />
                                                 <span className="usuarios-info-label">Profissão:</span>
                                                 <span className="usuarios-info-value">{user.informacoes_usuario.profissao}</span>
+                                            </div>
+                                        )}
+                                        {user.informacoes_usuario.matricula_municipio && (
+                                            <div className="usuarios-info-item">
+                                                <IdCard className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Matrícula do município:</span>
+                                                <span className="usuarios-info-value">{user.informacoes_usuario.matricula_municipio}</span>
+                                            </div>
+                                        )}
+                                        {user.informacoes_usuario.unidade_origem && (
+                                            <div className="usuarios-info-item">
+                                                <Building2 className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Unidade de Origem:</span>
+                                                <span className="usuarios-info-value">{user.informacoes_usuario.unidade_origem}</span>
                                             </div>
                                         )}
                                         <div className="usuarios-info-item">
