@@ -329,6 +329,11 @@ export default function Page() {
                             <span className="block text-sm font-medium text-gray-700">Matrícula do município</span>
                             <p className="mt-1 text-sm text-gray-900">{user.informacoes_usuario.matricula_municipio || "Não informada (estudante ou cadastro anterior ao campo)"}</p>
                         </div>
+                        <div>
+                            {/* Somente leitura: preenchida pelo congressista formado no cadastro do site. */}
+                            <span className="block text-sm font-medium text-gray-700">Unidade de Origem</span>
+                            <p className="mt-1 text-sm text-gray-900">{user.informacoes_usuario.unidade_origem || "Não informada (estudante ou cadastro anterior ao campo)"}</p>
+                        </div>
                     </div>
 
                     <div className="p-6 bg-gray-50 border-t border-gray-200 space-y-6">

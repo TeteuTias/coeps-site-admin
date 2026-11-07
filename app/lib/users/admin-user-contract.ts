@@ -19,6 +19,7 @@ export const ADMIN_USER_SUMMARY_PROJECTION = {
     "informacoes_usuario.titulo_honorario": 1,
     "informacoes_usuario.profissao": 1,
     "informacoes_usuario.matricula_municipio": 1,
+    "informacoes_usuario.unidade_origem": 1,
     "pagamento.situacao": 1,
     "pagamento.situacao_animacao": 1,
     "pagamento.tipo_pagamento": 1,
@@ -33,6 +34,7 @@ export interface AdminUserProfile {
     titulo_honorario: string | null
     profissao: string | null
     matricula_municipio: string | null
+    unidade_origem: string | null
 }
 
 export interface AdminUserPaymentSummary {
@@ -172,6 +174,7 @@ function normalizeBaseUser(value: unknown): AdminUserSummary | null {
         titulo_honorario: stringOrNull(rawProfile?.titulo_honorario),
         profissao: stringOrNull(rawProfile?.profissao),
         matricula_municipio: stringOrNull(rawProfile?.matricula_municipio),
+        unidade_origem: stringOrNull(rawProfile?.unidade_origem),
     }
 
     return {
