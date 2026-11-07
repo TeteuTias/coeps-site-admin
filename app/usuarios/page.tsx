@@ -287,6 +287,8 @@ function Lista() {
                                                     <td className={`${classeTd} max-w-64`}>
                                                         <p className="truncate font-medium" title={displayUserName(u)}>{displayUserName(u)}</p>
                                                         {u.informacoes_usuario.profissao && <p className="truncate text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
+                                                        {u.informacoes_usuario.matricula_municipio && <p className="truncate text-xs text-sutil">Matrícula do município: {u.informacoes_usuario.matricula_municipio}</p>}
+                                                        {u.informacoes_usuario.unidade_origem && <p className="truncate text-xs text-sutil">Unidade de Origem: {u.informacoes_usuario.unidade_origem}</p>}
                                                         <div className="mt-1"><Pendencia user={u} /></div>
                                                     </td>
                                                     <td className={`${classeTd} max-w-64`}>
@@ -315,6 +317,8 @@ function Lista() {
                                                 <p className="break-words font-semibold">{displayUserName(u)}</p>
                                                 <p className="break-all text-sm text-sutil">{displayUserField(u.informacoes_usuario.email)}</p>
                                                 {u.informacoes_usuario.profissao && <p className="text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
+                                                {u.informacoes_usuario.matricula_municipio && <p className="text-xs text-sutil">Matrícula do município: {u.informacoes_usuario.matricula_municipio}</p>}
+                                                {u.informacoes_usuario.unidade_origem && <p className="text-xs text-sutil">Unidade de Origem: {u.informacoes_usuario.unidade_origem}</p>}
                                             </div>
                                             <div className="flex flex-wrap gap-1.5">
                                                 <SeloSituacao situacao={u.pagamento.situacao} />

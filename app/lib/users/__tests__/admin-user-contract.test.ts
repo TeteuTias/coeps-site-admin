@@ -33,6 +33,8 @@ const FULL_USER = {
         data_criacao: new Date("2026-08-31T12:30:00.000Z"),
         titulo_honorario: "Dra.",
         profissao: "Médica",
+        matricula_municipio: "12345-6",
+        unidade_origem: "UBS Centro",
     },
     pagamento: {
         situacao: 1,
@@ -54,6 +56,8 @@ test("normaliza perfil completo, ObjectId e data BSON/ISO", () => {
     assert.equal(user.pagamento.situacao, 1)
     assert.equal(user.cadastroPendente, false)
     assert.equal(user.informacoes_usuario.profissao, "Médica")
+    assert.equal(user.informacoes_usuario.matricula_municipio, "12345-6")
+    assert.equal(user.informacoes_usuario.unidade_origem, "UBS Centro")
 })
 
 test("mantém usuário com perfil e pagamento ausentes como cadastro pendente", () => {
@@ -68,6 +72,8 @@ test("mantém usuário com perfil e pagamento ausentes como cadastro pendente", 
         data_criacao: null,
         titulo_honorario: null,
         profissao: null,
+        matricula_municipio: null,
+        unidade_origem: null,
     })
     assert.deepEqual(user.pagamento, {
         situacao: null,

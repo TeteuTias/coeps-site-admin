@@ -135,6 +135,19 @@ function Formulario({ usuario, userId, aoSalvar }: { usuario: AdminUserDetails; 
                     </p>
                     <p className="mt-1 text-xs text-sutil">Preenchida pela pessoa no cadastro do site; não é editada aqui.</p>
                 </div>
+                {/* Somente leitura: preenchidos pelo congressista formado no cadastro do site. */}
+                <div>
+                    <p className="text-sm font-medium">Matrícula do município</p>
+                    <p className="mt-1.5 rounded-xl bg-recuo/60 px-3.5 py-2.5 text-[15px]">
+                        {usuario.informacoes_usuario.matricula_municipio || "Não informada (estudante ou cadastro anterior ao campo)"}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-sm font-medium">Unidade de Origem</p>
+                    <p className="mt-1.5 rounded-xl bg-recuo/60 px-3.5 py-2.5 text-[15px]">
+                        {usuario.informacoes_usuario.unidade_origem || "Não informada (estudante ou cadastro anterior ao campo)"}
+                    </p>
+                </div>
             </div>
 
             <div className="grid gap-2">
