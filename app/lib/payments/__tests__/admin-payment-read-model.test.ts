@@ -19,6 +19,17 @@ test("autoriza somente o administrador financeiro configurado", () => {
   assert.equal(isFinanceAdminSubject(undefined, "admin-1"), false);
 });
 
+test("aceita a variável configurada com ou sem o prefixo auth0| e o subject nos dois formatos", () => {
+  assert.equal(isFinanceAdminSubject("abc", "auth0|abc"), true);
+  assert.equal(isFinanceAdminSubject("auth0|abc", "auth0|abc"), true);
+  assert.equal(isFinanceAdminSubject("auth0|abd", "auth0|abc"), false);
+});
+
+test("sem variável de ambiente, vale a conta administradora atual e só ela", () => {
+  assert.equal(isFinanceAdminSubject("auth0|6a8799078ecd649be9bdb061"), true);
+  assert.equal(isFinanceAdminSubject("auth0|67098341f7397b370e9cb8ba"), false);
+});
+
 test("classifica estados financeiros sem confundir recebimento desfeito com sucesso", () => {
   assert.equal(getPaymentStatusTone("PAYMENT_RECEIVED"), "success");
   assert.equal(getPaymentStatusTone("PAYMENT_CONFIRMED"), "success");
