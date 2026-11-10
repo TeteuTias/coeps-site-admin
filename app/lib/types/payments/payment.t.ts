@@ -16,7 +16,8 @@ export interface ILoteAutomatico {
     codigo: number,
     nome: string,
     limiteVagas: number,
-    precos: IPrecosLote
+    precos: IPrecosLote,
+    abreEm?: string // ISO 8601; antes disso o checkout do site não vende o lote
 }
 
 export interface IOcupacaoLoteAutomatico {
