@@ -11,6 +11,9 @@ import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table,
 import * as XLSX from 'xlsx';
 import { useUser } from '@/app/lib/auth0-client';
 import { useParams } from 'next/navigation';
+import { registrarPresenca, sinalizar } from '../../presenca-bip';
+import { limparCodigo } from '../../fila-presenca';
+import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca';
 interface Usuario {
     _id: string,
     informacoes_usuario: {
@@ -107,6 +110,10 @@ const MyComponent = () => {
             setLoading(false);
         }
     };
+
+    // presença sem resposta do servidor fica guardada no aparelho e é reenviada; ao entregar, recarrega a lista
+    const { pendentes, enviarAgora } = usePendentesPresenca(_id, () => { void hydrateData() })
+    const guardados = new Set(pendentes.filter((p) => p.eventId === _id).map((p) => p.userId))
 
     useEffect(() => {
         const fetchData = async () => {
@@ -234,7 +241,7 @@ const MyComponent = () => {
             </div>
 
             <section className="presenca-lista-actions" aria-label="Ações da lista">
-                <QRCodeScanner courseData={courseData} hydrateData={hydrateData} />
+                <QRCodeScanner courseData={courseData} hydrateData={hydrateData} usuariosCarregados={allUsers} />
                 {
                     canManageAttendance &&
                     <button
@@ -246,7 +253,7 @@ const MyComponent = () => {
                         Adicionar Usuário
                     </button>
                 }
-                <ExportButton inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
+                <ExportButton eventId={_id} guardados={guardados.size} inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
             </section>
 
             {errorBolean && (
@@ -254,6 +261,7 @@ const MyComponent = () => {
                     Não foi possível concluir a última atualização. Tente novamente.
                 </p>
             )}
+            <AvisoPendentes pendentes={pendentes} eventId={_id} enviarAgora={enviarAgora} />
 
             <div
                 className="presenca-lista-table-container"
@@ -325,6 +333,7 @@ const MyComponent = () => {
                                     <span className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}>
                                         {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
                                     </span>
+                                    {guardados.has(item._id) && <span className="presenca-lista-status-badge ausente">GUARDADA, AGUARDANDO ENVIO</span>}
                                 </td>
                                 {
                                     canManageAttendance &&
@@ -335,34 +344,12 @@ const MyComponent = () => {
                                             onClick={async () => {
                                                 setLoadingContent(true)
                                                 try {
-                                                    if (dataPresentes.includes(item._id)) {
-                                                        const response = await fetch(`/api/post/retirarPresenca`, {
-                                                            method: "POST",
-                                                            headers: {
-                                                                "Content-Type": "application/json",
-                                                            },
-                                                            body: JSON.stringify({
-                                                                eventId: _id,
-                                                                userId: item._id,
-                                                            }),
-                                                        });
-                                                        if (response.ok) {
-                                                            setDataPresente(prev => prev.filter(id => id !== item._id));
-                                                        }
-                                                        return;
-                                                    }
-                                                    const response = await fetch(`/api/post/darPresenca`, {
-                                                        method: "POST",
-                                                        headers: {
-                                                            "Content-Type": "application/json",
-                                                        },
-                                                        body: JSON.stringify({
-                                                            eventId: _id,
-                                                            userId: item._id,
-                                                        }),
-                                                    });
-                                                    if (response.ok) {
-                                                        setDataPresente(prev => [...prev, item._id])
+                                                    const quer = dataPresentes.includes(item._id) ? "retirar" : "dar"
+                                                    const r = await registrarPresenca({ tipo: "minicurso", eventId: _id, userId: item._id, nome: item.informacoes_usuario.nome, quer })
+                                                    if (r.estado === "registrado" || r.estado === "jaEstava") {
+                                                        setDataPresente(prev => quer === "retirar" ? prev.filter(id => id !== item._id) : prev.includes(item._id) ? prev : [...prev, item._id])
+                                                    } else {
+                                                        alert(r.mensagem)
                                                     }
                                                 }
                                                 catch {
@@ -399,20 +386,12 @@ const MyComponent = () => {
                     onClose={() => { setIsOpenAllUsers(false) }}
                     onUserSelect={async (userId: string) => {
                         setLoadingContent(true)
-                        const response = await fetch(`/api/post/darPresenca`, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify({
-                                eventId: _id,
-                                userId: userId,
-                            }),
-                        });
-                        if (response.ok) {
-                            setDataPresente(prev => [...prev, userId])
+                        const nome = allUsers.find((u) => `${u._id}` === userId)?.informacoes_usuario?.nome ?? ""
+                        const r = await registrarPresenca({ tipo: "minicurso", eventId: _id, userId, nome, quer: "dar" })
+                        if (r.estado === "registrado" || r.estado === "jaEstava") {
+                            setDataPresente(prev => prev.includes(userId) ? prev : [...prev, userId])
                         } else {
-                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                            alert(r.mensagem)
                             setLoadingContent(false)
                             return;
                         }
@@ -428,7 +407,7 @@ const MyComponent = () => {
 };
 //
 //
-const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<void> }> = ({ courseData, hydrateData }) => {
+const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<void>, usuariosCarregados: IUser[] }> = ({ courseData, hydrateData, usuariosCarregados }) => {
     // Estado para controlar a visibilidade do scanner
     const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
     // Estado para armazenar a lista de câmeras disponíveis
@@ -590,24 +569,52 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
 
             {/* Modal com o Resultado */}
             {qrCodeResult && (
-                <ModalUserFound courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} />
+                <ModalUserFound courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} usuariosCarregados={usuariosCarregados} />
             )}
         </div>
     );
 };
 
-const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void> }> = ({ hydrateData, courseData, qrCodeResult, closeModal }) => {
+const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void>, usuariosCarregados: IUser[] }> = ({ hydrateData, courseData, qrCodeResult, closeModal, usuariosCarregados }) => {
     const [isLoading, setIsLoading] = useState<boolean>(true)
     const [user, setUser] = useState<IUser | null>(null)
+    const [erroLeitura, setErroLeitura] = useState<string>("")
+    const [semRede, setSemRede] = useState<boolean>(false)
     useEffect(() => {
         const fetchUser = async () => {
-            const userFetch = await fetch(`/api/get/usuarioPorId/${qrCodeResult}`)
-            const user: { data: IUser } = await userFetch.json()
-            setUser(user.data)
-            setIsLoading(false)
+            const codigo = limparCodigo(qrCodeResult)
+            if (!codigo) {
+                sinalizar("erro")
+                setErroLeitura("QR inválido: este código não é de uma credencial do CIEPS. Nada foi registrado.")
+                setIsLoading(false)
+                return
+            }
+            try {
+                const userFetch = await fetch(`/api/get/usuarioPorId/${codigo}`)
+                if (userFetch.status >= 500) throw new Error("servidor")
+                if (!userFetch.ok) {
+                    sinalizar("erro")
+                    setErroLeitura(userFetch.status === 404 ? "Credencial não encontrada: não existe cadastro com este código. Nada foi registrado." : "Não foi possível consultar esta credencial. Leia de novo.")
+                    return
+                }
+                const user: { data: IUser } = await userFetch.json()
+                setUser(user.data)
+            } catch {
+                // sem internet: usa a lista que já está carregada nesta tela para a chamada continuar
+                const local = usuariosCarregados.find((u) => `${u._id}` === codigo)
+                if (local) {
+                    setUser(local)
+                    setSemRede(true)
+                } else {
+                    sinalizar("erro")
+                    setErroLeitura("Sem conexão e esta credencial não está na lista carregada nesta tela. Leia de novo quando a internet voltar.")
+                }
+            } finally {
+                setIsLoading(false)
+            }
         }
         fetchUser()
-    }, [qrCodeResult])
+    }, [qrCodeResult, usuariosCarregados])
 
     useEffect(() => {
         const handleEscape = (event: KeyboardEvent) => {
@@ -688,6 +695,8 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                         <section className="attendance-modal-section">
                             <span className="attendance-modal-label">Observações</span>
                             <div className="attendance-feedback-list" aria-live="polite">
+                                {erroLeitura && <p className="attendance-feedback attendance-feedback-warning" role="alert">{erroLeitura}</p>}
+                                {semRede && <p className="attendance-feedback attendance-feedback-warning">Sem conexão: dados da lista carregada nesta tela. A presença fica guardada neste aparelho e é enviada quando a internet voltar.</p>}
                                 {feedback.map((value, index) => (
                                     <p key={`${user?._id}-${index}`} className="attendance-feedback attendance-feedback-warning">{value}</p>
                                 ))}
@@ -715,25 +724,11 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                 onClick={
                                     async () => {
                                         setIsLoading(true)
-                                        const response = await fetch(`/api/post/darPresenca`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            setIsLoading(false)
-                                            alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                            return;
-                                        }
-                                        await hydrateData()
+                                        const r = await registrarPresenca({ tipo: "minicurso", eventId: courseData._id, userId: user._id, nome: user.informacoes_usuario?.nome ?? "", quer: "dar" })
+                                        if (r.estado === "registrado" || r.estado === "jaEstava") await hydrateData()
                                         setIsLoading(false)
-                                        alert("Presença adicionada com sucesso.")
-                                        closeModal()
+                                        alert(r.mensagem)
+                                        if (r.estado !== "recusado" && r.estado !== "atividadeInexistente") closeModal()
 
                                     }
                                 }
@@ -749,25 +744,11 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                     async () => {
                                         //
                                         setIsLoading(true)
-                                        const response = await fetch(`/api/post/retirarPresenca`, {
-                                            method: "POST",
-                                            headers: {
-                                                "Content-Type": "application/json",
-                                            },
-                                            body: JSON.stringify({
-                                                eventId: courseData._id,
-                                                userId: qrCodeResult,
-                                            }),
-                                        });
-                                        if (!response.ok) {
-                                            setIsLoading(false)
-                                            alert("Algo deu errado, por favor tente novamente.")
-                                            return;
-                                        }
-                                        await hydrateData()
+                                        const r = await registrarPresenca({ tipo: "minicurso", eventId: courseData._id, userId: user._id, nome: user.informacoes_usuario?.nome ?? "", quer: "retirar" })
+                                        if (r.estado === "registrado" || r.estado === "jaEstava") await hydrateData()
                                         setIsLoading(false)
-                                        alert("Presença removida com sucesso.")
-                                        closeModal()
+                                        alert(r.mensagem)
+                                        if (r.estado !== "recusado" && r.estado !== "atividadeInexistente") closeModal()
 
                                     }
                                 }
@@ -903,8 +884,9 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     );
 };
 
-function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: string[], presentes: string[], todosUsuarios: Usuario[] }) {
-    const data = presentes
+function ExportButton({ eventId, guardados, inscritos, presentes, todosUsuarios }: { eventId: string, guardados: number, inscritos: string[], presentes: string[], todosUsuarios: Usuario[] }) {
+    // a tela pode estar velha (outros leitores registram ao mesmo tempo): a planilha usa a lista do servidor no momento do clique
+    const montar = (presentes: string[], todosUsuarios: Usuario[]) => presentes
         // 1. FILTRA: Mantém apenas os IDs que correspondem a um usuário existente
         .map(usuarioId => todosUsuarios.find(u => u._id === usuarioId))
         .filter(usuario => usuario !== undefined) // Remove todos os 'undefined'
@@ -916,7 +898,26 @@ function ExportButton({ inscritos, presentes, todosUsuarios }: { inscritos: stri
             EMAIL: usuario!.informacoes_usuario.email,
         }));
 
-    const handleDownload = () => {
+    const handleDownload = async () => {
+        let ids = presentes
+        let usuarios = todosUsuarios
+        try {
+            const res = await fetch(`/api/get/listaDePresenca/${eventId}`)
+            if (!res.ok) throw new Error("lista")
+            ids = (await res.json()).data
+            const faltam = ids.filter((id) => !usuarios.some((u) => u._id === id))
+            if (faltam.length) {
+                const info = await fetch("/api/post/informacoesVariosUsuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(faltam) })
+                if (!info.ok) throw new Error("usuarios")
+                usuarios = [...usuarios, ...(await info.json()).data]
+            }
+        } catch {
+            ids = presentes
+            usuarios = todosUsuarios
+            alert("Não foi possível buscar a lista atual no servidor. A planilha será gerada com a lista desta tela e podem faltar presenças registradas em outros aparelhos.")
+        }
+        if (guardados) alert(`${guardados} presença(s) guardada(s) neste aparelho ainda não chegaram ao servidor e não estão na planilha.`)
+        const data = montar(ids, usuarios)
         // 1. Crie uma nova planilha a partir dos seus dados JSON
         const worksheet = XLSX.utils.json_to_sheet(data);
         // 2. Crie um novo livro (workbook) e adicione a planilha a ele
