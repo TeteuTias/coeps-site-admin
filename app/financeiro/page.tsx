@@ -37,6 +37,28 @@ const formatOccupancyTime = (value: string) => {
     }).format(date);
 };
 
+// Código provisório do card de criação; o servidor define o código real (maior + 1).
+const NEW_LOT_CODE = -1;
+// shortcut: Brasília fixo em -03:00 (sem horário de verão desde 2019), mesma regra usada pela API ao salvar.
+const BRASILIA_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** ISO salvo → valor do campo datetime-local, em horário de Brasília. */
+const toBrasiliaInputValue = (iso?: string) => {
+    const time = iso ? new Date(iso).getTime() : Number.NaN;
+    return Number.isFinite(time) ? new Date(time - BRASILIA_OFFSET_MS).toISOString().slice(0, 16) : "";
+};
+
+const isFutureOpening = (iso?: string): iso is string =>
+    Boolean(iso) && new Date(iso as string).getTime() > Date.now();
+
+const formatLotOpening = (iso: string) => new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+}).format(new Date(iso));
+
 const hasValidAutomaticStructure = (lots: unknown): lots is ILoteAutomatico[] => {
     if (!Array.isArray(lots) || lots.length === 0) return false;
     const lotCodes = new Set<number>();
@@ -96,6 +118,7 @@ export default function Page() {
     const [isEditingParcelamentos, setIsEditingParcelamentos] = useState(false);
     const [editingLotCode, setEditingLotCode] = useState<number | null>(null);
     const [editableLot, setEditableLot] = useState<ILoteAutomatico | null>(null);
+    const [editableLotOpensAt, setEditableLotOpensAt] = useState("");
     const [lotOccupancy, setLotOccupancy] = useState<IAutomaticLotOccupancy | null>(null);
     const [lotOccupancyLoading, setLotOccupancyLoading] = useState(false);
     const [lotOccupancyError, setLotOccupancyError] = useState<string | null>(null);
@@ -217,11 +240,44 @@ export default function Page() {
     const handleStartLotEdit = (lot: ILoteAutomatico) => {
         setEditingLotCode(lot.codigo);
         setEditableLot(structuredClone(lot));
+        setEditableLotOpensAt(toBrasiliaInputValue(lot.abreEm));
+    };
+
+    // O novo lote começa como cópia do último: mesmas opções de parcela, preços para ajustar.
+    const handleStartLotCreate = () => {
+        const lastLot = paymentData?.configuracaoLotesAutomaticos?.lotes?.at(-1);
+        if (!lastLot) return;
+        setEditingLotCode(NEW_LOT_CODE);
+        setEditableLot({ ...structuredClone(lastLot), codigo: NEW_LOT_CODE, nome: "", abreEm: undefined });
+        setEditableLotOpensAt("");
     };
 
     const handleCancelLotEdit = () => {
         setEditingLotCode(null);
         setEditableLot(null);
+        setEditableLotOpensAt("");
+    };
+
+    // Mesma lógica dos lotes anteriores: um preço único e parcelas sem juros (centavos arredondados para baixo).
+    const handleSplitInstallmentsFromPix = () => {
+        setEditableLot((current) => {
+            if (!current) return current;
+            const pixCents = Math.round(current.precos.valorPix * 100);
+            const price = pixCents / 100;
+            return {
+                ...current,
+                precos: {
+                    ...current.precos,
+                    valorBoleto: price,
+                    valorDebito: price,
+                    valorAVista: price,
+                    parcelamentos: current.precos.parcelamentos.map((installment) => ({
+                        ...installment,
+                        valorCadaParcela: Math.floor(pixCents / installment.totalParcelas) / 100,
+                    })),
+                },
+            };
+        });
     };
 
     const handleLotFieldChange = (field: "nome" | "limiteVagas", value: string) => {
@@ -289,21 +345,26 @@ export default function Page() {
     const handleSaveAutomaticLot = async () => {
         if (!paymentData || !editableLot || editingLotCode === null) return;
 
+        const isCreating = editingLotCode === NEW_LOT_CODE;
+        const lote = {
+            nome: editableLot.nome,
+            limiteVagas: editableLot.limiteVagas,
+            precos: editableLot.precos,
+            abreEm: editableLotOpensAt || null,
+        };
+
         try {
             setLoading(true);
-            const response = await fetch("/api/put/pagamentos/configuracaoLoteAutomatico", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    configId: paymentData._id,
-                    loteCodigo: editingLotCode,
-                    lote: {
-                        nome: editableLot.nome,
-                        limiteVagas: editableLot.limiteVagas,
-                        precos: editableLot.precos,
-                    },
-                }),
-            });
+            const response = await fetch(
+                isCreating ? "/api/post/pagamentos/loteAutomatico" : "/api/put/pagamentos/configuracaoLoteAutomatico",
+                {
+                    method: isCreating ? "POST" : "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(isCreating
+                        ? { configId: paymentData._id, lote }
+                        : { configId: paymentData._id, loteCodigo: editingLotCode, lote }),
+                },
+            );
             const result: unknown = await response.json().catch(() => null);
             if (!response.ok) {
                 const message = typeof result === "object" && result !== null &&
@@ -316,7 +377,7 @@ export default function Page() {
             await loadPaymentConfig();
             handleCancelLotEdit();
             await loadLotOccupancy(paymentData._id);
-            alert("Lote automático atualizado com sucesso!");
+            alert(isCreating ? "Lote automático criado com sucesso!" : "Lote automático atualizado com sucesso!");
         } catch (error) {
             alert(error instanceof Error ? error.message : "Não foi possível salvar o lote.");
         } finally {
@@ -583,6 +644,147 @@ export default function Page() {
     const automaticLots = paymentData.configuracaoLotesAutomaticos?.lotes;
     const automaticStructureValid = hasValidAutomaticStructure(automaticLots);
 
+    const renderLotForm = (idSuffix: string) => editableLot && (
+        <div className="financeiro-lot-edit-form">
+            <div className="financeiro-form-row">
+                <div className="financeiro-form-group">
+                    <label className="financeiro-label" htmlFor={`lot-name-${idSuffix}`}>Nome</label>
+                    <input
+                        id={`lot-name-${idSuffix}`}
+                        className="financeiro-input"
+                        value={editableLot.nome}
+                        onChange={(event) => handleLotFieldChange("nome", event.target.value)}
+                    />
+                </div>
+                <div className="financeiro-form-group">
+                    <label className="financeiro-label" htmlFor={`lot-limit-${idSuffix}`}>Limite de vagas</label>
+                    <input
+                        id={`lot-limit-${idSuffix}`}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="financeiro-input"
+                        value={editableLot.limiteVagas}
+                        onChange={(event) => handleLotFieldChange("limiteVagas", event.target.value)}
+                    />
+                </div>
+                <div className="financeiro-form-group">
+                    <label className="financeiro-label" htmlFor={`lot-opens-${idSuffix}`}>
+                        Abre em (horário de Brasília)
+                        <span className="financeiro-info-text">
+                            Opcional. Antes desse horário o checkout não vende este lote.
+                        </span>
+                    </label>
+                    <input
+                        id={`lot-opens-${idSuffix}`}
+                        type="datetime-local"
+                        className="financeiro-input"
+                        value={editableLotOpensAt}
+                        onChange={(event) => setEditableLotOpensAt(event.target.value)}
+                    />
+                </div>
+            </div>
+
+            <div className="financeiro-lot-subheading">
+                <h4>Preços</h4>
+                <button
+                    type="button"
+                    onClick={handleSplitInstallmentsFromPix}
+                    className="financeiro-btn financeiro-btn-secondary"
+                >
+                    Dividir parcelas pelo valor PIX
+                </button>
+            </div>
+            <div className="financeiro-lot-prices-grid">
+                {([
+                    ["valorPix", "PIX"],
+                    ["valorBoleto", "Boleto"],
+                    ["valorDebito", "Débito"],
+                    ["valorAVista", "Crédito à vista"],
+                ] as const).map(([field, label]) => (
+                    <div className="financeiro-form-group" key={field}>
+                        <label className="financeiro-label" htmlFor={`${field}-${idSuffix}`}>{label} (R$)</label>
+                        <input
+                            id={`${field}-${idSuffix}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="financeiro-input"
+                            value={editableLot.precos[field]}
+                            onChange={(event) => handleLotPriceChange(field, event.target.value)}
+                        />
+                    </div>
+                ))}
+            </div>
+
+            <div className="financeiro-lot-installments">
+                <div className="financeiro-lot-subheading">
+                    <h4>Parcelamentos do lote</h4>
+                    <button
+                        type="button"
+                        onClick={handleAddLotInstallment}
+                        className="financeiro-btn financeiro-btn-secondary"
+                    >
+                        <Plus size={17} />
+                        Adicionar opção
+                    </button>
+                </div>
+                {editableLot.precos.parcelamentos.length === 0 ? (
+                    <p className="financeiro-info-note">Nenhuma opção de parcelamento cadastrada.</p>
+                ) : (
+                    <div className="financeiro-lot-installment-list">
+                        {editableLot.precos.parcelamentos.map((installment, index) => (
+                            <div className="financeiro-lot-installment-row" key={installment.codigo}>
+                                <span className="financeiro-lot-code">Código {installment.codigo}</span>
+                                <label>
+                                    Parcelas
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        className="financeiro-input"
+                                        value={installment.totalParcelas}
+                                        onChange={(event) => handleLotInstallmentChange(index, "totalParcelas", event.target.value)}
+                                    />
+                                </label>
+                                <label>
+                                    Valor por parcela (R$)
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className="financeiro-input"
+                                        value={installment.valorCadaParcela}
+                                        onChange={(event) => handleLotInstallmentChange(index, "valorCadaParcela", event.target.value)}
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    className="financeiro-delete-btn financeiro-delete-btn--inline"
+                                    onClick={() => handleDeleteLotInstallment(installment.codigo)}
+                                    aria-label={`Remover parcelamento ${installment.codigo}`}
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="financeiro-form-actions">
+                <button type="button" onClick={handleSaveAutomaticLot} className="financeiro-btn financeiro-btn-success">
+                    <Save size={18} />
+                    {editingLotCode === NEW_LOT_CODE ? "Criar lote" : "Salvar este lote"}
+                </button>
+                <button type="button" onClick={handleCancelLotEdit} className="financeiro-btn financeiro-btn-secondary">
+                    <X size={18} />
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
+
     return (
         <>
             <LoadingModal isLoading={loading} />
@@ -729,6 +931,15 @@ export default function Page() {
                                     />
                                     {lotOccupancyLoading ? "Atualizando" : "Atualizar números"}
                                 </button>
+                                <button
+                                    type="button"
+                                    className="financeiro-btn financeiro-btn-success"
+                                    onClick={handleStartLotCreate}
+                                    disabled={!automaticStructureValid || editingLotCode !== null}
+                                >
+                                    <Plus size={17} />
+                                    Criar novo lote
+                                </button>
                             </div>
                         </div>
 
@@ -804,6 +1015,11 @@ export default function Page() {
                                                 <div>
                                                     <span className="financeiro-lot-code">Lote #{lot.codigo}</span>
                                                     <h3>{lot.nome}</h3>
+                                                    {isFutureOpening(lot.abreEm) && (
+                                                        <span className="financeiro-mode-badge financeiro-mode-badge--manual">
+                                                            Abre em {formatLotOpening(lot.abreEm)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 {!isEditing && (
                                                     <button
@@ -818,121 +1034,7 @@ export default function Page() {
                                                 )}
                                             </div>
 
-                                            {isEditing ? (
-                                                <div className="financeiro-lot-edit-form">
-                                                    <div className="financeiro-form-row">
-                                                        <div className="financeiro-form-group">
-                                                            <label className="financeiro-label" htmlFor={`lot-name-${lot.codigo}`}>Nome</label>
-                                                            <input
-                                                                id={`lot-name-${lot.codigo}`}
-                                                                className="financeiro-input"
-                                                                value={editableLot.nome}
-                                                                onChange={(event) => handleLotFieldChange("nome", event.target.value)}
-                                                            />
-                                                        </div>
-                                                        <div className="financeiro-form-group">
-                                                            <label className="financeiro-label" htmlFor={`lot-limit-${lot.codigo}`}>Limite de vagas</label>
-                                                            <input
-                                                                id={`lot-limit-${lot.codigo}`}
-                                                                type="number"
-                                                                min="1"
-                                                                step="1"
-                                                                className="financeiro-input"
-                                                                value={editableLot.limiteVagas}
-                                                                onChange={(event) => handleLotFieldChange("limiteVagas", event.target.value)}
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="financeiro-lot-prices-grid">
-                                                        {([
-                                                            ["valorPix", "PIX"],
-                                                            ["valorBoleto", "Boleto"],
-                                                            ["valorDebito", "Débito"],
-                                                            ["valorAVista", "Crédito à vista"],
-                                                        ] as const).map(([field, label]) => (
-                                                            <div className="financeiro-form-group" key={field}>
-                                                                <label className="financeiro-label" htmlFor={`${field}-${lot.codigo}`}>{label} (R$)</label>
-                                                                <input
-                                                                    id={`${field}-${lot.codigo}`}
-                                                                    type="number"
-                                                                    min="0"
-                                                                    step="0.01"
-                                                                    className="financeiro-input"
-                                                                    value={editableLot.precos[field]}
-                                                                    onChange={(event) => handleLotPriceChange(field, event.target.value)}
-                                                                />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-
-                                                    <div className="financeiro-lot-installments">
-                                                        <div className="financeiro-lot-subheading">
-                                                            <h4>Parcelamentos do lote</h4>
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleAddLotInstallment}
-                                                                className="financeiro-btn financeiro-btn-secondary"
-                                                            >
-                                                                <Plus size={17} />
-                                                                Adicionar opção
-                                                            </button>
-                                                        </div>
-                                                        {editableLot.precos.parcelamentos.length === 0 ? (
-                                                            <p className="financeiro-info-note">Nenhuma opção de parcelamento cadastrada.</p>
-                                                        ) : (
-                                                            <div className="financeiro-lot-installment-list">
-                                                                {editableLot.precos.parcelamentos.map((installment, index) => (
-                                                                    <div className="financeiro-lot-installment-row" key={installment.codigo}>
-                                                                        <span className="financeiro-lot-code">Código {installment.codigo}</span>
-                                                                        <label>
-                                                                            Parcelas
-                                                                            <input
-                                                                                type="number"
-                                                                                min="1"
-                                                                                step="1"
-                                                                                className="financeiro-input"
-                                                                                value={installment.totalParcelas}
-                                                                                onChange={(event) => handleLotInstallmentChange(index, "totalParcelas", event.target.value)}
-                                                                            />
-                                                                        </label>
-                                                                        <label>
-                                                                            Valor por parcela (R$)
-                                                                            <input
-                                                                                type="number"
-                                                                                min="0"
-                                                                                step="0.01"
-                                                                                className="financeiro-input"
-                                                                                value={installment.valorCadaParcela}
-                                                                                onChange={(event) => handleLotInstallmentChange(index, "valorCadaParcela", event.target.value)}
-                                                                            />
-                                                                        </label>
-                                                                        <button
-                                                                            type="button"
-                                                                            className="financeiro-delete-btn financeiro-delete-btn--inline"
-                                                                            onClick={() => handleDeleteLotInstallment(installment.codigo)}
-                                                                            aria-label={`Remover parcelamento ${installment.codigo}`}
-                                                                        >
-                                                                            <Trash2 size={16} />
-                                                                        </button>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="financeiro-form-actions">
-                                                        <button type="button" onClick={handleSaveAutomaticLot} className="financeiro-btn financeiro-btn-success">
-                                                            <Save size={18} />
-                                                            Salvar este lote
-                                                        </button>
-                                                        <button type="button" onClick={handleCancelLotEdit} className="financeiro-btn financeiro-btn-secondary">
-                                                            <X size={18} />
-                                                            Cancelar
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
+                                            {isEditing ? renderLotForm(String(lot.codigo)) : (
                                                 <>
                                                     <div className="financeiro-lot-details-grid">
                                                         <div>
@@ -964,6 +1066,17 @@ export default function Page() {
                                         </article>
                                     );
                                 })}
+                                {editingLotCode === NEW_LOT_CODE && editableLot && (
+                                    <article className="financeiro-lot-card">
+                                        <div className="financeiro-lot-header">
+                                            <div>
+                                                <span className="financeiro-lot-code">Novo lote</span>
+                                                <h3>{editableLot.nome.trim() || "Sem nome"}</h3>
+                                            </div>
+                                        </div>
+                                        {renderLotForm("new")}
+                                    </article>
+                                )}
                             </div>
                         )}
                     </div>

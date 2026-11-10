@@ -4,8 +4,10 @@ import { ObjectId } from "mongodb";
 import {
   LEGACY_PAYMENT_CONFIG_ID,
   PaymentConfigError,
+  createAutomaticLot,
   getActivePaymentConfig,
   parseAutomaticLotUpdate,
+  parseLotOpeningTime,
   serializePaymentConfig,
   updateAutomaticLot,
 } from "../payment-config-repository.ts";
@@ -342,5 +344,147 @@ test("rejeita códigos de lote existentes duplicados sem sobrescrever lotes", as
         error.code === "invalid_existing_lot_codes",
     );
     assert.equal(fake.updateCalls.length, 0);
+  });
+});
+
+const newLotInput = {
+  nome: "Quarto lote",
+  limiteVagas: 35,
+  precos: {
+    valorPix: 370,
+    valorBoleto: 370,
+    valorDebito: 370,
+    valorAVista: 370,
+    parcelamentos: [
+      { codigo: 225, totalParcelas: 1, valorCadaParcela: 370 },
+      { codigo: 456, totalParcelas: 3, valorCadaParcela: 123.33 },
+    ],
+  },
+};
+
+test("lê o horário de abertura como Brasília e recusa formatos ambíguos", () => {
+  assert.equal(parseLotOpeningTime("2026-11-10T12:30"), "2026-11-10T15:30:00.000Z");
+  assert.equal(parseLotOpeningTime("2026-11-10T12:30:15"), "2026-11-10T15:30:15.000Z");
+  assert.equal(parseLotOpeningTime("2026-11-10T15:30:00.000Z"), "2026-11-10T15:30:00.000Z");
+  assert.equal(parseLotOpeningTime("2026-11-10T12:30:00-03:00"), "2026-11-10T15:30:00.000Z");
+  assert.equal(parseLotOpeningTime(null), null);
+  assert.equal(parseLotOpeningTime(""), null);
+  for (const invalid of ["2026-11-10", "amanhã", "2026-13-40T99:99", 1731250200000, {}]) {
+    assert.equal(parseLotOpeningTime(invalid), undefined);
+  }
+});
+
+test("cria lote no fim da lista com código seguinte e trava de horário", async () => {
+  await withEditionEnvironment(undefined, undefined, async () => {
+    const config = automaticConfig();
+    const fake = createFakeDb([config]);
+
+    const result = await createAutomaticLot(
+      fake.db as never,
+      { configId: String(config._id), lote: { ...newLotInput, abreEm: "2026-11-10T12:30" } },
+      "admin-1",
+    );
+
+    const expected = { codigo: 3, ...newLotInput, abreEm: "2026-11-10T15:30:00.000Z" };
+    assert.deepEqual(result, expected);
+    assert.equal(fake.updateCalls.length, 1);
+    assert.deepEqual(fake.updateCalls[0].filter, {
+      _id: config._id,
+      modo: "automatico",
+      "configuracaoLotesAutomaticos.lotes.codigo": { $ne: 3 },
+    });
+    const update = fake.updateCalls[0].update as {
+      $push: Record<string, unknown>;
+      $set: Record<string, unknown>;
+    };
+    assert.deepEqual(update.$push, { "configuracaoLotesAutomaticos.lotes": expected });
+    assert.equal(update.$set.updatedBy, "admin-1");
+    assert.ok(update.$set.updatedAt instanceof Date);
+  });
+});
+
+test("cria lote sem trava sem gravar abreEm", async () => {
+  await withEditionEnvironment(undefined, undefined, async () => {
+    const config = automaticConfig();
+    const fake = createFakeDb([config]);
+
+    const result = await createAutomaticLot(
+      fake.db as never,
+      { configId: String(config._id), lote: { ...newLotInput, abreEm: null } },
+      "admin-1",
+    );
+
+    assert.deepEqual(result, { codigo: 3, ...newLotInput });
+    assert.equal("abreEm" in result, false);
+  });
+});
+
+test("criação recusa tela obsoleta, horário inválido e corrida de códigos", async () => {
+  await withEditionEnvironment(undefined, undefined, async () => {
+    const stale = createFakeDb([automaticConfig()]);
+    await assert.rejects(
+      createAutomaticLot(stale.db as never, { configId: String(new ObjectId()), lote: newLotInput }, "admin-1"),
+      (error: unknown) => error instanceof PaymentConfigError && error.code === "stale_payment_config",
+    );
+    assert.equal(stale.updateCalls.length, 0);
+
+    const config = automaticConfig();
+    const invalid = createFakeDb([config]);
+    await assert.rejects(
+      createAutomaticLot(
+        invalid.db as never,
+        { configId: String(config._id), lote: { ...newLotInput, abreEm: "10/11 12:30" } },
+        "admin-1",
+      ),
+      (error: unknown) => error instanceof PaymentConfigError && error.code === "invalid_automatic_lot",
+    );
+    assert.equal(invalid.findCalls.length, 0);
+
+    const raced = automaticConfig();
+    const race = createFakeDb([raced], { matchedCount: 0 });
+    await assert.rejects(
+      createAutomaticLot(race.db as never, { configId: String(raced._id), lote: newLotInput }, "admin-1"),
+      (error: unknown) => error instanceof PaymentConfigError && error.code === "automatic_lot_changed",
+    );
+  });
+});
+
+test("edição trava, destrava ou preserva o horário de abertura", async () => {
+  await withEditionEnvironment(undefined, undefined, async () => {
+    const baseInput = (abreEm?: string | null) => {
+      const config = automaticConfig();
+      const lote = { nome: firstLot.nome, limiteVagas: firstLot.limiteVagas, precos: firstLot.precos };
+      return {
+        config,
+        input: {
+          configId: String(config._id),
+          loteCodigo: 1,
+          lote: abreEm === undefined ? lote : { ...lote, abreEm },
+        },
+      };
+    };
+    const path = "configuracaoLotesAutomaticos.lotes.$[lot].abreEm";
+
+    const locked = baseInput("2026-11-10T12:30");
+    const lockedDb = createFakeDb([locked.config]);
+    const lockedResult = await updateAutomaticLot(lockedDb.db as never, locked.input, "admin-1");
+    const lockedUpdate = lockedDb.updateCalls[0].update as Record<string, Record<string, unknown>>;
+    assert.equal(lockedUpdate.$set[path], "2026-11-10T15:30:00.000Z");
+    assert.equal("$unset" in lockedUpdate, false);
+    assert.equal(lockedResult.abreEm, "2026-11-10T15:30:00.000Z");
+
+    const unlocked = baseInput(null);
+    const unlockedDb = createFakeDb([unlocked.config]);
+    await updateAutomaticLot(unlockedDb.db as never, unlocked.input, "admin-1");
+    const unlockedUpdate = unlockedDb.updateCalls[0].update as Record<string, Record<string, unknown>>;
+    assert.deepEqual(unlockedUpdate.$unset, { [path]: "" });
+    assert.equal(path in unlockedUpdate.$set, false);
+
+    const untouched = baseInput();
+    const untouchedDb = createFakeDb([untouched.config]);
+    await updateAutomaticLot(untouchedDb.db as never, untouched.input, "admin-1");
+    const untouchedUpdate = untouchedDb.updateCalls[0].update as Record<string, Record<string, unknown>>;
+    assert.equal("$unset" in untouchedUpdate, false);
+    assert.equal(path in untouchedUpdate.$set, false);
   });
 });
