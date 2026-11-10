@@ -332,8 +332,11 @@ const MyComponent = () => {
                                                             userId: item._id,
                                                         }),
                                                     })
+                                                    const result = await response.json().catch(() => null)
                                                     if (!response.ok) {
-                                                        alert("Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                        alert(result?.message || "Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                    } else if (result?.pagamentoMantido) {
+                                                        alert("Inscrição retirada. Esta pessoa já tinha PAGO o minicurso: o valor NÃO foi estornado. Se for o caso, faça o estorno pelo painel do Asaas.")
                                                     }
                                                     await hydrateData()
                                                     setLoading(false)
@@ -342,7 +345,7 @@ const MyComponent = () => {
                                                 title: "Atenção!",
                                                 children: (
                                                     <>
-                                                        <p className="presenca-lista-confirmation-copy">Você está prestes a retirar a inscrição do usuário do minicurso. Essa opção <strong className="presenca-lista-confirmation-emphasis">NÃO</strong> estornará o valor ao congressista. Deseja mesmo continuar?</p>
+                                                        <p className="presenca-lista-confirmation-copy">Você está prestes a retirar a inscrição do usuário do minicurso. Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido <strong className="presenca-lista-confirmation-emphasis">NÃO</strong> será estornado. Deseja mesmo continuar?</p>
                                                     </>
                                                 ),
                                                 confirmText: "Continuar",
