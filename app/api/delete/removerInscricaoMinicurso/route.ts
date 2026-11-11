@@ -74,17 +74,19 @@ export const DELETE = withApiAuthRequired(async function DELETE(request) {
         })
     } catch (error) {
         console.log(error)
+        // withApiAuthRequired troca qualquer resposta 5xx por um texto genérico. Estes dois casos precisam
+        // chegar à tela com a mensagem certa, então respondem 424 (dependência externa falhou).
         if (error instanceof AsaasNotConfiguredError) {
             console.error("removerInscricaoMinicurso: ASAAS_API_KEY/ASAAS_API_URL ausentes no Admin")
             return NextResponse.json(
                 { "message": "O Admin não está configurado para falar com o Asaas (faltam ASAAS_API_KEY e ASAAS_API_URL). A inscrição NÃO foi retirada. Avise quem cuida da Vercel." },
-                { status: 503 }
+                { status: 424 }
             )
         }
         if (error instanceof AsaasUnavailableError) {
             return NextResponse.json(
                 { "message": "Não foi possível cancelar a cobrança no Asaas. A inscrição NÃO foi retirada. Tente novamente em instantes." },
-                { status: 502 }
+                { status: 424 }
             )
         }
         return NextResponse.json({ "message": "Ocorreu Algum erro" }, { status: 500 })
