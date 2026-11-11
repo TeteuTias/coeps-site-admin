@@ -2,10 +2,11 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import './style.css';
-import { Users, ClipboardList, UserPlus, UserMinus, CheckCircle, Loader2 } from 'lucide-react';
+import { Users, ClipboardList, UserPlus, UserMinus, CheckCircle, Loader2, Clock, MapPin } from 'lucide-react';
 import { ICourse, ILecture } from '../lib/types/events/event.t';
 import { parseDataArrayPayload } from '../lib/api-data-contract';
 import { isRawActivity, toCourseSummary, toLectureSummary } from '../lib/presenca/activity-summary-contract';
+import { formatActivitySchedule, formatExtraSchedules } from '../lib/presenca/activity-schedule';
 
 const MyComponent = () => {
   const [dataLecture, setDataLecture] = useState<ILecture[]>([])
@@ -109,6 +110,15 @@ const MyComponent = () => {
               <h2 className="presenca-nome">{value.name}</h2>
               <span className="presenca-id">ID: {value._id}</span>
             </div>
+            {(() => {
+              const schedule = formatActivitySchedule(value.timeline)
+              return (
+                <div className="presenca-card-agenda">
+                  <span className="presenca-card-agenda-item"><Clock size={16} /> {schedule.when}{schedule.extra > 0 && <span className="presenca-card-agenda-extra"> ({formatExtraSchedules(schedule.extra)})</span>}</span>
+                  {schedule.where && <span className="presenca-card-agenda-item"><MapPin size={16} /> {schedule.where}</span>}
+                </div>
+              )
+            })()}
             <div className="presenca-card-estatisticas">
               <div className="presenca-card-estatistica"><UserPlus size={18} /> {value.maxParticipants}</div>
               <div className="presenca-card-estatistica"><CheckCircle size={18} /> {value.participants.length}</div>
