@@ -13,6 +13,12 @@ export const PAYMENT_ATTRIBUTION_STATUSES = [
 
 export type PaymentCodeType = (typeof PAYMENT_CODE_TYPES)[number];
 export type PaymentCodeStatus = (typeof PAYMENT_CODE_STATUSES)[number];
+export type PaymentUserProfile = "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
+export type PaymentPriceOrigin =
+  | "LOTE"
+  | "DESCONTO_PERCENTUAL"
+  | "ORGANIZADOR_CONFIGURADO"
+  | "CORTESIA";
 export type PaymentAttributionStatus =
   (typeof PAYMENT_ATTRIBUTION_STATUSES)[number];
 
@@ -41,6 +47,10 @@ export interface PaymentCodeDocument {
   reserva?: PaymentCodeReservation;
   usedAt?: Date;
   usedPurchaseId?: ObjectId | string;
+  perfilUtilizador?: PaymentUserProfile;
+  /** Só código de profissional da saúde: vários usos; sem o campo vale uso único. */
+  limiteUsos?: number;
+  usosRealizados?: number;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -53,6 +63,7 @@ export interface PaymentCodeSnapshot {
   tipo?: PaymentCodeType;
   percentualDesconto?: number;
   responsavel?: PaymentCodeResponsible;
+  perfilUtilizador?: PaymentUserProfile;
 }
 
 export interface SelectedPaymentAmountsInCents {
@@ -81,6 +92,8 @@ export interface PaymentAttributionDocument {
   usuarioId: ObjectId | string;
   codigoDesconto?: PaymentCodeSnapshot;
   codigoRastreio?: PaymentCodeSnapshot;
+  perfilUtilizador?: PaymentUserProfile;
+  origemPreco?: PaymentPriceOrigin;
   valoresCentavos: PaymentAmountsInCents;
   valorSelecionadoCentavos?: SelectedPaymentAmountsInCents;
   pagamento?: {
@@ -89,18 +102,42 @@ export interface PaymentAttributionDocument {
     paymentId?: string;
     invoiceNumber?: string;
   };
+  refundStatus?: "PARTIAL" | "IN_PROGRESS" | "FULL" | string;
+  refundsSnapshot?: PaymentRefundsSnapshot;
+  chargebackStatus?: "REQUESTED" | "DISPUTED" | string;
   status: PaymentAttributionStatus;
   createdAt: Date;
   confirmedAt?: Date;
   updatedAt: Date;
 }
 
+export interface PaymentRefundItem {
+  value: number;
+  valueCentavos: number;
+  status: string;
+  dateCreated: string | null;
+  transactionReceiptUrl: string | null;
+}
+
+export interface PaymentRefundsSnapshot {
+  items: PaymentRefundItem[];
+  totalDone: number;
+  totalDoneCentavos: number;
+  capturedAt: Date;
+}
+
 export interface PaymentCodeMetrics {
   confirmadas: number;
+  confirmadasBrutas: number;
   pendentes: number;
   estornadas: number;
   canceladasOuExpiradas: number;
+  emRevisaoFinanceira: number;
   valorConfirmadoCentavos: number;
+  valorBrutoConfirmadoCentavos: number;
+  valorEstornadoDoneCentavos: number;
+  valorEmRiscoCentavos: number;
+  valorLiquidoCentavos: number;
 }
 
 export interface PaymentCodeListItem {
@@ -111,6 +148,7 @@ export interface PaymentCodeListItem {
   tipo: PaymentCodeType;
   percentualDesconto?: number;
   responsavel?: PaymentCodeResponsible;
+  perfilUtilizador?: PaymentUserProfile;
   status: PaymentCodeStatus | "CONSUMIDO";
   historico: boolean;
   createdAt: string | null;

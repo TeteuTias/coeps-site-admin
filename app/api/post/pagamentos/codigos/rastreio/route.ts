@@ -1,7 +1,7 @@
 import { connectToDatabase } from "@/app/lib/mongodb";
 import { requireFinanceAdmin } from "@/app/lib/payments/finance-admin";
 import {
-  createUniqueCodeDocument,
+  createReadableTrackingCodeDocument,
   getActiveEditionId,
   normalizeEditionId,
   parseResponsible,
@@ -48,9 +48,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const code = await createUniqueCodeDocument(db, {
+    const code = await createReadableTrackingCodeDocument(db, {
       edicaoId,
-      tipo: "RASTREIO",
       responsavel,
       createdBy: authorization.identity.userId,
     });

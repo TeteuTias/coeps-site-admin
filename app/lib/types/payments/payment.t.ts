@@ -1,27 +1,75 @@
+export interface IParcelamento {
+    codigo: number,
+    valorCadaParcela: number,
+    totalParcelas: number
+}
+
+export interface IPrecosLote {
+    valorAVista: number,
+    valorBoleto: number,
+    valorDebito: number,
+    valorPix: number,
+    parcelamentos: IParcelamento[]
+}
+
+export interface ILoteAutomatico {
+    codigo: number,
+    nome: string,
+    limiteVagas: number,
+    precos: IPrecosLote,
+    abreEm?: string // ISO 8601; antes disso o checkout do site não vende o lote
+}
+
+export interface IOcupacaoLoteAutomatico {
+    codigo: number,
+    limiteVagas: number,
+    ocupadasEfetivas: number,
+    restantes: number
+}
+
+export interface IAutomaticLotOccupancy {
+    configId: string,
+    edicaoId: string,
+    calculadoEm: string,
+    confirmadas: {
+        legadas: number,
+        modernas: number,
+        total: number
+    },
+    reservasAtivas: number,
+    ocupadasEfetivas: number,
+    capacidadeTotal: number,
+    excedente: number,
+    lotes: IOcupacaoLoteAutomatico[]
+}
+
 export interface IPaymentConfig {
     "_id": string & { readonly __brand: 'ObjectId' },
     "edicaoId"?: string,
     "ativo"?: boolean,
     "pagantesLegados"?: number,
-    "dataInit": "",
-    "dataEnd": "",
-    "parcelamentos": {
-        "codigo": number,
-        "valorCadaParcela": number,
-        "totalParcelas": number
-    }[],
+    "dataInit": string,
+    "dataEnd": string,
+    "parcelamentos": IParcelamento[],
     "nome": string, // exemplo => "Terceiro Lote - COEPS",
     "valorAVista": number,
     "valorBoleto": number,
     "valorDebito": number,
     "valorPix": number,
-    "pagamentosAceitos": ("PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD")[]
+    "pagamentosAceitos": ("PIX" | "BOLETO" | "CREDIT_CARD" | "DEBIT_CARD")[],
+    "modo"?: "automatico" | "manual",
+    "configuracaoLotesAutomaticos"?: {
+        "lotes": ILoteAutomatico[]
+    },
+    "configuracaoOrganizador"?: {
+        "valorFinalCentavos": number
+    }
 }
 
 
 export interface IPayment {
     "_id": string & { readonly __brand: 'ObjectId' },
-    "situacao": number, // mostra se está pago ou não => 0, 1 ou 2 onde 0 não há pagamento criado, 1 pago, 2 pagamento criado e esperando confirmação
+    "situacao": number, // mostra se está pago ou não => 0, 1, 2 ou 3 onde 0 não há pagamento criado, 1 pago, 2 pagamento criado e esperando confirmação, 3 inscrição suspensa (profissional da saúde aguardando repasse)
     "lista_pagamentos": {
         "object": string,
         "id": string, // exemplo => "pay_e4qzehxllm4ep78p" NAO É OBJECT ID

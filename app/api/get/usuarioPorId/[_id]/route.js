@@ -2,6 +2,8 @@ import { withApiAuthRequired } from "@/app/lib/auth0";
 import { connectToDatabase } from '../../../../lib/mongodb'
 import { NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
+import { normalizeAdminUserDetails } from '@/app/lib/users/admin-user-contract';
+import { loadAdminRemoteParticipation } from '@/app/lib/users/admin-remote-work-server';
 //
 //
 // Exemplo de return:
@@ -14,6 +16,12 @@ export const dynamic = 'force-dynamic'
 export const GET = withApiAuthRequired(async function GET(request, { params }) {
     try {
         const { _id: miniCursoId } = await params;
+        if (!ObjectId.isValid(miniCursoId)) {
+            return NextResponse.json(
+                { error: "invalid_user_id", message: "O identificador do usuário é inválido." },
+                { status: 400 },
+            )
+        }
         //const { user } = await auth0.getSession();
         //vconst userId = user.sub.replace("auth0|", ""); // Retirando o auth0|  
         //
@@ -24,14 +32,28 @@ export const GET = withApiAuthRequired(async function GET(request, { params }) {
         const colecao = 'usuarios'
 
 
-        const response = await db.collection(colecao).find(
+        const response = await db.collection(colecao).findOne(
             { _id: new ObjectId(miniCursoId) },
-            // estamos usando essa rota para vários locais agora. Por isso removi a projeção.
-        ).toArray() // 'buffer': 0, 'user_id': 0, 'size': 0
+        )
 
+        if (!response) {
+            return NextResponse.json(
+                { error: "user_not_found", message: "Usuário não encontrado." },
+                { status: 404 },
+            )
+        }
+
+        const participacao = await loadAdminRemoteParticipation(db, response, new ObjectId(miniCursoId))
+        const user = normalizeAdminUserDetails({ ...response, participacao })
+        if (!user) {
+            return NextResponse.json(
+                { error: "invalid_user_data", message: "Os dados do usuário estão em formato inválido." },
+                { status: 500 },
+            )
+        }
 
         return NextResponse.json({
-            "data": { ...response[0] },
+            "data": user,
         }, { status: 200 });
 
     }

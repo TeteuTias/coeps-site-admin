@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import ConfirmationModal from "@/app/components/ConfirmationModal";
+import { buildPaymentCodesCsv } from "@/app/lib/payments/payment-codes-csv";
+import type { AdminPaymentLedgerBacklog } from "@/app/lib/types/payments/payment-admin.t";
 import {
   ArrowLeft,
   BadgePercent,
   Ban,
   CheckCircle2,
+  CircleX,
+  ChevronDown,
   Clipboard,
+  Download,
+  HeartPulse,
   History,
   Link2,
   Loader2,
@@ -17,20 +23,29 @@ import {
   Search,
   ShieldAlert,
   Tag,
+  TriangleAlert,
   Trash2,
   UserRound,
 } from "lucide-react";
 import "./style.css";
 
 type CodeType = "DESCONTO" | "RASTREIO";
+// A aba "SAUDE" lista os códigos de perfil PROFISSIONAL_SAUDE (tipo DESCONTO).
+type CodeTab = CodeType | "SAUDE";
 type CodeStatus = "ATIVO" | "RESERVADO" | "INATIVO" | "USADO" | "CONSUMIDO";
 
 interface CodeMetrics {
   confirmadas: number;
+  confirmadasBrutas: number;
   pendentes: number;
   estornadas: number;
   canceladasOuExpiradas: number;
+  emRevisaoFinanceira: number;
   valorConfirmadoCentavos: number;
+  valorBrutoConfirmadoCentavos: number;
+  valorEstornadoDoneCentavos: number;
+  valorEmRiscoCentavos: number;
+  valorLiquidoCentavos: number;
 }
 
 interface CodeItem {
@@ -46,21 +61,42 @@ interface CodeItem {
   createdAt: string | null;
   updatedAt: string | null;
   metrics: CodeMetrics;
+  perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
+  limiteUsos?: number;
+  usosRealizados?: number;
 }
+
+type CreatedCodeItem = Pick<
+  CodeItem,
+  "id" | "edicaoId" | "codigo" | "codigoNormalizado" | "tipo" | "percentualDesconto" | "perfilUtilizador" | "status" | "createdAt"
+>;
 
 interface CodesResponse {
   activeEditionId: string | null;
   edicaoId: string | null;
+  organizerPriceCents: number | null;
   items: CodeItem[];
   metrics: {
     totalCodigos: number;
     ativos: number;
     descontos: number;
+    profissionaisSaude: number;
     rastreios: number;
     vendasConfirmadas: number;
+    vendasBrutas: number;
     pagamentosPendentes: number;
     vendasEstornadas: number;
+    revisoesFinanceiras: number;
+    atribuicoesSemSessao: number;
+    sessoesSemAtribuicao: number;
+    webhooksEmRevisao: number;
+    webhooksFalhos: number;
+    valorBrutoConfirmadoCentavos: number;
+    valorEstornadoDoneCentavos: number;
+    valorEmRiscoCentavos: number;
+    valorLiquidoCentavos: number;
   };
+  ledger: AdminPaymentLedgerBacklog;
   pagination: {
     page: number;
     limit: number;
@@ -90,10 +126,34 @@ const EMPTY_METRICS: CodesResponse["metrics"] = {
   totalCodigos: 0,
   ativos: 0,
   descontos: 0,
+  profissionaisSaude: 0,
   rastreios: 0,
   vendasConfirmadas: 0,
+  vendasBrutas: 0,
   pagamentosPendentes: 0,
   vendasEstornadas: 0,
+  revisoesFinanceiras: 0,
+  atribuicoesSemSessao: 0,
+  sessoesSemAtribuicao: 0,
+  webhooksEmRevisao: 0,
+  webhooksFalhos: 0,
+  valorBrutoConfirmadoCentavos: 0,
+  valorEstornadoDoneCentavos: 0,
+  valorEmRiscoCentavos: 0,
+  valorLiquidoCentavos: 0,
+};
+
+const EMPTY_LEDGER: AdminPaymentLedgerBacklog = {
+  counts: { pending: 0, processing: 0, failed: 0, reviewRequired: 0 },
+  oldestOutstandingAt: null,
+  oldestOutstandingAgeSeconds: null,
+  worker: {
+    locked: false,
+    leaseUntil: null,
+    leaseExpired: false,
+    blockedByFailedEvent: false,
+    updatedAt: null,
+  },
 };
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -129,20 +189,58 @@ function formatDate(value: string | null) {
 
 function usageCount(item: CodeItem) {
   return (
-    item.metrics.confirmadas +
+    item.metrics.confirmadasBrutas +
     item.metrics.pendentes +
-    item.metrics.estornadas +
     item.metrics.canceladasOuExpiradas
   );
 }
 
+// Espelha as regras do servidor; o servidor revalida e devolve o motivo de cada código ignorado.
+function canDeleteCode(item: CodeItem, isActiveEdition: boolean) {
+  return (
+    isActiveEdition &&
+    !item.historico &&
+    item.status !== "RESERVADO" &&
+    usageCount(item) === 0 &&
+    (item.tipo !== "RASTREIO" || item.status === "INATIVO") &&
+    Boolean(item.id)
+  );
+}
+
+function buildCodeListParams(filters: {
+  page: number;
+  limit: number;
+  editionId: string;
+  activeTab: CodeTab;
+  statusFilter: string;
+  search: string;
+}) {
+  const params = new URLSearchParams({ page: String(filters.page), limit: String(filters.limit) });
+  if (filters.editionId) params.set("edicaoId", filters.editionId);
+  params.set("tipo", filters.activeTab === "RASTREIO" ? "RASTREIO" : "DESCONTO");
+  if (filters.activeTab === "SAUDE") params.set("perfil", "PROFISSIONAL_SAUDE");
+  if (filters.statusFilter) params.set("status", filters.statusFilter);
+  if (filters.search) params.set("search", filters.search);
+  return params;
+}
+
+function formatAge(seconds: number | null) {
+  if (seconds === null) return "Sem eventos pendentes";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
+
 export default function PaymentCodesPage() {
+  const [activeTab, setActiveTab] = useState<CodeTab>("DESCONTO");
   const [items, setItems] = useState<CodeItem[]>([]);
   const [metrics, setMetrics] = useState(EMPTY_METRICS);
+  const [ledger, setLedger] = useState(EMPTY_LEDGER);
   const [activeEditionId, setActiveEditionId] = useState<string | null>(null);
+  const [organizerPriceCents, setOrganizerPriceCents] = useState<number | null>(null);
   const [editionInput, setEditionInput] = useState("");
   const [editionId, setEditionId] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -157,10 +255,22 @@ export default function PaymentCodesPage() {
   const [hasLoadedCodes, setHasLoadedCodes] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [createdCodes, setCreatedCodes] = useState<CreatedCodeItem[]>([]);
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [codePendingDeletion, setCodePendingDeletion] = useState<CodeItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeletionPending, setBulkDeletionPending] = useState(false);
 
   const [discountPercentage, setDiscountPercentage] = useState("10");
+  const [discountQuantity, setDiscountQuantity] = useState("1");
+  const [healthLimit, setHealthLimit] = useState("100");
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
+  const [healthSuspension, setHealthSuspension] = useState<{
+    ativos: number;
+    suspensos: number;
+    codigosBloqueados: number;
+  } | null>(null);
+  const [discountProfile, setDiscountProfile] = useState<"ORGANIZADOR" | "CONGRESSISTA">("CONGRESSISTA");
   const [trackingName, setTrackingName] = useState("");
   const [trackingEmail, setTrackingEmail] = useState("");
 
@@ -173,11 +283,7 @@ export default function PaymentCodesPage() {
     setMessage(null);
 
     try {
-      const params = new URLSearchParams({ page: String(page), limit: "25" });
-      if (editionId) params.set("edicaoId", editionId);
-      if (typeFilter) params.set("tipo", typeFilter);
-      if (statusFilter) params.set("status", statusFilter);
-      if (search) params.set("search", search);
+      const params = buildCodeListParams({ page, limit: 25, editionId, activeTab, statusFilter, search });
 
       const data = await requestJson<CodesResponse>(
         `/api/get/pagamentos/codigos?${params.toString()}`,
@@ -185,8 +291,10 @@ export default function PaymentCodesPage() {
 
       setItems(data.items);
       setMetrics(data.metrics);
+      setLedger(data.ledger);
       setPagination(data.pagination);
       setActiveEditionId(data.activeEditionId);
+      setOrganizerPriceCents(data.organizerPriceCents);
       setHasLoadedCodes(true);
 
       if (!editionId && data.edicaoId) {
@@ -201,23 +309,78 @@ export default function PaymentCodesPage() {
     } finally {
       setLoading(false);
     }
-  }, [editionId, page, search, statusFilter, typeFilter]);
+  }, [activeTab, editionId, page, search, statusFilter]);
 
   useEffect(() => {
     void loadCodes();
   }, [loadCodes]);
+
+  // A seleção vale para a aba/filtro atual; trocar de contexto limpa.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [activeTab, editionId, statusFilter, search]);
+
+  const loadHealthSuspension = useCallback(async () => {
+    try {
+      setHealthSuspension(await requestJson("/api/post/pagamentos/profissionaisSaude/suspensao"));
+    } catch {
+      setHealthSuspension(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "SAUDE") void loadHealthSuspension();
+  }, [activeTab, loadHealthSuspension]);
 
   const isActiveEdition = Boolean(
     activeEditionId && editionId && activeEditionId === editionId,
   );
 
   const metricCards = useMemo(
-    () => [
-      { label: "Códigos ativos", value: metrics.ativos, icon: Tag },
-      { label: "Descontos", value: metrics.descontos, icon: BadgePercent },
-      { label: "Rastreios", value: metrics.rastreios, icon: Link2 },
-      { label: "Vendas confirmadas", value: metrics.vendasConfirmadas, icon: CheckCircle2 },
-    ],
+    () => ({
+      operational: [
+        { label: "Códigos ativos", value: metrics.ativos, icon: Tag },
+        { label: "Vendas brutas", value: metrics.vendasBrutas, icon: Link2 },
+        { label: "Confirmadas sem risco", value: metrics.vendasConfirmadas, icon: CheckCircle2 },
+        {
+          label: "Compras em revisão financeira",
+          value: metrics.revisoesFinanceiras,
+          icon: TriangleAlert,
+        },
+        {
+          label: "Atribuições sem sessão",
+          value: metrics.atribuicoesSemSessao,
+          icon: ShieldAlert,
+        },
+        {
+          label: "Sessões sem atribuição",
+          value: metrics.sessoesSemAtribuicao,
+          icon: ShieldAlert,
+        },
+      ],
+      financial: [
+        {
+          label: "Valor bruto confirmado",
+          value: moneyFromCents(metrics.valorBrutoConfirmadoCentavos),
+          icon: BadgePercent,
+        },
+        {
+          label: "Estornos concluídos (DONE)",
+          value: moneyFromCents(metrics.valorEstornadoDoneCentavos),
+          icon: CircleX,
+        },
+        {
+          label: "Valor em risco",
+          value: moneyFromCents(metrics.valorEmRiscoCentavos),
+          icon: ShieldAlert,
+        },
+        {
+          label: "Valor líquido após DONE",
+          value: moneyFromCents(metrics.valorLiquidoCentavos),
+          icon: CheckCircle2,
+        },
+      ],
+    }),
     [metrics],
   );
 
@@ -227,7 +390,7 @@ export default function PaymentCodesPage() {
     if (!normalized) return;
     setEditionId(normalized);
     setPage(1);
-    setCreatedCode(null);
+    setCreatedCodes([]);
     setCleanupPreview(null);
   }
 
@@ -241,21 +404,25 @@ export default function PaymentCodesPage() {
     event.preventDefault();
     setMutating(true);
     setMessage(null);
-    setCreatedCode(null);
+    setCreatedCodes([]);
 
     try {
-      const data = await requestJson<{ message: string; code: { codigo: string } }>(
+      const data = await requestJson<{ message: string; codes: CreatedCodeItem[]; code?: CreatedCodeItem }>(
         "/api/post/pagamentos/codigos/desconto/gerar",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             edicaoId: editionId,
-            percentualDesconto: Number(discountPercentage),
+            quantidade: Number(discountQuantity),
+            perfilUtilizador: discountProfile,
+            ...(discountProfile === "CONGRESSISTA"
+              ? { percentualDesconto: Number(discountPercentage) }
+              : {}),
           }),
         },
       );
-      setCreatedCode(data.code.codigo);
+      setCreatedCodes(data.codes ?? (data.code ? [data.code] : []));
       await loadCodes();
       setMessage({ type: "success", text: data.message });
     } catch (error) {
@@ -268,14 +435,111 @@ export default function PaymentCodesPage() {
     }
   }
 
+  async function createHealthCodes(event: FormEvent) {
+    event.preventDefault();
+    setMutating(true);
+    setMessage(null);
+    setCreatedCodes([]);
+
+    try {
+      const data = await requestJson<{ message: string; codes: CreatedCodeItem[]; code?: CreatedCodeItem }>(
+        "/api/post/pagamentos/codigos/desconto/gerar",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            edicaoId: editionId,
+            quantidade: 1,
+            limiteUsos: Number(healthLimit),
+            perfilUtilizador: "PROFISSIONAL_SAUDE",
+          }),
+        },
+      );
+      setCreatedCodes(data.codes ?? (data.code ? [data.code] : []));
+      await loadCodes();
+      setMessage({ type: "success", text: data.message });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível gerar os códigos.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function changeHealthSuspension(acao: "SUSPENDER" | "REATIVAR") {
+    const confirmation = acao === "SUSPENDER"
+      ? "Suspender TODOS os profissionais da saúde inscritos e bloquear os códigos ainda não usados?"
+      : "Reativar todos os profissionais da saúde suspensos e liberar os códigos bloqueados pela suspensão?";
+    if (!window.confirm(confirmation)) return;
+
+    setMutating(true);
+    setMessage(null);
+    try {
+      const data = await requestJson<{ usuarios: number; codigos: number }>(
+        "/api/post/pagamentos/profissionaisSaude/suspensao",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acao }),
+        },
+      );
+      await Promise.all([loadCodes(), loadHealthSuspension()]);
+      setMessage({
+        type: "success",
+        text: `${data.usuarios} inscrições ${acao === "SUSPENDER" ? "suspensas" : "reativadas"} e ${data.codigos} códigos ${acao === "SUSPENDER" ? "bloqueados" : "liberados"}.`,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível alterar a suspensão.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function saveHealthLimit(item: CodeItem) {
+    if (!item.id) return;
+    setMutating(true);
+    setMessage(null);
+    try {
+      const data = await requestJson<{ message: string }>(
+        `/api/put/pagamentos/codigos/${item.id}/limite`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            limiteUsos: Number(limitDrafts[item.id] ?? item.limiteUsos),
+          }),
+        },
+      );
+      setLimitDrafts((drafts) => {
+        const next = { ...drafts };
+        delete next[item.id as string];
+        return next;
+      });
+      await loadCodes();
+      setMessage({ type: "success", text: data.message });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível alterar o limite.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
   async function createTracking(event: FormEvent) {
     event.preventDefault();
     setMutating(true);
     setMessage(null);
-    setCreatedCode(null);
+    setCreatedCodes([]);
 
     try {
-      const data = await requestJson<{ message: string; code: { codigo: string } }>(
+      const data = await requestJson<{ message: string; code: CreatedCodeItem }>(
         "/api/post/pagamentos/codigos/rastreio",
         {
           method: "POST",
@@ -291,7 +555,7 @@ export default function PaymentCodesPage() {
       );
       setTrackingName("");
       setTrackingEmail("");
-      setCreatedCode(data.code.codigo);
+      setCreatedCodes([data.code]);
       await loadCodes();
       setMessage({ type: "success", text: data.message });
     } catch (error) {
@@ -348,6 +612,79 @@ export default function PaymentCodesPage() {
       setMessage({
         type: "error",
         text: error instanceof Error ? error.message : "Não foi possível excluir o código.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]));
+  }
+
+  function togglePageSelection(pageIds: string[]) {
+    setSelectedIds((ids) =>
+      pageIds.every((id) => ids.includes(id))
+        ? ids.filter((id) => !pageIds.includes(id))
+        : [...new Set([...ids, ...pageIds])],
+    );
+  }
+
+  /** Seleciona todos os códigos excluíveis do filtro atual, em todas as páginas. */
+  async function selectAllDeletable() {
+    setMutating(true);
+    setMessage(null);
+    try {
+      const ids: string[] = [];
+      for (let current = 1, total = 1; current <= total; current += 1) {
+        const params = buildCodeListParams({ page: current, limit: 100, editionId, activeTab, statusFilter, search });
+        const data = await requestJson<CodesResponse>(`/api/get/pagamentos/codigos?${params.toString()}`);
+        total = data.pagination.totalPages;
+        const activeEdition = Boolean(data.activeEditionId && editionId && data.activeEditionId === editionId);
+        for (const item of data.items) {
+          if (canDeleteCode(item, activeEdition) && item.id) ids.push(item.id);
+        }
+      }
+      setSelectedIds(ids);
+      if (ids.length === 0) setMessage({ type: "error", text: "Nenhum código deste filtro pode ser excluído." });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível selecionar os códigos.",
+      });
+    } finally {
+      setMutating(false);
+    }
+  }
+
+  async function deleteSelectedCodes() {
+    setBulkDeletionPending(false);
+    setMutating(true);
+    setMessage(null);
+    try {
+      const data = await requestJson<{
+        message: string;
+        excluidos: number;
+        ignorados: { id: string; codigo?: string; motivo: string }[];
+      }>("/api/delete/pagamentos/codigos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      setSelectedIds(data.ignorados.map((item) => item.id).filter(Boolean));
+      await loadCodes();
+      const details = data.ignorados
+        .slice(0, 5)
+        .map((item) => `${item.codigo ?? item.id}: ${item.motivo}`)
+        .join(" · ");
+      setMessage({
+        type: data.ignorados.length ? "error" : "success",
+        text: details ? `${data.message} ${details}` : data.message,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Não foi possível excluir os códigos.",
       });
     } finally {
       setMutating(false);
@@ -420,6 +757,27 @@ export default function PaymentCodesPage() {
     }
   }
 
+  async function copyCreatedCodes() {
+    try {
+      await navigator.clipboard.writeText(createdCodes.map((item) => item.codigo).join("\n"));
+      setMessage({ type: "success", text: `${createdCodes.length} código(s) copiado(s).` });
+    } catch {
+      setMessage({ type: "error", text: "Não foi possível copiar o lote." });
+    }
+  }
+
+  function downloadCreatedCodesCsv() {
+    const csv = buildPaymentCodesCsv(createdCodes);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `codigos-${editionId || "cieps"}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="codigos-page">
       <div className="codigos-shell">
@@ -454,15 +812,27 @@ export default function PaymentCodesPage() {
           </div>
         )}
 
-        {createdCode && (
-          <section className="codigos-created" aria-live="polite">
-            <div>
-              <strong>Novo código</strong>
-              <code>{createdCode}</code>
+        {createdCodes.length > 0 && (
+          <section className="codigos-created codigos-created-batch" aria-live="polite">
+            <div className="codigos-created-heading">
+              <div>
+                <strong>{createdCodes.length === 1 ? "Novo código" : "Novo lote de códigos"}</strong>
+                <span>{createdCodes.length} código(s) pronto(s) para distribuição</span>
+              </div>
+              <div className="codigos-created-actions">
+                <button type="button" onClick={() => void copyCreatedCodes()}>
+                  <Clipboard size={17} /> Copiar todos
+                </button>
+                <button type="button" onClick={downloadCreatedCodesCsv}>
+                  <Download size={17} /> Baixar CSV
+                </button>
+              </div>
             </div>
-            <button type="button" onClick={() => void copyCode(createdCode)}>
-              <Clipboard size={17} /> Copiar
-            </button>
+            <div className="codigos-created-list">
+              {createdCodes.map((item) => (
+                <code key={item.codigoNormalizado}>{item.codigo}</code>
+              ))}
+            </div>
           </section>
         )}
 
@@ -504,89 +874,293 @@ export default function PaymentCodesPage() {
           </div>
         )}
 
-        <section className="codigos-metrics" aria-label="Resumo dos códigos">
-          {metricCards.map(({ label, value, icon: Icon }) => (
-            <article key={label}>
-              <Icon size={22} />
-              <strong>{value}</strong>
-              <span>{label}</span>
-            </article>
-          ))}
+        <section className="codigos-metrics-summary" aria-label="Resumo dos códigos e valores">
+          <div className="codigos-metrics-group">
+            <h2 className="codigos-metrics-title">Indicadores de vendas</h2>
+            <div className="codigos-metrics codigos-metrics--counts">
+              {metricCards.operational.map(({ label, value, icon: Icon }) => (
+                <article className="codigos-metric codigos-metric--count" key={label}>
+                  <Icon size={22} />
+                  <strong>{value}</strong>
+                  <span>{label}</span>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="codigos-metrics-group">
+            <h2 className="codigos-metrics-title">Valores financeiros</h2>
+            <div className="codigos-metrics codigos-metrics--currency">
+              {metricCards.financial.map(({ label, value, icon: Icon }) => (
+                <article className="codigos-metric codigos-metric--currency" key={label}>
+                  <Icon size={22} />
+                  <strong>{value}</strong>
+                  <span>{label}</span>
+                </article>
+              ))}
+            </div>
+          </div>
         </section>
 
-        <section className="codigos-create-grid">
-          <form className="codigos-panel" onSubmit={createDiscount}>
-            <div className="codigos-panel-title">
-              <BadgePercent size={22} />
-              <div>
-                <h2>Novo desconto</h2>
-                <p>Uso único em todo o congresso. O código é gerado pelo servidor.</p>
-              </div>
+        <section className="codigos-ledger-panel" aria-labelledby="ledger-heading">
+          <div className="codigos-ledger-heading">
+            <div>
+              <p className="codigos-eyebrow">Operação global do webhook</p>
+              <h2 id="ledger-heading">Fila e worker de conciliação</h2>
             </div>
-            <label htmlFor="discountPercentage">Percentual de desconto</label>
-            <div className="codigos-percentage-input">
-              <input
-                id="discountPercentage"
-                type="number"
-                min="1"
-                max="99"
-                step="1"
-                value={discountPercentage}
-                onChange={(event) => setDiscountPercentage(event.target.value)}
-                required
-              />
-              <span>%</span>
+            <span className={ledger.worker.locked ? "is-locked" : "is-unlocked"}>
+              {ledger.worker.locked ? "Worker com lease ativo" : "Worker sem lease ativo"}
+            </span>
+          </div>
+          <div className="codigos-ledger-grid">
+            <div><strong>{ledger.counts.pending}</strong><span>PENDING</span></div>
+            <div><strong>{ledger.counts.processing}</strong><span>PROCESSING</span></div>
+            <div><strong>{ledger.counts.failed}</strong><span>FAILED</span></div>
+            <div><strong>{ledger.counts.reviewRequired}</strong><span>REVIEW_REQUIRED</span></div>
+          </div>
+          <dl className="codigos-ledger-details">
+            <div>
+              <dt>Evento pendente mais antigo</dt>
+              <dd>{formatAge(ledger.oldestOutstandingAgeSeconds)} · {formatDate(ledger.oldestOutstandingAt)}</dd>
             </div>
-            <button
-              className="codigos-button codigos-button--primary"
-              type="submit"
-              disabled={!isActiveEdition || mutating}
-            >
-              {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-              Gerar desconto
-            </button>
-          </form>
+            <div>
+              <dt>Lease até</dt>
+              <dd>{formatDate(ledger.worker.leaseUntil)}</dd>
+            </div>
+            <div>
+              <dt>Estado do lease</dt>
+              <dd>{ledger.worker.leaseExpired ? "Expirado" : ledger.worker.locked ? "Ativo" : "Livre"}</dd>
+            </div>
+            <div>
+              <dt>Bloqueio por falha</dt>
+              <dd>{ledger.worker.blockedByFailedEvent ? "Sim — exige atenção" : "Não"}</dd>
+            </div>
+          </dl>
+        </section>
 
-          <form className="codigos-panel" onSubmit={createTracking}>
-            <div className="codigos-panel-title">
-              <UserRound size={22} />
-              <div>
-                <h2>Novo rastreio</h2>
-                <p>Reutilizável e sem alteração no valor da inscrição.</p>
+        <section className="codigos-workspace">
+          <div className="codigos-tabs" role="tablist" aria-label="Tipo de código">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "DESCONTO"}
+              className={activeTab === "DESCONTO" ? "is-active" : ""}
+              onClick={() => { setActiveTab("DESCONTO"); setPage(1); setExpandedCode(null); }}
+            >
+              <BadgePercent size={18} /> Descontos <span>{metrics.descontos}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "RASTREIO"}
+              className={activeTab === "RASTREIO" ? "is-active" : ""}
+              onClick={() => { setActiveTab("RASTREIO"); setPage(1); setExpandedCode(null); }}
+            >
+              <UserRound size={18} /> Rastreios <span>{metrics.rastreios}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "SAUDE"}
+              className={activeTab === "SAUDE" ? "is-active" : ""}
+              onClick={() => { setActiveTab("SAUDE"); setPage(1); setExpandedCode(null); }}
+            >
+              <HeartPulse size={18} /> Profissionais da saúde <span>{metrics.profissionaisSaude}</span>
+            </button>
+          </div>
+
+          {activeTab === "SAUDE" ? (
+            <>
+            <div className="codigos-panel codigos-create-form">
+              <div className="codigos-panel-title">
+                <HeartPulse size={22} />
+                <div>
+                  <h2>Repasse da prefeitura</h2>
+                  <p>
+                    Suspende o acesso de todos os profissionais da saúde inscritos e bloqueia os códigos
+                    ainda não usados. Ao reativar, tudo volta como estava.
+                  </p>
+                </div>
+              </div>
+              <div className="codigos-form-grid">
+                <div className="codigos-organizer-price is-ready">
+                  <span>Inscritos ativos</span>
+                  <strong>{healthSuspension?.ativos ?? "—"}</strong>
+                </div>
+                <div className="codigos-organizer-price is-ready">
+                  <span>Suspensos</span>
+                  <strong>{healthSuspension?.suspensos ?? "—"}</strong>
+                  <small>{healthSuspension?.codigosBloqueados ?? 0} códigos bloqueados</small>
+                </div>
+              </div>
+              <div className="codigos-form-grid">
+                <button
+                  className="codigos-button"
+                  type="button"
+                  disabled={!isActiveEdition || mutating}
+                  onClick={() => void changeHealthSuspension("SUSPENDER")}
+                >
+                  Suspender todos
+                </button>
+                <button
+                  className="codigos-button codigos-button--primary"
+                  type="button"
+                  disabled={!isActiveEdition || mutating}
+                  onClick={() => void changeHealthSuspension("REATIVAR")}
+                >
+                  Reativar todos
+                </button>
               </div>
             </div>
-            <label htmlFor="trackingName">Pessoa responsável</label>
-            <input
-              id="trackingName"
-              value={trackingName}
-              onChange={(event) => setTrackingName(event.target.value)}
-              minLength={2}
-              maxLength={120}
-              required
-            />
-            <label htmlFor="trackingEmail">E-mail (opcional)</label>
-            <input
-              id="trackingEmail"
-              type="email"
-              value={trackingEmail}
-              onChange={(event) => setTrackingEmail(event.target.value)}
-              maxLength={254}
-            />
-            <button
-              className="codigos-button codigos-button--primary"
-              type="submit"
-              disabled={!isActiveEdition || mutating}
-            >
-              {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
-              Gerar rastreio
-            </button>
-          </form>
+            <form className="codigos-panel codigos-create-form" onSubmit={createHealthCodes}>
+              <div className="codigos-panel-title">
+                <HeartPulse size={22} />
+                <div>
+                  <h2>Gerar código de profissionais da saúde</h2>
+                  <p>Um único código com vários usos, para a prefeitura divulgar. Inscrição gratuita, sem pagamento no Asaas e sem ocupar vagas dos lotes.</p>
+                </div>
+              </div>
+              <div className="codigos-form-grid">
+                <label>
+                  Limite de usos
+                  <input
+                    id="healthLimit"
+                    type="number"
+                    min="1"
+                    max="5000"
+                    step="1"
+                    value={healthLimit}
+                    onChange={(event) => setHealthLimit(event.target.value)}
+                    required
+                  />
+                </label>
+                <div className="codigos-organizer-price is-ready">
+                  <span>Valor da inscrição</span>
+                  <strong>{moneyFromCents(0)}</strong>
+                  <small>Marcados como profissional da saúde no cadastro.</small>
+                </div>
+              </div>
+              <button className="codigos-button codigos-button--primary" type="submit" disabled={!isActiveEdition || mutating}>
+                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
+                Gerar código com {healthLimit || "N"} usos
+              </button>
+            </form>
+            </>
+          ) : activeTab === "DESCONTO" ? (
+            <form className="codigos-panel codigos-create-form" onSubmit={createDiscount}>
+              <div className="codigos-panel-title">
+                <BadgePercent size={22} />
+                <div>
+                  <h2>Gerar descontos</h2>
+                  <p>Cada código é individual, aleatório e de uso único.</p>
+                </div>
+              </div>
+              <div className="codigos-form-grid">
+                <label>
+                  Perfil do participante
+                  <select
+                    value={discountProfile}
+                    onChange={(event) => setDiscountProfile(event.target.value as "ORGANIZADOR" | "CONGRESSISTA")}
+                  >
+                    <option value="CONGRESSISTA">Congressista</option>
+                    <option value="ORGANIZADOR">Organizador</option>
+                  </select>
+                </label>
+                <label>
+                  Quantidade
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    step="1"
+                    value={discountQuantity}
+                    onChange={(event) => setDiscountQuantity(event.target.value)}
+                    required
+                  />
+                </label>
+                {discountProfile === "CONGRESSISTA" ? (
+                  <label>
+                    Percentual de desconto
+                    <div className="codigos-percentage-input">
+                      <input
+                        id="discountPercentage"
+                        type="number"
+                        min="1"
+                        max="99"
+                        step="1"
+                        value={discountPercentage}
+                        onChange={(event) => setDiscountPercentage(event.target.value)}
+                        required
+                      />
+                      <span>%</span>
+                    </div>
+                  </label>
+                ) : (
+                  <div className={`codigos-organizer-price ${organizerPriceCents ? "is-ready" : "is-missing"}`}>
+                    <span>Preço fixo de organizador</span>
+                    <strong>{organizerPriceCents ? moneyFromCents(organizerPriceCents) : "Não configurado"}</strong>
+                    <small>Não ocupa vagas dos lotes.</small>
+                  </div>
+                )}
+              </div>
+              <button
+                className="codigos-button codigos-button--primary"
+                type="submit"
+                disabled={!isActiveEdition || mutating || (discountProfile === "ORGANIZADOR" && !organizerPriceCents)}
+              >
+                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
+                Gerar {Number(discountQuantity) > 1 ? `${discountQuantity} descontos` : "desconto"}
+              </button>
+            </form>
+          ) : (
+            <form className="codigos-panel codigos-create-form" onSubmit={createTracking}>
+              <div className="codigos-panel-title">
+                <UserRound size={22} />
+                <div>
+                  <h2>Novo rastreio</h2>
+                  <p>Reutilizável, legível e sem alteração no preço ou no perfil.</p>
+                </div>
+              </div>
+              <div className="codigos-form-grid codigos-form-grid--tracking">
+                <label>
+                  Pessoa responsável
+                  <input
+                    id="trackingName"
+                    value={trackingName}
+                    onChange={(event) => setTrackingName(event.target.value)}
+                    minLength={2}
+                    maxLength={120}
+                    placeholder="Ana Lívia"
+                    required
+                  />
+                </label>
+                <label>
+                  E-mail (opcional)
+                  <input
+                    id="trackingEmail"
+                    type="email"
+                    value={trackingEmail}
+                    onChange={(event) => setTrackingEmail(event.target.value)}
+                    maxLength={254}
+                  />
+                </label>
+                <div className="codigos-tracking-example">
+                  <span>Formato gerado</span>
+                  <code>AnaLivia-CIEPS2026</code>
+                </div>
+              </div>
+              <button className="codigos-button codigos-button--primary" type="submit" disabled={!isActiveEdition || mutating}>
+                {mutating ? <Loader2 className="codigos-spin" size={17} /> : <Plus size={17} />}
+                Gerar rastreio
+              </button>
+            </form>
+          )}
         </section>
 
         <section className="codigos-panel codigos-list-panel">
           <div className="codigos-list-heading">
             <div>
-              <h2>Códigos da edição {editionId || "—"}</h2>
+              <h2>{activeTab === "SAUDE" ? "Profissionais da saúde" : activeTab === "DESCONTO" ? "Descontos" : "Rastreios"} da edição {editionId || "—"}</h2>
               <p>{pagination.total} resultado(s) para os filtros aplicados.</p>
             </div>
             <form onSubmit={applySearch} className="codigos-search-form">
@@ -594,27 +1168,13 @@ export default function PaymentCodesPage() {
               <input
                 value={searchInput}
                 onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Código ou responsável"
+                placeholder={activeTab !== "RASTREIO" ? "Buscar código" : "Código, nome ou e-mail"}
               />
               <button type="submit">Buscar</button>
             </form>
           </div>
 
           <div className="codigos-filters">
-            <label>
-              Tipo
-              <select
-                value={typeFilter}
-                onChange={(event) => {
-                  setTypeFilter(event.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">Todos</option>
-                <option value="DESCONTO">Desconto</option>
-                <option value="RASTREIO">Rastreio</option>
-              </select>
-            </label>
             <label>
               Status
               <select
@@ -644,18 +1204,66 @@ export default function PaymentCodesPage() {
               <p>Nenhum código encontrado.</p>
             </div>
           ) : (
+            <>
+            {isActiveEdition && (
+              <div className="codigos-bulk-bar">
+                <span>
+                  {selectedIds.length
+                    ? `${selectedIds.length} código(s) selecionado(s)`
+                    : "Nenhum código selecionado"}
+                </span>
+                <button
+                  className="codigos-button"
+                  type="button"
+                  disabled={mutating}
+                  onClick={() => void selectAllDeletable()}
+                >
+                  Selecionar todos
+                </button>
+                <button
+                  className="codigos-button"
+                  type="button"
+                  disabled={mutating || selectedIds.length === 0}
+                  onClick={() => setSelectedIds([])}
+                >
+                  Limpar seleção
+                </button>
+                <button
+                  className="codigos-button codigos-button--danger"
+                  type="button"
+                  disabled={mutating || selectedIds.length === 0}
+                  onClick={() => setBulkDeletionPending(true)}
+                >
+                  <Trash2 size={16} /> Excluir selecionados
+                </button>
+              </div>
+            )}
             <div className="codigos-table-wrap">
               <table className="codigos-table">
                 <thead>
                   <tr>
+                    <th>
+                      {(() => {
+                        const pageIds = items
+                          .filter((item) => canDeleteCode(item, isActiveEdition))
+                          .map((item) => item.id as string);
+                        return (
+                          <input
+                            type="checkbox"
+                            aria-label="Selecionar todos os códigos excluíveis desta página"
+                            title="Selecionar esta página"
+                            disabled={pageIds.length === 0 || mutating}
+                            checked={pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id))}
+                            onChange={() => togglePageSelection(pageIds)}
+                          />
+                        );
+                      })()}
+                    </th>
                     <th>Código</th>
-                    <th>Configuração</th>
+                    <th>{activeTab !== "RASTREIO" ? "Benefício" : "Responsável"}</th>
                     <th>Status</th>
-                    <th>Confirmadas</th>
-                    <th>Pendentes</th>
-                    <th>Estornadas</th>
-                    <th>Canceladas/expiradas</th>
-                    <th>Valor confirmado</th>
+                    <th>Atividade</th>
+                    <th>Valor líquido</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
@@ -668,17 +1276,23 @@ export default function PaymentCodesPage() {
                       item.status !== "RESERVADO" &&
                       (item.tipo === "RASTREIO" || !used) &&
                       Boolean(item.id);
-                    const canDelete =
-                      isActiveEdition &&
-                      !item.historico &&
-                      item.status !== "RESERVADO" &&
-                      !used &&
-                      (item.tipo !== "RASTREIO" || item.status === "INATIVO") &&
-                      Boolean(item.id);
+                    const canDelete = canDeleteCode(item, isActiveEdition);
 
+                    const itemKey = `${item.tipo}-${item.codigoNormalizado}`;
+                    const isExpanded = expandedCode === itemKey;
                     return (
-                      <tr key={`${item.tipo}-${item.codigoNormalizado}`}>
-                        <td>
+                      <Fragment key={itemKey}>
+                      <tr>
+                        <td data-label="Selecionar">
+                          <input
+                            type="checkbox"
+                            aria-label={`Selecionar ${item.codigo}`}
+                            disabled={!canDelete || mutating}
+                            checked={Boolean(item.id && selectedIds.includes(item.id))}
+                            onChange={() => item.id && toggleSelected(item.id)}
+                          />
+                        </td>
+                        <td data-label="Código">
                           <div className="codigos-code-cell">
                             <code>{item.codigo}</code>
                             <button
@@ -691,27 +1305,49 @@ export default function PaymentCodesPage() {
                           </div>
                           <small>Criado em {formatDate(item.createdAt)}</small>
                         </td>
-                        <td>
-                          <strong>{item.tipo === "DESCONTO" ? "Desconto" : "Rastreio"}</strong>
+                        <td data-label={activeTab !== "RASTREIO" ? "Benefício" : "Responsável"}>
+                          <strong>
+                            {item.tipo === "DESCONTO"
+                              ? item.perfilUtilizador === "ORGANIZADOR"
+                                ? "Organizador"
+                                : item.perfilUtilizador === "PROFISSIONAL_SAUDE"
+                                  ? "Profissional da saúde"
+                                  : `${item.percentualDesconto ?? "—"}% de desconto`
+                              : item.responsavel?.nome ?? "Responsável não informado"}
+                          </strong>
                           <small>
                             {item.tipo === "DESCONTO"
-                              ? `${item.percentualDesconto ?? "—"}%`
-                              : item.responsavel?.nome ?? "Responsável não informado"}
+                              ? item.perfilUtilizador === "ORGANIZADOR"
+                                ? organizerPriceCents ? moneyFromCents(organizerPriceCents) : "Preço da edição indisponível"
+                                : item.perfilUtilizador === "PROFISSIONAL_SAUDE"
+                                  ? item.limiteUsos !== undefined
+                                    ? `Inscrição gratuita · ${item.usosRealizados ?? 0}/${item.limiteUsos} usos`
+                                    : "Inscrição gratuita"
+                                  : "Congressista"
+                              : item.responsavel?.email ?? "Sem e-mail"}
                           </small>
-                          {item.responsavel?.email && <small>{item.responsavel.email}</small>}
                         </td>
-                        <td>
+                        <td data-label="Status">
                           <span className={`codigos-status codigos-status--${item.status.toLowerCase()}`}>
                             {item.status}
                           </span>
                         </td>
-                        <td>{item.metrics.confirmadas}</td>
-                        <td>{item.metrics.pendentes}</td>
-                        <td>{item.metrics.estornadas}</td>
-                        <td>{item.metrics.canceladasOuExpiradas}</td>
-                        <td>{moneyFromCents(item.metrics.valorConfirmadoCentavos)}</td>
-                        <td>
+                        <td data-label="Atividade">
+                          <strong>{item.metrics.confirmadas} confirmada(s)</strong>
+                          <small>{item.metrics.pendentes} pendente(s) · {item.metrics.emRevisaoFinanceira} em revisão</small>
+                        </td>
+                        <td data-label="Valor líquido"><strong>{moneyFromCents(item.metrics.valorLiquidoCentavos)}</strong></td>
+                        <td data-label="Ações">
                           <div className="codigos-actions">
+                            <button
+                              type="button"
+                              aria-expanded={isExpanded}
+                              aria-label={`${isExpanded ? "Ocultar" : "Mostrar"} detalhes de ${item.codigo}`}
+                              title="Ver indicadores detalhados"
+                              onClick={() => setExpandedCode(isExpanded ? null : itemKey)}
+                            >
+                              <ChevronDown className={isExpanded ? "is-expanded" : ""} size={16} />
+                            </button>
                             <button
                               type="button"
                               aria-label={
@@ -748,11 +1384,52 @@ export default function PaymentCodesPage() {
                           </div>
                         </td>
                       </tr>
+                      {isExpanded && (
+                        <tr className="codigos-detail-row">
+                          <td colSpan={7}>
+                            <dl className="codigos-detail-grid">
+                              <div><dt>Vendas brutas</dt><dd>{item.metrics.confirmadasBrutas}</dd></div>
+                              <div><dt>Estornadas</dt><dd>{item.metrics.estornadas}</dd></div>
+                              <div><dt>Canceladas/expiradas</dt><dd>{item.metrics.canceladasOuExpiradas}</dd></div>
+                              <div><dt>Valor bruto</dt><dd>{moneyFromCents(item.metrics.valorBrutoConfirmadoCentavos)}</dd></div>
+                              <div><dt>Refund DONE</dt><dd>{moneyFromCents(item.metrics.valorEstornadoDoneCentavos)}</dd></div>
+                              <div><dt>Valor em risco</dt><dd>{moneyFromCents(item.metrics.valorEmRiscoCentavos)}</dd></div>
+                            </dl>
+                            {item.id && item.limiteUsos !== undefined && isActiveEdition && (
+                              <div className="codigos-form-grid">
+                                <label>
+                                  Limite de usos ({item.usosRealizados ?? 0} já usados; igualar aos usos fecha o código)
+                                  <input
+                                    type="number"
+                                    min={Math.max(1, item.usosRealizados ?? 0)}
+                                    max="5000"
+                                    step="1"
+                                    value={limitDrafts[item.id] ?? String(item.limiteUsos)}
+                                    onChange={(event) =>
+                                      setLimitDrafts((drafts) => ({ ...drafts, [item.id as string]: event.target.value }))
+                                    }
+                                  />
+                                </label>
+                                <button
+                                  className="codigos-button codigos-button--primary"
+                                  type="button"
+                                  disabled={mutating}
+                                  onClick={() => void saveHealthLimit(item)}
+                                >
+                                  Salvar limite
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {pagination.totalPages > 1 && (
@@ -871,6 +1548,19 @@ export default function PaymentCodesPage() {
         <p className="codigos-confirmation-copy">
           O código <code>{codePendingDeletion?.codigo}</code> será removido permanentemente.
           Essa ação não pode ser desfeita.
+        </p>
+      </ConfirmationModal>
+
+      <ConfirmationModal
+        isOpen={bulkDeletionPending}
+        onClose={() => setBulkDeletionPending(false)}
+        onConfirm={() => void deleteSelectedCodes()}
+        title={`Excluir ${selectedIds.length} código(s)?`}
+        confirmText="Excluir selecionados"
+      >
+        <p className="codigos-confirmation-copy">
+          Os códigos selecionados serão removidos permanentemente. Códigos com compra vinculada,
+          reservados ou rastreios ativos são ignorados. Essa ação não pode ser desfeita.
         </p>
       </ConfirmationModal>
     </main>

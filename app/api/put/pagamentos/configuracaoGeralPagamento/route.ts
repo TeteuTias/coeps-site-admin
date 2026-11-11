@@ -2,10 +2,15 @@ import { ObjectId } from "mongodb";
 import { connectToDatabase } from "@/app/lib/mongodb";
 import { requireFinanceAdmin } from "@/app/lib/payments/finance-admin";
 import { normalizeEditionId } from "@/app/lib/payments/payment-code-repository";
+import {
+  assertLoadedActiveConfig,
+  PaymentConfigError,
+} from "@/app/lib/payments/payment-config-repository";
 
 function validNonNegativeAmount(value: unknown) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
 }
 
 export async function PUT(request: Request) {
@@ -18,6 +23,12 @@ export async function PUT(request: Request) {
     const nome = typeof body.nome === "string" ? body.nome.trim() : "";
     const explicitEdition = body.edicaoId !== undefined;
     const edicaoId = explicitEdition ? normalizeEditionId(body.edicaoId) : null;
+    const organizerConfig =
+      typeof body.configuracaoOrganizador === "object" &&
+      body.configuracaoOrganizador !== null
+        ? body.configuracaoOrganizador as Record<string, unknown>
+        : null;
+    const organizerPriceCents = organizerConfig?.valorFinalCentavos;
 
     if (!ObjectId.isValid(id)) {
       return Response.json(
@@ -34,6 +45,18 @@ export async function PUT(request: Request) {
     if (explicitEdition && !edicaoId) {
       return Response.json(
         { error: "invalid_edition", message: "O identificador da edição é inválido." },
+        { status: 400 },
+      );
+    }
+    if (
+      organizerConfig &&
+      (!Number.isInteger(organizerPriceCents) || Number(organizerPriceCents) <= 0)
+    ) {
+      return Response.json(
+        {
+          error: "invalid_organizer_price",
+          message: "O preço de organizador deve ser um valor positivo em centavos.",
+        },
         { status: 400 },
       );
     }
@@ -55,17 +78,8 @@ export async function PUT(request: Request) {
     }
 
     const { client, db } = await connectToDatabase();
-    const objectId = new ObjectId(id);
-    const currentConfig = await db.collection("ingressos_config").findOne(
-      { _id: objectId },
-      { projection: { edicaoId: 1, pagantesLegados: 1, ativo: 1 } },
-    );
-    if (!currentConfig) {
-      return Response.json(
-        { error: "config_not_found", message: "Configuração financeira não encontrada." },
-        { status: 404 },
-      );
-    }
+    const currentConfig = await assertLoadedActiveConfig(db, id);
+    const objectId = currentConfig._id;
 
     const editionChanged = Boolean(
       explicitEdition &&
@@ -79,6 +93,13 @@ export async function PUT(request: Request) {
       ...amounts,
       updatedAt,
       updatedBy: authorization.identity.userId,
+      ...(organizerConfig
+        ? {
+            configuracaoOrganizador: {
+              valorFinalCentavos: Number(organizerPriceCents),
+            },
+          }
+        : {}),
     };
 
     if (explicitEdition && edicaoId) {
@@ -134,9 +155,18 @@ export async function PUT(request: Request) {
         edicaoId: explicitEdition ? edicaoId : currentConfig.edicaoId,
         ativo: explicitEdition ? true : currentConfig.ativo,
         pagantesLegados: editionChanged ? 0 : currentConfig.pagantesLegados,
+        configuracaoOrganizador: organizerConfig
+          ? { valorFinalCentavos: Number(organizerPriceCents) }
+          : currentConfig.configuracaoOrganizador,
       },
     });
   } catch (error) {
+    if (error instanceof PaymentConfigError) {
+      return Response.json(
+        { error: error.code, message: error.message },
+        { status: error.status },
+      );
+    }
     console.error("Erro ao atualizar configuração financeira:", error);
     return Response.json(
       { error: "invalid_request", message: "Não foi possível validar os dados enviados." },

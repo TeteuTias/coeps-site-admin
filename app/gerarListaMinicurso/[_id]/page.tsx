@@ -2,28 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import {
+  type AdminUserSummary,
+  displayUserField,
+  displayUserName,
+  parseAdminUserListPayload,
+} from '@/app/lib/users/admin-user-contract'
+import { parseDataObjectPayload, parseStringArrayDataPayload } from '@/app/lib/api-data-contract'
 import '../../print-list.css'
-
-interface Usuario {
-  informacoes_usuario: {
-    email: string
-    nome: string
-  }
-}
-
-interface ParticipantesResponse {
-  data: string[]
-}
-
-interface UsuariosResponse {
-  data: Usuario[]
-}
-
-interface MinicursoResponse {
-  data: {
-    name: string
-  }
-}
 
 function formatarDataEmissao() {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -35,7 +21,7 @@ function formatarDataEmissao() {
 
 export default function ListaMinicursoPage() {
   const { _id } = useParams<{ _id: string }>()
-  const [participantes, setParticipantes] = useState<Usuario[]>([])
+  const [participantes, setParticipantes] = useState<AdminUserSummary[]>([])
   const [nomeMinicurso, setNomeMinicurso] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -62,14 +48,16 @@ export default function ListaMinicursoPage() {
         }
 
         const [participantesResult, minicursoResult] = await Promise.all([
-          participantesResponse.json() as Promise<ParticipantesResponse>,
-          minicursoResponse.json() as Promise<MinicursoResponse>,
+          participantesResponse.json().catch(() => null) as Promise<unknown>,
+          minicursoResponse.json().catch(() => null) as Promise<unknown>,
         ])
-        const ids = Array.isArray(participantesResult.data)
-          ? participantesResult.data
-          : []
+        const ids = parseStringArrayDataPayload(participantesResult)
+        const minicurso = parseDataObjectPayload(minicursoResult)
+        if (!ids || !minicurso || typeof minicurso.name !== 'string') {
+          throw new Error('Os dados do minicurso estão em formato inválido.')
+        }
 
-        setNomeMinicurso(minicursoResult.data?.name || 'Minicurso')
+        setNomeMinicurso(minicurso.name || 'Minicurso')
 
         const usuariosResponse = await fetch(
           '/api/post/informacoesVariosUsuarios',
@@ -87,11 +75,10 @@ export default function ListaMinicursoPage() {
           throw new Error('Não foi possível carregar os dados dos participantes.')
         }
 
-        const usuariosResult =
-          (await usuariosResponse.json()) as UsuariosResponse
-        setParticipantes(
-          Array.isArray(usuariosResult.data) ? usuariosResult.data : [],
-        )
+        const usuariosResult: unknown = await usuariosResponse.json().catch(() => null)
+        const users = parseAdminUserListPayload(usuariosResult)
+        if (!users) throw new Error('A lista de participantes está em formato inválido.')
+        setParticipantes(users)
       } catch (cause) {
         if (cause instanceof DOMException && cause.name === 'AbortError') {
           return
@@ -248,11 +235,11 @@ export default function ListaMinicursoPage() {
               <tbody>
                 {participantes.map((participante, index) => (
                   <tr
-                    key={`${participante.informacoes_usuario.email}-${index}`}
+                    key={participante._id}
                   >
                     <td className="print-list-number">{index + 1}</td>
-                    <td>{participante.informacoes_usuario.nome}</td>
-                    <td>{participante.informacoes_usuario.email}</td>
+                    <td>{displayUserName(participante)}</td>
+                    <td>{displayUserField(participante.informacoes_usuario.email)}</td>
                     <td className="print-list-signature">
                       <span aria-hidden="true" />
                     </td>

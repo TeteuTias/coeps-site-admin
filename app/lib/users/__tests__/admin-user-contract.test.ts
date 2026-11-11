@@ -1,0 +1,225 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+import {
+    adminDateToIso,
+    adminUserCreationDay,
+    adminUserLotKey,
+    adminUserLotLabel,
+    LOT_FILTER_NONE,
+    LOT_FILTER_ORGANIZER,
+    purchaseLotFromSession,
+    filterAdminUsers,
+    normalizeAdminUserDetails,
+    normalizeAdminUserSummary,
+    parseAdminUserDetailsPayload,
+    parseAdminUserListHttpResponse,
+    parseAdminUserListPayload,
+} from "../admin-user-contract.ts"
+import {
+    parseDataArrayPayload,
+    parseDataObjectPayload,
+    parseStringArrayDataPayload,
+} from "../../api-data-contract.ts"
+
+const FULL_USER = {
+    _id: "66bbc8c2db29318201acc2a1",
+    id_api: "cus_123",
+    isPos_registration: true,
+    informacoes_usuario: {
+        cpf: "12345678900",
+        numero_telefone: "34999999999",
+        nome: "Ada Lovelace",
+        email: "ada@example.com",
+        data_criacao: new Date("2026-08-31T12:30:00.000Z"),
+        titulo_honorario: "Dra.",
+        profissao: "Médica",
+        matricula_municipio: "12345-6",
+        unidade_origem: "UBS Centro",
+    },
+    pagamento: {
+        situacao: 1,
+        situacao_animacao: true,
+        tipo_pagamento: "PIX",
+        lista_pagamentos: [{ _id: "legacy-payment" }],
+    },
+}
+
+test("normaliza perfil completo, ObjectId e data BSON/ISO", () => {
+    const user = normalizeAdminUserSummary({
+        ...FULL_USER,
+        _id: { toHexString: () => FULL_USER._id },
+    })
+
+    assert.ok(user)
+    assert.equal(user._id, FULL_USER._id)
+    assert.equal(user.informacoes_usuario.data_criacao, "2026-08-31T12:30:00.000Z")
+    assert.equal(user.pagamento.situacao, 1)
+    assert.equal(user.cadastroPendente, false)
+    assert.equal(user.informacoes_usuario.profissao, "Médica")
+    assert.equal(user.informacoes_usuario.matricula_municipio, "12345-6")
+    assert.equal(user.informacoes_usuario.unidade_origem, "UBS Centro")
+})
+
+test("mantém usuário com perfil e pagamento ausentes como cadastro pendente", () => {
+    const user = normalizeAdminUserDetails({ _id: FULL_USER._id })
+
+    assert.ok(user)
+    assert.deepEqual(user.informacoes_usuario, {
+        cpf: null,
+        numero_telefone: null,
+        nome: null,
+        email: null,
+        data_criacao: null,
+        titulo_honorario: null,
+        profissao: null,
+        matricula_municipio: null,
+        unidade_origem: null,
+    })
+    assert.deepEqual(user.pagamento, {
+        situacao: null,
+        situacao_animacao: false,
+        tipo_pagamento: null,
+        lista_pagamentos: [],
+    })
+    assert.equal(user.cadastroPendente, true)
+})
+
+test("rejeita objeto ausente ou sem identificador", () => {
+    assert.equal(normalizeAdminUserSummary(undefined), null)
+    assert.equal(normalizeAdminUserSummary(null), null)
+    assert.equal(normalizeAdminUserSummary({}), null)
+})
+
+test("rejeita tipos incorretos sem fabricar status ou campos pessoais", () => {
+    const user = normalizeAdminUserSummary({
+        _id: FULL_USER._id,
+        id_api: 123,
+        informacoes_usuario: {
+            nome: 42,
+            email: {},
+            cpf: false,
+            numero_telefone: [],
+            data_criacao: { $date: "2026-08-31T12:30:00.000Z" },
+        },
+        pagamento: { situacao: 9, tipo_pagamento: 10 },
+    })
+
+    assert.ok(user)
+    assert.equal(user.id_api, null)
+    assert.equal(user.informacoes_usuario.nome, null)
+    assert.equal(user.informacoes_usuario.data_criacao, null)
+    assert.equal(user.pagamento.situacao, null)
+    assert.equal(user.pagamento.tipo_pagamento, null)
+})
+
+test("datas nulas, vazias, inválidas, objetos e números nunca viram 1970", () => {
+    const invalidValues = [undefined, null, "", "   ", "not-a-date", {}, 0]
+    for (const value of invalidValues) {
+        assert.equal(adminDateToIso(value), null)
+    }
+    assert.equal(adminDateToIso("2026-08-31T12:30:00.000Z"), "2026-08-31T12:30:00.000Z")
+    assert.equal(adminUserCreationDay(null), null)
+})
+
+test("parsers rejeitam erro HTTP, envelope ausente, lista não-array e linha sem ID", () => {
+    assert.equal(parseAdminUserListHttpResponse(false, { data: [FULL_USER] }), null)
+    assert.equal(parseAdminUserListPayload({ message: "erro" }), null)
+    assert.equal(parseAdminUserListPayload({}), null)
+    assert.equal(parseAdminUserListPayload({ data: {} }), null)
+    assert.equal(parseAdminUserListPayload({ data: [{}] }), null)
+    assert.equal(parseAdminUserDetailsPayload({ message: "erro" }), null)
+})
+
+test("lista legada malformada vira lista vazia", () => {
+    const user = normalizeAdminUserDetails({
+        ...FULL_USER,
+        pagamento: {
+            ...FULL_USER.pagamento,
+            lista_pagamentos: [{ _id: "legacy-payment" }],
+        },
+    })
+
+    assert.ok(user)
+    assert.deepEqual(user.pagamento.lista_pagamentos, [])
+})
+
+test("envelopes auxiliares exigem objeto e arrays somente de strings", () => {
+    assert.deepEqual(parseStringArrayDataPayload({ data: ["a", "b"] }), ["a", "b"])
+    assert.equal(parseStringArrayDataPayload({ data: ["a", null] }), null)
+    assert.equal(parseStringArrayDataPayload({ message: "erro" }), null)
+    assert.deepEqual(parseDataObjectPayload({ data: { name: "Evento" } }), { name: "Evento" })
+    assert.equal(parseDataObjectPayload({ data: [] }), null)
+    const hasName = (item: unknown): item is { name: string } => (
+        typeof item === "object" && item !== null && "name" in item &&
+        typeof item.name === "string"
+    )
+    assert.deepEqual(parseDataArrayPayload({ data: [{ name: "Evento" }] }, hasName), [{ name: "Evento" }])
+    assert.equal(parseDataArrayPayload({ data: [{ name: null }] }, hasName), null)
+})
+
+test("filtros toleram campos nulos e preservam sem data apenas sem intervalo", () => {
+    const full = normalizeAdminUserSummary(FULL_USER)
+    const partial = normalizeAdminUserSummary({
+        _id: "66bbc8c2db29318201acc2a2",
+        informacoes_usuario: {},
+        pagamento: { situacao: 0 },
+    })
+    assert.ok(full && partial)
+
+    assert.equal(filterAdminUsers([full, partial], {}).length, 2)
+    assert.deepEqual(
+        filterAdminUsers([full, partial], { startDate: "2026-08-01" }).map((user) => user._id),
+        [full._id],
+    )
+    assert.deepEqual(
+        filterAdminUsers([full, partial], { searchTerm: "ADA", selectedStatus: "1" }).map((user) => user._id),
+        [full._id],
+    )
+    assert.equal(filterAdminUsers([partial], { searchTerm: "inexistente" }).length, 0)
+    assert.deepEqual(
+        filterAdminUsers([full, partial], { selectedParticipationMode: "REGULAR" }).map((user) => user._id),
+        [full._id],
+    )
+})
+
+test("lote da compra: código da sessão, organizador separado e sem sessão", () => {
+    const sessaoLote = { paymentConfigOriginal: { codigo: 435, nome: "Lote Promocional" }, perfilUtilizador: "CONGRESSISTA" }
+    const sessaoOrganizador = { paymentConfigOriginal: { codigo: 435, nome: "Lote Promocional" }, origemPreco: "ORGANIZADOR_CONFIGURADO" }
+
+    const promo = normalizeAdminUserSummary({ ...FULL_USER, lote: purchaseLotFromSession(sessaoLote, "PIX") })
+    const organizador = normalizeAdminUserSummary({ ...FULL_USER, _id: "66bbc8c2db29318201acc2a3", lote: purchaseLotFromSession(sessaoOrganizador, "PIX") })
+    const organizadorSemSessao = normalizeAdminUserSummary({ ...FULL_USER, _id: "66bbc8c2db29318201acc2a4", lote: purchaseLotFromSession(undefined, "Organizador") })
+    const semLote = normalizeAdminUserSummary({ ...FULL_USER, _id: "66bbc8c2db29318201acc2a5", lote: purchaseLotFromSession(undefined, "PIX") })
+    assert.ok(promo && organizador && organizadorSemSessao && semLote)
+
+    assert.equal(adminUserLotKey(promo), "435")
+    assert.equal(adminUserLotLabel(promo), "Lote Promocional (#435)")
+    assert.equal(adminUserLotKey(organizador), LOT_FILTER_ORGANIZER)
+    assert.equal(adminUserLotKey(organizadorSemSessao), LOT_FILTER_ORGANIZER)
+    assert.equal(adminUserLotKey(semLote), LOT_FILTER_NONE)
+
+    const todos = [promo, organizador, organizadorSemSessao, semLote]
+    assert.deepEqual(filterAdminUsers(todos, { selectedLot: "435" }).map((user) => user._id), [promo._id])
+    assert.equal(filterAdminUsers(todos, { selectedLot: LOT_FILTER_ORGANIZER }).length, 2)
+    assert.equal(filterAdminUsers(todos, {}).length, 4)
+})
+
+test("lote da compra: profissional da saúde tem filtro e rótulo próprios, separado do organizador", () => {
+    const porSessao = normalizeAdminUserSummary({
+        ...FULL_USER,
+        lote: purchaseLotFromSession(
+            { perfilUtilizador: "PROFISSIONAL_SAUDE", paymentConfigOriginal: { codigo: 2, nome: "Lote 2" } },
+            "profissional_saude",
+        ),
+    })
+    const semSessao = normalizeAdminUserSummary({
+        ...FULL_USER,
+        _id: "66bbc8c2db29318201acc2a6",
+        lote: purchaseLotFromSession(undefined, "profissional_saude"),
+    })
+    assert.ok(porSessao && semSessao)
+    assert.equal(adminUserLotKey(porSessao), "PROFISSIONAL_SAUDE")
+    assert.equal(adminUserLotKey(semSessao), "PROFISSIONAL_SAUDE")
+    assert.equal(adminUserLotLabel(porSessao), "Profissional da saúde")
+    assert.notEqual(adminUserLotKey(porSessao), LOT_FILTER_ORGANIZER)
+})

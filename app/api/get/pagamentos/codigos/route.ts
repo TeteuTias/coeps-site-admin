@@ -1,14 +1,22 @@
 import { connectToDatabase } from "@/app/lib/mongodb";
-import type { Db } from "mongodb";
+import type { Db, Document } from "mongodb";
 import { requireFinanceAdmin } from "@/app/lib/payments/finance-admin";
 import {
-  getActiveEditionId,
+  buildLedgerBacklogSummary,
+  PAYMENT_EFFECTIVE_REFUND_EXPRESSION,
+  PAYMENT_FINANCIAL_RISK_EXPRESSION,
+  PAYMENT_GROSS_AMOUNT_EXPRESSION,
+  PAYMENT_NET_AMOUNT_EXPRESSION,
+  PAYMENT_RECOGNIZED_SALE_EXPRESSION,
+} from "@/app/lib/payments/admin-payment-read-model";
+import {
   isPaymentCodeStatus,
   isPaymentCodeType,
   normalizeEditionId,
   PAYMENT_ATTRIBUTIONS_COLLECTION,
   PAYMENT_CODES_COLLECTION,
 } from "@/app/lib/payments/payment-code-repository";
+import { getActivePaymentConfig } from "@/app/lib/payments/payment-config-repository";
 import type {
   PaymentCodeDocument,
   PaymentCodeListItem,
@@ -29,21 +37,49 @@ interface LedgerSummary {
   codigoId?: unknown;
   percentualDesconto?: number;
   responsavel?: PaymentCodeResponsible;
+  perfilUtilizador?: "ORGANIZADOR" | "CONGRESSISTA" | "PROFISSIONAL_SAUDE";
   confirmadas: number;
+  confirmadasBrutas: number;
   pendentes: number;
   estornadas: number;
   canceladasOuExpiradas: number;
+  emRevisaoFinanceira: number;
   valorConfirmadoCentavos: number;
+  valorBrutoConfirmadoCentavos: number;
+  valorEstornadoDoneCentavos: number;
+  valorEmRiscoCentavos: number;
+  valorLiquidoCentavos: number;
   createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface GeneralFinancialTotals {
+  valorBrutoConfirmadoCentavos: number;
+  valorEstornadoDoneCentavos: number;
+  valorEmRiscoCentavos: number;
+  valorLiquidoCentavos: number;
+}
+
+interface WebhookWorkerLockDocument extends Document {
+  _id: string;
+  owner?: string;
+  leaseUntil?: Date;
+  blockedByFailedEvent?: boolean;
   updatedAt?: Date;
 }
 
 const EMPTY_METRICS: PaymentCodeMetrics = {
   confirmadas: 0,
+  confirmadasBrutas: 0,
   pendentes: 0,
   estornadas: 0,
   canceladasOuExpiradas: 0,
+  emRevisaoFinanceira: 0,
   valorConfirmadoCentavos: 0,
+  valorBrutoConfirmadoCentavos: 0,
+  valorEstornadoDoneCentavos: 0,
+  valorEmRiscoCentavos: 0,
+  valorLiquidoCentavos: 0,
 };
 
 function parsePositiveInteger(value: string | null, fallback: number, maximum: number) {
@@ -62,10 +98,16 @@ function summaryMetrics(summary?: LedgerSummary): PaymentCodeMetrics {
   if (!summary) return { ...EMPTY_METRICS };
   return {
     confirmadas: summary.confirmadas,
+    confirmadasBrutas: summary.confirmadasBrutas,
     pendentes: summary.pendentes,
     estornadas: summary.estornadas,
     canceladasOuExpiradas: summary.canceladasOuExpiradas,
+    emRevisaoFinanceira: summary.emRevisaoFinanceira,
     valorConfirmadoCentavos: summary.valorConfirmadoCentavos,
+    valorBrutoConfirmadoCentavos: summary.valorBrutoConfirmadoCentavos,
+    valorEstornadoDoneCentavos: summary.valorEstornadoDoneCentavos,
+    valorEmRiscoCentavos: summary.valorEmRiscoCentavos,
+    valorLiquidoCentavos: summary.valorLiquidoCentavos,
   };
 }
 
@@ -80,6 +122,34 @@ export async function GET(request: Request) {
   try {
     const { db: untypedDb } = await connectToDatabase();
     const db = untypedDb as Db;
+    const [backlogRows, workerLock] = await Promise.all([
+      db.collection("pagamentos.webhook_eventos_v2").aggregate([
+        {
+          $match: {
+            status: { $in: ["PENDING", "PROCESSING", "FAILED", "REVIEW_REQUIRED"] },
+          },
+        },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+            oldestReceivedAt: { $min: "$receivedAt" },
+          },
+        },
+      ]).toArray(),
+      db.collection<WebhookWorkerLockDocument>("pagamentos.webhook_worker_locks").findOne(
+        { _id: "asaas-global-fifo" },
+        {
+          projection: {
+            owner: 1,
+            leaseUntil: 1,
+            blockedByFailedEvent: 1,
+            updatedAt: 1,
+          },
+        },
+      ),
+    ]);
+    const ledger = buildLedgerBacklogSummary(backlogRows, workerLock);
     const url = new URL(request.url);
     const rawEdition = url.searchParams.get("edicaoId");
     const requestedEdition = rawEdition ? normalizeEditionId(rawEdition) : null;
@@ -91,12 +161,21 @@ export async function GET(request: Request) {
       );
     }
 
-    const activeEditionId = await getActiveEditionId(db);
+    const activeConfig = await getActivePaymentConfig(db);
+    const activeEditionId = normalizeEditionId(activeConfig?.edicaoId);
+    const configuredOrganizerPriceCents = Number.isInteger(
+      activeConfig?.configuracaoOrganizador?.valorFinalCentavos,
+    )
+      ? Number(activeConfig?.configuracaoOrganizador?.valorFinalCentavos)
+      : null;
     const edicaoId = requestedEdition ?? activeEditionId;
+    const organizerPriceCents =
+      edicaoId && edicaoId === activeEditionId ? configuredOrganizerPriceCents : null;
     if (!edicaoId) {
       return Response.json({
         activeEditionId: null,
         edicaoId: null,
+        organizerPriceCents,
         items: [],
         metrics: {
           totalCodigos: 0,
@@ -106,7 +185,18 @@ export async function GET(request: Request) {
           vendasConfirmadas: 0,
           pagamentosPendentes: 0,
           vendasEstornadas: 0,
+          revisoesFinanceiras: 0,
+          atribuicoesSemSessao: 0,
+          sessoesSemAtribuicao: 0,
+          vendasBrutas: 0,
+          valorBrutoConfirmadoCentavos: 0,
+          valorEstornadoDoneCentavos: 0,
+          valorEmRiscoCentavos: 0,
+          valorLiquidoCentavos: 0,
+          webhooksEmRevisao: ledger.counts.reviewRequired,
+          webhooksFalhos: ledger.counts.failed,
         },
+        ledger,
         pagination: { page: 1, limit: 25, total: 0, totalPages: 0 },
       });
     }
@@ -117,12 +207,15 @@ export async function GET(request: Request) {
         { edicaoId },
         {
           projection: {
+            perfilUtilizador: 1,
             codigo: 1,
             codigoNormalizado: 1,
             edicaoId: 1,
             tipo: 1,
             percentualDesconto: 1,
             responsavel: 1,
+            limiteUsos: 1,
+            usosRealizados: 1,
             status: 1,
             createdAt: 1,
             updatedAt: 1,
@@ -137,6 +230,15 @@ export async function GET(request: Request) {
       .aggregate<LedgerSummary>([
         { $match: { edicaoId } },
         {
+          $lookup: {
+            from: "pagamentos.sessoes",
+            localField: "compraId",
+            foreignField: "_id",
+            as: "linkedSessions",
+          },
+        },
+        { $set: { linkedSessionCount: { $size: "$linkedSessions" } } },
+        {
           $project: {
             status: 1,
             valoresCentavos: 1,
@@ -144,6 +246,16 @@ export async function GET(request: Request) {
             pagamento: 1,
             createdAt: 1,
             updatedAt: 1,
+            recognizedSale: PAYMENT_RECOGNIZED_SALE_EXPRESSION,
+            requiresFinancialReview: {
+              $or: [
+                PAYMENT_FINANCIAL_RISK_EXPRESSION,
+                { $ne: ["$linkedSessionCount", 1] },
+              ],
+            },
+            grossAmountCentavos: PAYMENT_GROSS_AMOUNT_EXPRESSION,
+            refundDoneCentavos: PAYMENT_EFFECTIVE_REFUND_EXPRESSION,
+            netAmountCentavos: PAYMENT_NET_AMOUNT_EXPRESSION,
             codigos: {
               $concatArrays: [
                 {
@@ -156,6 +268,9 @@ export async function GET(request: Request) {
                         codigoNormalizado: "$codigoDesconto.codigoNormalizado",
                         codigoId: "$codigoDesconto.codigoId",
                         percentualDesconto: "$codigoDesconto.percentualDesconto",
+                        perfilUtilizador: {
+                          $ifNull: ["$perfilUtilizador", "$codigoDesconto.perfilUtilizador"],
+                        },
                       },
                     ],
                     [],
@@ -197,8 +312,23 @@ export async function GET(request: Request) {
             codigoId: { $first: "$codigos.codigoId" },
             percentualDesconto: { $first: "$codigos.percentualDesconto" },
             responsavel: { $first: "$codigos.responsavel" },
+            perfilUtilizador: { $first: "$codigos.perfilUtilizador" },
             confirmadas: {
-              $sum: { $cond: [{ $eq: ["$status", "CONFIRMADA"] }, 1, 0] },
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ["$status", "CONFIRMADA"] },
+                      { $eq: ["$requiresFinancialReview", false] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+            confirmadasBrutas: {
+              $sum: { $cond: ["$recognizedSale", 1, 0] },
             },
             pendentes: {
               $sum: {
@@ -221,51 +351,33 @@ export async function GET(request: Request) {
                 ],
               },
             },
+            emRevisaoFinanceira: {
+              $sum: { $cond: ["$requiresFinancialReview", 1, 0] },
+            },
             valorConfirmadoCentavos: {
               $sum: {
+                $cond: ["$recognizedSale", "$netAmountCentavos", 0],
+              },
+            },
+            valorBrutoConfirmadoCentavos: {
+              $sum: { $cond: ["$recognizedSale", "$grossAmountCentavos", 0] },
+            },
+            valorEstornadoDoneCentavos: {
+              $sum: { $cond: ["$recognizedSale", "$refundDoneCentavos", 0] },
+            },
+            valorEmRiscoCentavos: {
+              $sum: {
                 $cond: [
-                  { $eq: ["$status", "CONFIRMADA"] },
                   {
-                    $ifNull: [
-                      "$valorSelecionadoCentavos.final",
-                      {
-                        $cond: [
-                          { $isNumber: "$valoresCentavos.final" },
-                          "$valoresCentavos.final",
-                          {
-                            $switch: {
-                              branches: [
-                                {
-                                  case: { $eq: ["$pagamento.metodo", "PIX"] },
-                                  then: { $ifNull: ["$valoresCentavos.final.PIX", 0] },
-                                },
-                                {
-                                  case: { $eq: ["$pagamento.metodo", "BOLETO"] },
-                                  then: { $ifNull: ["$valoresCentavos.final.BOLETO", 0] },
-                                },
-                                {
-                                  case: { $eq: ["$pagamento.metodo", "DEBIT_CARD"] },
-                                  then: {
-                                    $ifNull: ["$valoresCentavos.final.DEBIT_CARD", 0],
-                                  },
-                                },
-                                {
-                                  case: { $eq: ["$pagamento.metodo", "CREDIT_CARD"] },
-                                  then: {
-                                    $ifNull: ["$valoresCentavos.final.CREDIT_CARD", 0],
-                                  },
-                                },
-                              ],
-                              default: 0,
-                            },
-                          },
-                        ],
-                      },
-                    ],
+                    $and: ["$recognizedSale", "$requiresFinancialReview"],
                   },
+                  "$netAmountCentavos",
                   0,
                 ],
               },
+            },
+            valorLiquidoCentavos: {
+              $sum: { $cond: ["$recognizedSale", "$netAmountCentavos", 0] },
             },
             createdAt: { $min: "$createdAt" },
             updatedAt: { $max: "$updatedAt" },
@@ -282,10 +394,40 @@ export async function GET(request: Request) {
         { codigoRastreio: { $exists: true } },
       ],
     };
-    const [confirmedPurchases, pendingPurchases, refundedPurchases] = await Promise.all([
+    const sessionHasAnyCode = {
+      $or: [
+        { codigoDesconto: { $exists: true } },
+        { codigoRastreio: { $exists: true } },
+      ],
+    };
+    const [sessionsForEdition, attributedPurchaseIds] = await Promise.all([
+      db.collection("pagamentos.sessoes")
+        .find({ edicaoId }, { projection: { _id: 1 } })
+        .toArray(),
+      db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).distinct("compraId", { edicaoId }),
+    ]);
+    const sessionIds = sessionsForEdition.map((paymentSession) => paymentSession._id);
+    const [
+      confirmedPurchases,
+      grossPurchases,
+      pendingPurchases,
+      refundedPurchases,
+      financialRiskPurchases,
+      attributionsMissingSession,
+      attributionsMissingSessionWithoutOtherRisk,
+      sessionsMissingAttribution,
+      financialTotalsRows,
+    ] = await Promise.all([
       db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).countDocuments({
         edicaoId,
         status: "CONFIRMADA",
+        compraId: { $in: sessionIds },
+        $expr: { $not: [PAYMENT_FINANCIAL_RISK_EXPRESSION] },
+        ...hasAnyCode,
+      }),
+      db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).countDocuments({
+        edicaoId,
+        status: { $in: ["CONFIRMADA", "ESTORNADA"] },
         ...hasAnyCode,
       }),
       db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).countDocuments({
@@ -298,7 +440,78 @@ export async function GET(request: Request) {
         status: "ESTORNADA",
         ...hasAnyCode,
       }),
+      db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).countDocuments({
+        edicaoId,
+        $expr: PAYMENT_FINANCIAL_RISK_EXPRESSION,
+        ...hasAnyCode,
+      }),
+      db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).countDocuments({
+        edicaoId,
+        compraId: { $nin: sessionIds },
+        ...hasAnyCode,
+      }),
+      db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).countDocuments({
+        edicaoId,
+        compraId: { $nin: sessionIds },
+        $expr: { $not: [PAYMENT_FINANCIAL_RISK_EXPRESSION] },
+        ...hasAnyCode,
+      }),
+      db.collection("pagamentos.sessoes").countDocuments({
+        edicaoId,
+        _id: { $nin: attributedPurchaseIds },
+        ...sessionHasAnyCode,
+      }),
+      db.collection(PAYMENT_ATTRIBUTIONS_COLLECTION).aggregate<GeneralFinancialTotals>([
+        { $match: { edicaoId, ...hasAnyCode } },
+        {
+          $project: {
+            recognizedSale: PAYMENT_RECOGNIZED_SALE_EXPRESSION,
+            requiresFinancialReview: {
+              $or: [
+                PAYMENT_FINANCIAL_RISK_EXPRESSION,
+                { $not: [{ $in: ["$compraId", sessionIds] }] },
+              ],
+            },
+            grossAmountCentavos: PAYMENT_GROSS_AMOUNT_EXPRESSION,
+            refundDoneCentavos: PAYMENT_EFFECTIVE_REFUND_EXPRESSION,
+            netAmountCentavos: PAYMENT_NET_AMOUNT_EXPRESSION,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            valorBrutoConfirmadoCentavos: {
+              $sum: { $cond: ["$recognizedSale", "$grossAmountCentavos", 0] },
+            },
+            valorEstornadoDoneCentavos: {
+              $sum: { $cond: ["$recognizedSale", "$refundDoneCentavos", 0] },
+            },
+            valorEmRiscoCentavos: {
+              $sum: {
+                $cond: [
+                  { $and: ["$recognizedSale", "$requiresFinancialReview"] },
+                  "$netAmountCentavos",
+                  0,
+                ],
+              },
+            },
+            valorLiquidoCentavos: {
+              $sum: { $cond: ["$recognizedSale", "$netAmountCentavos", 0] },
+            },
+          },
+        },
+      ]).toArray(),
     ]);
+    const financialReviewPurchases =
+      financialRiskPurchases +
+      attributionsMissingSessionWithoutOtherRisk +
+      sessionsMissingAttribution;
+    const financialTotals = financialTotalsRows[0] ?? {
+      valorBrutoConfirmadoCentavos: 0,
+      valorEstornadoDoneCentavos: 0,
+      valorEmRiscoCentavos: 0,
+      valorLiquidoCentavos: 0,
+    };
 
     const summariesByCode = new Map(
       ledgerSummaries.map((summary) => [
@@ -313,11 +526,23 @@ export async function GET(request: Request) {
       return {
         id: code._id?.toHexString() ?? null,
         edicaoId,
+        ...(code.tipo === "DESCONTO"
+          ? {
+              perfilUtilizador:
+                code.perfilUtilizador === "ORGANIZADOR" ||
+                code.perfilUtilizador === "PROFISSIONAL_SAUDE"
+                  ? code.perfilUtilizador
+                  : "CONGRESSISTA",
+            }
+          : {}),
         codigo: code.codigo,
         codigoNormalizado: code.codigoNormalizado,
         tipo: code.tipo,
         percentualDesconto: code.percentualDesconto,
         responsavel: code.responsavel,
+        ...(code.limiteUsos !== undefined
+          ? { limiteUsos: code.limiteUsos, usosRealizados: code.usosRealizados ?? 0 }
+          : {}),
         status: code.status,
         historico: false,
         createdAt: dateToIso(code.createdAt),
@@ -335,6 +560,15 @@ export async function GET(request: Request) {
         tipo: summary._id.tipo,
         percentualDesconto: summary.percentualDesconto,
         responsavel: summary.responsavel,
+        ...(summary._id.tipo === "DESCONTO"
+          ? {
+              perfilUtilizador:
+                summary.perfilUtilizador === "ORGANIZADOR" ||
+                summary.perfilUtilizador === "PROFISSIONAL_SAUDE"
+                  ? summary.perfilUtilizador
+                  : "CONGRESSISTA",
+            }
+          : {}),
         status: "CONSUMIDO",
         historico: true,
         createdAt: dateToIso(summary.createdAt),
@@ -352,11 +586,26 @@ export async function GET(request: Request) {
     const metrics = {
       totalCodigos: allItems.length,
       ativos: allItems.filter((item) => item.status === "ATIVO").length,
-      descontos: allItems.filter((item) => item.tipo === "DESCONTO").length,
+      descontos: allItems.filter(
+        (item) => item.tipo === "DESCONTO" && item.perfilUtilizador !== "PROFISSIONAL_SAUDE",
+      ).length,
+      profissionaisSaude: allItems.filter(
+        (item) => item.perfilUtilizador === "PROFISSIONAL_SAUDE",
+      ).length,
       rastreios: allItems.filter((item) => item.tipo === "RASTREIO").length,
       vendasConfirmadas: confirmedPurchases,
+      vendasBrutas: grossPurchases,
       pagamentosPendentes: pendingPurchases,
       vendasEstornadas: refundedPurchases,
+      revisoesFinanceiras: financialReviewPurchases,
+      atribuicoesSemSessao: attributionsMissingSession,
+      sessoesSemAtribuicao: sessionsMissingAttribution,
+      valorBrutoConfirmadoCentavos: financialTotals.valorBrutoConfirmadoCentavos,
+      valorEstornadoDoneCentavos: financialTotals.valorEstornadoDoneCentavos,
+      valorEmRiscoCentavos: financialTotals.valorEmRiscoCentavos,
+      valorLiquidoCentavos: financialTotals.valorLiquidoCentavos,
+      webhooksEmRevisao: ledger.counts.reviewRequired,
+      webhooksFalhos: ledger.counts.failed,
     };
 
     const rawType = url.searchParams.get("tipo");
@@ -383,8 +632,11 @@ export async function GET(request: Request) {
       );
     }
 
+    // A aba de profissionais da saúde tem listagem própria; "Descontos" não mostra esses códigos.
+    const healthOnly = url.searchParams.get("perfil") === "PROFISSIONAL_SAUDE";
     const filteredItems = allItems.filter((item) => {
       if (typeFilter && item.tipo !== typeFilter) return false;
+      if (healthOnly !== (item.perfilUtilizador === "PROFISSIONAL_SAUDE")) return false;
       if (statusFilter && item.status !== statusFilter) return false;
       if (
         search &&
@@ -404,8 +656,10 @@ export async function GET(request: Request) {
     return Response.json({
       activeEditionId,
       edicaoId,
+      organizerPriceCents,
       items: filteredItems.slice(start, start + limit),
       metrics,
+      ledger,
       pagination: {
         page,
         limit,

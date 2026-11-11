@@ -1,37 +1,74 @@
 "use client"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import LoadingModal from "../components/LoadingModal"
-import { IUser } from "../lib/types/user/user.t"
-import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2 } from "lucide-react"
+import {
+    type AdminUserSummary,
+    adminDateToIso,
+    displayUserField,
+    displayUserName,
+    filterAdminUsers,
+    parseAdminUserListHttpResponse,
+} from "../lib/users/admin-user-contract"
+import { participationModeLabel } from "../lib/users/admin-remote-work"
+import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2, Briefcase, IdCard, Building2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import './style.css'
 import QrCodeUserSearch from "../components/QrCodeUserSearch"
 
+const formatUserCreationDate = (value: string | null) => {
+    const iso = adminDateToIso(value)
+    const date = iso ? new Date(iso) : null
+    return date ? date.toLocaleDateString("pt-BR") : "Data não informada"
+}
+
 export default function Page() {
     const [loading, setLoading] = useState<boolean>(true)
-    const [dataUsers, setDataUsers] = useState<IUser[]>([])
+    const [error, setError] = useState<string | null>(null)
+    const [dataUsers, setDataUsers] = useState<AdminUserSummary[]>([])
     const router = useRouter()
 
     const [searchTerm, setSearchTerm] = useState<string>("")
     const [selectedStatus, setSelectedStatus] = useState<string>("")
     const [selectedPaymentType, setSelectedPaymentType] = useState<string>("")
+    const [selectedParticipationMode, setSelectedParticipationMode] = useState<string>("")
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
 
-    const hydrate = async () => {
-        const response = await fetch(`/api/get/todosCongressistas/`)
-        const dataUsers: { data: IUser[] } = await response.json()
-        setDataUsers(dataUsers.data)
-        setLoading(false)
-    }
+    const hydrate = useCallback(async () => {
+        setLoading(true)
+        setError(null)
+        try {
+            const response = await fetch(`/api/get/todosCongressistas/`, { cache: "no-store" })
+            const payload: unknown = await response.json().catch(() => null)
+            const users = parseAdminUserListHttpResponse(response.ok, payload)
+            if (!users) {
+                const message = typeof payload === "object" && payload !== null &&
+                    "message" in payload && typeof payload.message === "string"
+                    ? payload.message
+                    : response.ok
+                        ? "A lista de congressistas recebida está em formato inválido."
+                        : "Não foi possível carregar os congressistas."
+                throw new Error(message)
+            }
+            setDataUsers(users)
+        } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "Não foi possível carregar os congressistas.")
+        } finally {
+            setLoading(false)
+        }
+    }, [])
 
     useEffect(() => {
-        hydrate()
-    }, [])
+        void hydrate()
+    }, [hydrate])
 
     const paymentTypes = useMemo(() => {
         if (!dataUsers.length) return []
-        const types = new Set(dataUsers.map(user => user.pagamento.tipo_pagamento).filter(Boolean))
+        const types = new Set(
+            dataUsers
+                .map(user => user.pagamento.tipo_pagamento)
+                .filter((type): type is string => Boolean(type)),
+        )
         return Array.from(types)
     }, [dataUsers])
 
@@ -39,41 +76,36 @@ export default function Page() {
         setSearchTerm("")
         setSelectedStatus("")
         setSelectedPaymentType("")
+        setSelectedParticipationMode("")
         setStartDate("")
         setEndDate("")
     }
 
-    const getSituacaoBadge = (situacao: number) => {
+    const getSituacaoBadge = (situacao: AdminUserSummary["pagamento"]["situacao"]) => {
         switch (situacao) {
             case 0: return <span className="usuarios-badge usuarios-badge-error"><BadgeX className="mr-1.5 h-4 w-4" />Não Inscrito</span>
+            case 1: return <span className="usuarios-badge usuarios-badge-success"><BadgeCheck className="mr-1.5 h-4 w-4" />Inscrito</span>
             case 2: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Pagamento em Aberto</span>
-            default: return <span className="usuarios-badge usuarios-badge-success"><BadgeCheck className="mr-1.5 h-4 w-4" />Inscrito</span>
+            case 3: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Suspenso</span>
+            default: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Status não informado</span>
         }
     }
 
-    const filteredUsers = dataUsers.filter(user => {
-        const term = searchTerm.toLowerCase()
-        const creationDate = new Date(user.informacoes_usuario.data_criacao).toISOString().split('T')[0]
-
-        const searchMatch = term === "" ||
-            user?._id?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.email?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.nome.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.numero_telefone?.includes(term)
-
-        const statusMatch = selectedStatus === "" || user.pagamento.situacao === parseInt(selectedStatus, 10)
-        const paymentTypeMatch = selectedPaymentType === "" || user.pagamento.tipo_pagamento === selectedPaymentType
-        const startDateMatch = startDate === "" || creationDate >= startDate
-        const endDateMatch = endDate === "" || creationDate <= endDate
-
-        return searchMatch && statusMatch && paymentTypeMatch && startDateMatch && endDateMatch
-    })
+    const filteredUsers = useMemo(() => filterAdminUsers(dataUsers, {
+        searchTerm,
+        selectedStatus,
+        selectedPaymentType,
+        selectedParticipationMode,
+        startDate,
+        endDate,
+    }), [dataUsers, searchTerm, selectedStatus, selectedPaymentType, selectedParticipationMode, startDate, endDate])
 
     // Estatísticas
     const totalUsers = dataUsers.length
     const inscritos = dataUsers.filter(user => user.pagamento.situacao === 1).length
     const naoInscritos = dataUsers.filter(user => user.pagamento.situacao === 0).length
     const pagamentoAberto = dataUsers.filter(user => user.pagamento.situacao === 2).length
+    const participantesRemotos = dataUsers.filter(user => ["REMOTE", "BOTH"].includes(user.participacao.mode)).length
 
     if (loading) {
         return (
@@ -82,6 +114,19 @@ export default function Page() {
                 <span className="usuarios-loading-text">Carregando congressistas...</span>
             </div>
         );
+    }
+
+    if (error) {
+        return (
+            <div className="admin-state admin-state--error" role="alert">
+                <span className="admin-state__mark">!</span>
+                <h1>Não foi possível carregar os congressistas</h1>
+                <p>{error}</p>
+                <button type="button" className="usuarios-btn usuarios-btn-primary" onClick={() => void hydrate()}>
+                    Tentar novamente
+                </button>
+            </div>
+        )
     }
 
     return (
@@ -115,6 +160,11 @@ export default function Page() {
                         <span className="usuarios-estatistica-valor">{pagamentoAberto}</span>
                         <span className="usuarios-estatistica-label">Pagamento Aberto</span>
                     </div>
+                    <div className="usuarios-estatistica-card">
+                        <Laptop size={32} style={{ marginBottom: '0.3rem', color: '#2563EB' }} />
+                        <span className="usuarios-estatistica-valor">{participantesRemotos}</span>
+                        <span className="usuarios-estatistica-label">Acesso Remoto</span>
+                    </div>
                 </div>
 
                 {/* Filtros */}
@@ -147,6 +197,23 @@ export default function Page() {
                                 <option value="1">Inscrito</option>
                                 <option value="0">Não Inscrito</option>
                                 <option value="2">Pagamento em Aberto</option>
+                                <option value="3">Suspenso</option>
+                            </select>
+                        </div>
+
+                        <div className="usuarios-filtro-select">
+                            <label htmlFor="participationMode" className="usuarios-label">Modalidade de Participação</label>
+                            <select
+                                id="participationMode"
+                                value={selectedParticipationMode}
+                                onChange={e => setSelectedParticipationMode(e.target.value)}
+                                className="usuarios-select"
+                            >
+                                <option value="">Todas as Modalidades</option>
+                                <option value="REGULAR">Regular</option>
+                                <option value="REMOTE">Somente remoto</option>
+                                <option value="BOTH">Regular + remoto</option>
+                                <option value="NONE">Sem acesso</option>
                             </select>
                         </div>
 
@@ -215,13 +282,18 @@ export default function Page() {
                                             <User className="h-6 w-6" />
                                         </div>
                                         <div className="usuarios-user-info">
-                                            <h3 className="usuarios-user-name" title={user.informacoes_usuario.nome}>
-                                                {user.informacoes_usuario.nome}
+                                            <h3 className="usuarios-user-name" title={displayUserName(user)}>
+                                                {displayUserName(user)}
                                             </h3>
-                                            <p className="usuarios-user-email" title={user.informacoes_usuario.email}>
+                                            <p className="usuarios-user-email" title={displayUserField(user.informacoes_usuario.email)}>
                                                 <Mail className="h-4 w-4" />
-                                                {user.informacoes_usuario.email}
+                                                {displayUserField(user.informacoes_usuario.email)}
                                             </p>
+                                            {user.cadastroPendente && (
+                                                <span className="usuarios-badge usuarios-badge-warning">
+                                                    <BadgeAlert className="mr-1.5 h-4 w-4" />Cadastro pendente
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
@@ -234,13 +306,34 @@ export default function Page() {
                                         <div className="usuarios-info-item">
                                             <Phone className="h-4 w-4" />
                                             <span className="usuarios-info-label">Telefone:</span>
-                                            <span className="usuarios-info-value">{user.informacoes_usuario.numero_telefone}</span>
+                                            <span className="usuarios-info-value">{displayUserField(user.informacoes_usuario.numero_telefone)}</span>
                                         </div>
+                                        {user.informacoes_usuario.profissao && (
+                                            <div className="usuarios-info-item">
+                                                <Briefcase className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Profissão:</span>
+                                                <span className="usuarios-info-value">{user.informacoes_usuario.profissao}</span>
+                                            </div>
+                                        )}
+                                        {user.informacoes_usuario.matricula_municipio && (
+                                            <div className="usuarios-info-item">
+                                                <IdCard className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Matrícula do município:</span>
+                                                <span className="usuarios-info-value">{user.informacoes_usuario.matricula_municipio}</span>
+                                            </div>
+                                        )}
+                                        {user.informacoes_usuario.unidade_origem && (
+                                            <div className="usuarios-info-item">
+                                                <Building2 className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Unidade de Origem:</span>
+                                                <span className="usuarios-info-value">{user.informacoes_usuario.unidade_origem}</span>
+                                            </div>
+                                        )}
                                         <div className="usuarios-info-item">
                                             <CalendarDays className="h-4 w-4" />
                                             <span className="usuarios-info-label">Criação:</span>
                                             <span className="usuarios-info-value">
-                                                {new Date(user.informacoes_usuario.data_criacao).toLocaleDateString()}
+                                                {formatUserCreationDate(user.informacoes_usuario.data_criacao)}
                                             </span>
                                         </div>
                                     </div>
@@ -264,6 +357,45 @@ export default function Page() {
                                         </div>
                                     </div>
 
+                                    <div className="usuarios-card-payment">
+                                        <h4 className="usuarios-payment-title">
+                                            <Laptop className="h-5 w-5" />
+                                            Participação em Trabalhos
+                                        </h4>
+                                        <div className="usuarios-payment-info">
+                                            <div className="usuarios-payment-item">
+                                                <span className="usuarios-payment-label">Modalidade:</span>
+                                                <span className="usuarios-payment-type">{participationModeLabel(user.participacao.mode)}</span>
+                                            </div>
+                                            <div className="usuarios-info-item">
+                                                <MapPin className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Cidade/UF:</span>
+                                                <span className="usuarios-info-value">
+                                                    {user.participacao.municipalityName && user.participacao.uf
+                                                        ? `${user.participacao.municipalityName}/${user.participacao.uf}`
+                                                        : "Não informado"}
+                                                </span>
+                                            </div>
+                                            <div className="usuarios-info-item">
+                                                <FileCheck2 className="h-4 w-4" />
+                                                <span className="usuarios-info-label">Comprovante:</span>
+                                                <span className="usuarios-info-value">
+                                                    {user.participacao.proof
+                                                        ? `${user.participacao.reviewStatus ?? "PENDING"} · ${formatUserCreationDate(user.participacao.proof.uploadedAt)}`
+                                                        : "Não enviado"}
+                                                </span>
+                                            </div>
+                                            <div className="usuarios-payment-item">
+                                                <span className="usuarios-payment-label">Financeiro:</span>
+                                                <span className="usuarios-payment-type">{user.participacao.status ?? "SEM ACESSO"}</span>
+                                            </div>
+                                            <div className="usuarios-payment-item">
+                                                <span className="usuarios-payment-label">Trabalhos remotos:</span>
+                                                <span className="usuarios-payment-type">{user.participacao.remoteWorkCount}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div className="usuarios-card-actions">
                                         <button
                                             className="usuarios-btn usuarios-btn-primary"
@@ -282,7 +414,7 @@ export default function Page() {
                 {/* Estado vazio */}
                 {filteredUsers.length === 0 && (
                     <div className="usuarios-empty">
-                        {searchTerm || selectedStatus || selectedPaymentType || startDate || endDate ? (
+                        {searchTerm || selectedStatus || selectedPaymentType || selectedParticipationMode || startDate || endDate ? (
                             <>
                                 <SearchX className="usuarios-empty-icon" />
                                 <h3 className="usuarios-empty-title">Nenhum resultado encontrado</h3>

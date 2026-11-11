@@ -1,6 +1,7 @@
 import { getSession } from "@/app/lib/auth0";
+import { isFinanceAdminSubject } from "@/app/lib/payments/finance-admin-policy";
 
-const DEFAULT_FINANCE_ADMIN_ID = "67098341f7397b370e9cb8ba";
+export { isFinanceAdminSubject } from "@/app/lib/payments/finance-admin-policy";
 
 export interface FinanceAdminIdentity {
   userId: string;
@@ -13,17 +14,6 @@ type FinanceAdminResult =
 
 function jsonError(status: number, error: string, message: string) {
   return Response.json({ error, message }, { status });
-}
-
-function configuredAdminIds() {
-  const configured = (process.env.FINANCE_ADMIN_USER_IDS ?? "")
-    .split(/[;,\s]+/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  return new Set(
-    configured.length > 0 ? configured : [DEFAULT_FINANCE_ADMIN_ID],
-  );
 }
 
 export async function requireFinanceAdmin(
@@ -57,9 +47,7 @@ export async function requireFinanceAdmin(
   }
 
   const userId = subject.replace(/^auth0\|/, "");
-  const allowedIds = configuredAdminIds();
-
-  if (!allowedIds.has(subject) && !allowedIds.has(userId)) {
+  if (!isFinanceAdminSubject(subject, process.env.FINANCE_ADMIN_USER_IDS ?? "")) {
     return {
       authorized: false,
       response: jsonError(

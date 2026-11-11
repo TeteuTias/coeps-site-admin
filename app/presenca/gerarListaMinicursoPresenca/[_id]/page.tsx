@@ -1,5 +1,14 @@
 'use client'
-import { IUser } from '@/app/lib/types/user/user.t';
+import {
+    type AdminUserDetails,
+    type AdminUserSummary,
+    adminUserInitial,
+    displayUserField,
+    displayUserName,
+    parseAdminUserDetailsPayload,
+    parseAdminUserListPayload,
+} from '@/app/lib/users/admin-user-contract';
+import { parseDataObjectPayload, parseStringArrayDataPayload } from '@/app/lib/api-data-contract';
 import { useEffect, useState } from 'react';
 import { Html5Qrcode, CameraDevice, Html5QrcodeCameraScanConfig } from 'html5-qrcode';
 import LoadingModal from '@/app/components/LoadingModal';
@@ -14,25 +23,32 @@ import { useParams } from 'next/navigation';
 import { registrarPresenca, sinalizar } from '../../presenca-bip';
 import { limparCodigo } from '../../fila-presenca';
 import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca';
-interface Usuario {
-    _id: string,
-    informacoes_usuario: {
-        cpf: string;
-        data_criacao: string;
-        email: string;
-        nome: string;
-        numero_telefone: string;
-        titulo_honorario: string;
-    };
+
+const parseCoursePayload = (value: unknown): ICourse | null => {
+    const course = parseDataObjectPayload(value)
+    if (
+        !course ||
+        typeof course._id !== "string" ||
+        typeof course.name !== "string" ||
+        typeof course.maxParticipants !== "number" ||
+        !Number.isFinite(course.maxParticipants) ||
+        !Array.isArray(course.participants) ||
+        !course.participants.every((id) => typeof id === "string") ||
+        !Array.isArray(course.attendanceList) ||
+        !course.attendanceList.every((id) => typeof id === "string")
+    ) {
+        return null
+    }
+    return course as unknown as ICourse
 }
 
 const MyComponent = () => {
     const { _id } = useParams<{ _id: string }>();
     const [data, setData] = useState<string[]>([]);
     const user = useUser()
-    const [allUsers, setAllUsers] = useState<IUser[]>([])
+    const [allUsers, setAllUsers] = useState<AdminUserSummary[]>([])
     const [errorBolean, setErrorBolean] = useState<boolean>(false);
-    const [data2, setData2] = useState<Usuario[]>([]);
+    const [data2, setData2] = useState<AdminUserSummary[]>([]);
     const [dataPresentes, setDataPresente] = useState<string[]>([])
     const [courseData, setCourseData] = useState<ICourse | null>(null)
     const [isModalProps, setIsModalProps] = useState<ModalProps>({
@@ -70,17 +86,24 @@ const MyComponent = () => {
                     throw new Error("Erro ao buscar dados de participantes ou lista de presença");
                 }
 
-                const participantsResult: { data: string[] } = await participantsResponse.json();
-                const attendanceResult: { data: string[] } = await attendanceResponse.json();
-                const courseResult: { data: ICourse } = await courseResponse.json()
-                const allUsersResult: { data: IUser[] } = await allUsersResponse.json()
+                const participantsResult: unknown = await participantsResponse.json().catch(() => null);
+                const attendanceResult: unknown = await attendanceResponse.json().catch(() => null);
+                const courseResult: unknown = await courseResponse.json().catch(() => null)
+                const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
+                const participantIds = parseStringArrayDataPayload(participantsResult)
+                const attendanceIds = parseStringArrayDataPayload(attendanceResult)
+                const course = parseCoursePayload(courseResult)
+                const normalizedUsers = parseAdminUserListPayload(allUsersResult)
+                if (!participantIds || !attendanceIds || !course || !normalizedUsers) {
+                    throw new Error("Dados de participantes ou presença inválidos")
+                }
 
-                setData(participantsResult.data);
-                setDataPresente(attendanceResult.data);
-                setCourseData(courseResult.data)
-                setAllUsers(allUsersResult.data)
+                setData(participantIds);
+                setDataPresente(attendanceIds);
+                setCourseData(course)
+                setAllUsers(normalizedUsers)
 
-                return participantsResult.data;
+                return participantIds;
             };
 
             const fetchUserInfo = async (userIds: string[]) => {
@@ -96,8 +119,10 @@ const MyComponent = () => {
                     throw new Error("Erro na resposta da API de informações de usuários");
                 }
 
-                const result: { data: Usuario[] } = await response.json();
-                setData2(result.data);
+                const result: unknown = await response.json().catch(() => null);
+                const normalizedUsers = parseAdminUserListPayload(result)
+                if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
+                setData2(normalizedUsers);
             };
 
             const participantIds = await fetchParticipantAndAttendanceData();
@@ -130,17 +155,24 @@ const MyComponent = () => {
                         throw new Error("Erro ao buscar dados de participantes ou lista de presença");
                     }
 
-                    const participantsResult: { data: string[] } = await participantsResponse.json();
-                    const attendanceResult: { data: string[] } = await attendanceResponse.json();
-                    const courseResult: { data: ICourse } = await courseResponse.json()
-                    const allUsersResult: { data: IUser[] } = await allUsersResponse.json()
+                    const participantsResult: unknown = await participantsResponse.json().catch(() => null);
+                    const attendanceResult: unknown = await attendanceResponse.json().catch(() => null);
+                    const courseResult: unknown = await courseResponse.json().catch(() => null)
+                    const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
+                    const participantIds = parseStringArrayDataPayload(participantsResult)
+                    const attendanceIds = parseStringArrayDataPayload(attendanceResult)
+                    const course = parseCoursePayload(courseResult)
+                    const normalizedUsers = parseAdminUserListPayload(allUsersResult)
+                    if (!participantIds || !attendanceIds || !course || !normalizedUsers) {
+                        throw new Error("Dados de participantes ou presença inválidos")
+                    }
 
-                    setData(participantsResult.data);
-                    setDataPresente(attendanceResult.data);
-                    setCourseData(courseResult.data)
-                    setAllUsers(allUsersResult.data)
+                    setData(participantIds);
+                    setDataPresente(attendanceIds);
+                    setCourseData(course)
+                    setAllUsers(normalizedUsers)
 
-                    return participantsResult.data;
+                    return participantIds;
                 };
 
                 const fetchUserInfo = async (userIds: string[]) => {
@@ -156,8 +188,10 @@ const MyComponent = () => {
                         throw new Error("Erro na resposta da API de informações de usuários");
                     }
 
-                    const result: { data: Usuario[] } = await response.json();
-                    setData2(result.data);
+                    const result: unknown = await response.json().catch(() => null);
+                    const normalizedUsers = parseAdminUserListPayload(result)
+                    if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
+                    setData2(normalizedUsers);
                 };
 
                 const participantIds = await fetchParticipantAndAttendanceData();
@@ -289,7 +323,7 @@ const MyComponent = () => {
                                     <button
                                         type="button"
                                         className="presenca-lista-remove-btn"
-                                        aria-label={`Remover inscrição de ${item.informacoes_usuario.nome}`}
+                                        aria-label={`Remover inscrição de ${displayUserName(item)}`}
                                         title="Remover inscrição"
                                         onClick={() => {
                                             setIsModalProps(() => ({
@@ -326,9 +360,9 @@ const MyComponent = () => {
                                     >
                                         ×
                                     </button>
-                                    <span>{index + 1}. {item.informacoes_usuario.nome}</span>
+                                    <span>{index + 1}. {displayUserName(item)}</span>
                                 </td>
-                                <td className="presenca-lista-email">{item.informacoes_usuario.email}</td>
+                                <td className="presenca-lista-email">{displayUserField(item.informacoes_usuario.email)}</td>
                                 <td className="presenca-lista-status">
                                     <span className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}>
                                         {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
@@ -345,7 +379,7 @@ const MyComponent = () => {
                                                 setLoadingContent(true)
                                                 try {
                                                     const quer = dataPresentes.includes(item._id) ? "retirar" : "dar"
-                                                    const r = await registrarPresenca({ tipo: "minicurso", eventId: _id, userId: item._id, nome: item.informacoes_usuario.nome, quer })
+                                                    const r = await registrarPresenca({ tipo: "minicurso", eventId: _id, userId: item._id, nome: item.informacoes_usuario.nome ?? "", quer })
                                                     if (r.estado === "registrado" || r.estado === "jaEstava") {
                                                         setDataPresente(prev => quer === "retirar" ? prev.filter(id => id !== item._id) : prev.includes(item._id) ? prev : [...prev, item._id])
                                                     } else {
@@ -407,7 +441,7 @@ const MyComponent = () => {
 };
 //
 //
-const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<void>, usuariosCarregados: IUser[] }> = ({ courseData, hydrateData, usuariosCarregados }) => {
+const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<void>, usuariosCarregados: AdminUserSummary[] }> = ({ courseData, hydrateData, usuariosCarregados }) => {
     // Estado para controlar a visibilidade do scanner
     const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
     // Estado para armazenar a lista de câmeras disponíveis
@@ -575,11 +609,12 @@ const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<
     );
 };
 
-const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void>, usuariosCarregados: IUser[] }> = ({ hydrateData, courseData, qrCodeResult, closeModal, usuariosCarregados }) => {
+const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void>, usuariosCarregados: AdminUserSummary[] }> = ({ hydrateData, courseData, qrCodeResult, closeModal, usuariosCarregados }) => {
     const [isLoading, setIsLoading] = useState<boolean>(true)
-    const [user, setUser] = useState<IUser | null>(null)
+    const [user, setUser] = useState<AdminUserDetails | AdminUserSummary | null>(null)
     const [erroLeitura, setErroLeitura] = useState<string>("")
     const [semRede, setSemRede] = useState<boolean>(false)
+    const [loadError, setLoadError] = useState<string | null>(null)
     useEffect(() => {
         const fetchUser = async () => {
             const codigo = limparCodigo(qrCodeResult)
@@ -592,13 +627,19 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
             try {
                 const userFetch = await fetch(`/api/get/usuarioPorId/${codigo}`)
                 if (userFetch.status >= 500) throw new Error("servidor")
+                const payload: unknown = await userFetch.json().catch(() => null)
                 if (!userFetch.ok) {
                     sinalizar("erro")
                     setErroLeitura(userFetch.status === 404 ? "Credencial não encontrada: não existe cadastro com este código. Nada foi registrado." : "Não foi possível consultar esta credencial. Leia de novo.")
                     return
                 }
-                const user: { data: IUser } = await userFetch.json()
-                setUser(user.data)
+                const normalizedUser = parseAdminUserDetailsPayload(payload)
+                if (!normalizedUser) {
+                    sinalizar("erro")
+                    setLoadError("Dados do usuário inválidos")
+                    return
+                }
+                setUser(normalizedUser)
             } catch {
                 // sem internet: usa a lista que já está carregada nesta tela para a chamada continuar
                 const local = usuariosCarregados.find((u) => `${u._id}` === codigo)
@@ -635,7 +676,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
      *  - Etc.;
      * Após perguntar, vamos verificar se o adm quer continuar com a inscrição.
      */
-    const getFeedBack = (user: IUser, courseData: ICourse): string[] => {
+    const getFeedBack = (user: AdminUserSummary, courseData: ICourse): string[] => {
         let listFeedBack: string[] = []
         console.log(user)
         if (user.pagamento.situacao == 2) {
@@ -686,10 +727,10 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                         <section className="attendance-modal-section">
                             <span className="attendance-modal-label">Informações gerais</span>
                             <dl className="attendance-user-details">
-                                <div><dt>Nome</dt><dd>{user?.informacoes_usuario?.nome}</dd></div>
-                                <div><dt>CPF</dt><dd>{user?.informacoes_usuario?.cpf}</dd></div>
-                                <div><dt>E-mail</dt><dd>{user?.informacoes_usuario?.email}</dd></div>
-                                <div><dt>Telefone</dt><dd>{user?.informacoes_usuario?.numero_telefone}</dd></div>
+                                <div><dt>Nome</dt><dd>{user ? displayUserName(user) : "Não informado"}</dd></div>
+                                <div><dt>CPF</dt><dd>{displayUserField(user?.informacoes_usuario.cpf ?? null)}</dd></div>
+                                <div><dt>E-mail</dt><dd>{displayUserField(user?.informacoes_usuario.email ?? null)}</dd></div>
+                                <div><dt>Telefone</dt><dd>{displayUserField(user?.informacoes_usuario.numero_telefone ?? null)}</dd></div>
                             </dl>
                         </section>
                         <section className="attendance-modal-section">
@@ -700,6 +741,14 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                                 {feedback.map((value, index) => (
                                     <p key={`${user?._id}-${index}`} className="attendance-feedback attendance-feedback-warning">{value}</p>
                                 ))}
+                                {loadError && (
+                                    <p className="attendance-feedback attendance-feedback-warning">{loadError}</p>
+                                )}
+                                {user?.cadastroPendente && (
+                                    <p className="attendance-feedback attendance-feedback-warning">
+                                        Cadastro pendente: alguns dados pessoais ainda não foram informados.
+                                    </p>
+                                )}
                                 {user && courseData.participants.includes(`${user._id}`) && (
                                     <p className="attendance-feedback attendance-feedback-positive">
                                         O congressista está inscrito no minicurso.
@@ -772,7 +821,7 @@ interface AllUsersModalProps {
     isOpen: boolean;
     onClose: () => void;
     onUserSelect: (user: string) => Promise<void>; // Função para lidar com a seleção
-    usersData: IUser[];
+    usersData: AdminUserSummary[];
 }
 
 const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClose, onUserSelect, usersData }) => {
@@ -853,17 +902,20 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
                                     <div className="all-users-modal-user-content">
                                         <div className="all-users-modal-user-avatar">
                                             <span className="all-users-modal-avatar-text">
-                                                {user.informacoes_usuario.nome.charAt(0)}
+                                                {adminUserInitial(user)}
                                             </span>
                                         </div>
                                         <div className="all-users-modal-user-info">
                                             {courseData.participants.includes(`${user._id}`) && (
                                                 <p className="all-users-modal-badge">Já inscrito no minicurso</p>
                                             )}
+                                            {user.cadastroPendente && (
+                                                <p className="all-users-modal-payment-status">Cadastro pendente</p>
+                                            )}
                                             <p className="all-users-modal-user-name">
-                                                {user.informacoes_usuario.titulo_honorario} {user.informacoes_usuario.nome}
+                                                {user.informacoes_usuario.titulo_honorario} {displayUserName(user)}
                                             </p>
-                                                <p className="all-users-modal-user-email">{user.informacoes_usuario.email}</p>
+                                                <p className="all-users-modal-user-email">{displayUserField(user.informacoes_usuario.email)}</p>
                                             {user.pagamento.situacao != 1 && (
                                                 <p className="all-users-modal-payment-status">
                                                     Não inscrito no congresso
@@ -884,18 +936,18 @@ const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClo
     );
 };
 
-function ExportButton({ eventId, guardados, inscritos, presentes, todosUsuarios }: { eventId: string, guardados: number, inscritos: string[], presentes: string[], todosUsuarios: Usuario[] }) {
+function ExportButton({ eventId, guardados, inscritos, presentes, todosUsuarios }: { eventId: string, guardados: number, inscritos: string[], presentes: string[], todosUsuarios: AdminUserSummary[] }) {
     // a tela pode estar velha (outros leitores registram ao mesmo tempo): a planilha usa a lista do servidor no momento do clique
-    const montar = (presentes: string[], todosUsuarios: Usuario[]) => presentes
+    const montar = (presentes: string[], todosUsuarios: AdminUserSummary[]) => presentes
         // 1. FILTRA: Mantém apenas os IDs que correspondem a um usuário existente
         .map(usuarioId => todosUsuarios.find(u => u._id === usuarioId))
         .filter(usuario => usuario !== undefined) // Remove todos os 'undefined'
 
         // 2. MAP: Transforma os objetos de usuário encontrados no formato de planilha
         .map(usuario => ({ //
-            NOME: usuario!.informacoes_usuario.nome,
-            CPF: usuario!.informacoes_usuario.cpf,
-            EMAIL: usuario!.informacoes_usuario.email,
+            NOME: displayUserName(usuario!),
+            CPF: displayUserField(usuario!.informacoes_usuario.cpf),
+            EMAIL: displayUserField(usuario!.informacoes_usuario.email),
         }));
 
     const handleDownload = async () => {
@@ -909,7 +961,9 @@ function ExportButton({ eventId, guardados, inscritos, presentes, todosUsuarios 
             if (faltam.length) {
                 const info = await fetch("/api/post/informacoesVariosUsuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(faltam) })
                 if (!info.ok) throw new Error("usuarios")
-                usuarios = [...usuarios, ...(await info.json()).data]
+                const extras = parseAdminUserListPayload(await info.json().catch(() => null))
+                if (!extras) throw new Error("usuarios")
+                usuarios = [...usuarios, ...extras]
             }
         } catch {
             ids = presentes

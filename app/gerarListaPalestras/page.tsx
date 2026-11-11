@@ -1,18 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import {
+  type AdminUserSummary,
+  displayUserField,
+  displayUserName,
+  parseAdminUserListPayload,
+} from '@/app/lib/users/admin-user-contract'
 import '../print-list.css'
-
-interface Usuario {
-  informacoes_usuario: {
-    email: string
-    nome: string
-  }
-}
-
-interface UsuariosResponse {
-  data: Usuario[]
-}
 
 function formatarDataEmissao() {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -23,7 +18,7 @@ function formatarDataEmissao() {
 }
 
 export default function ListaPalestrasPage() {
-  const [participantes, setParticipantes] = useState<Usuario[]>([])
+  const [participantes, setParticipantes] = useState<AdminUserSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -43,8 +38,10 @@ export default function ListaPalestrasPage() {
           throw new Error('Não foi possível consultar a lista de congressistas.')
         }
 
-        const result = (await response.json()) as UsuariosResponse
-        setParticipantes(Array.isArray(result.data) ? result.data : [])
+        const result: unknown = await response.json().catch(() => null)
+        const users = parseAdminUserListPayload(result)
+        if (!users) throw new Error('A lista de congressistas está em formato inválido.')
+        setParticipantes(users)
       } catch (cause) {
         if (cause instanceof DOMException && cause.name === 'AbortError') {
           return
@@ -201,11 +198,11 @@ export default function ListaPalestrasPage() {
               <tbody>
                 {participantes.map((participante, index) => (
                   <tr
-                    key={`${participante.informacoes_usuario.email}-${index}`}
+                    key={participante._id}
                   >
                     <td className="print-list-number">{index + 1}</td>
-                    <td>{participante.informacoes_usuario.nome}</td>
-                    <td>{participante.informacoes_usuario.email}</td>
+                    <td>{displayUserName(participante)}</td>
+                    <td>{displayUserField(participante.informacoes_usuario.email)}</td>
                     <td className="print-list-signature">
                       <span aria-hidden="true" />
                     </td>

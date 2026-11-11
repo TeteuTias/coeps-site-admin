@@ -1,36 +1,389 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useCallback, useEffect, useState, useMemo } from "react"
 import LoadingModal from "../components/LoadingModal"
-import { IPaymentConfig } from "../lib/types/payments/payment.t"
-import { IUser } from "../lib/types/user/user.t"
+import { IAutomaticLotOccupancy, ILoteAutomatico, IPaymentConfig } from "../lib/types/payments/payment.t"
+import { parseAdminPaymentConfigHttpResponse } from "../lib/payments/payment-config-contract"
+import {
+    type AdminUserSummary,
+    adminUserLotKey,
+    adminUserLotLabel,
+    displayUserField,
+    displayUserName,
+    filterAdminUsers,
+    parseAdminUserListHttpResponse,
+} from "../lib/users/admin-user-contract"
 import { useRouter } from "next/navigation"
 import './style.css'
-import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX, Tag } from 'lucide-react'
+import { Search, FilterX, CreditCard, DollarSign, Users, Settings, Plus, Trash2, Edit3, Save, X, AlertTriangle, Info, UserCheck, UserX, Tag, RefreshCw } from 'lucide-react'
 
 type IParcelamento = IPaymentConfig["parcelamentos"][0];
+
+const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+const formatCount = (value: number) => new Intl.NumberFormat("pt-BR").format(value);
+
+const formatRemainingPlaces = (value: number) =>
+    value === 1 ? "Resta 1 vaga" : `Restam ${formatCount(value)} vagas`;
+
+const formatOccupancyTime = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    }).format(date);
+};
+
+// Código provisório do card de criação; o servidor define o código real (maior + 1).
+const NEW_LOT_CODE = -1;
+// shortcut: Brasília fixo em -03:00 (sem horário de verão desde 2019), mesma regra usada pela API ao salvar.
+const BRASILIA_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** ISO salvo → valor do campo datetime-local, em horário de Brasília. */
+const toBrasiliaInputValue = (iso?: string) => {
+    const time = iso ? new Date(iso).getTime() : Number.NaN;
+    return Number.isFinite(time) ? new Date(time - BRASILIA_OFFSET_MS).toISOString().slice(0, 16) : "";
+};
+
+const isFutureOpening = (iso?: string): iso is string =>
+    Boolean(iso) && new Date(iso as string).getTime() > Date.now();
+
+const formatLotOpening = (iso: string) => new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+}).format(new Date(iso));
+
+const hasValidAutomaticStructure = (lots: unknown): lots is ILoteAutomatico[] => {
+    if (!Array.isArray(lots) || lots.length === 0) return false;
+    const lotCodes = new Set<number>();
+
+    return lots.every((candidate) => {
+        if (typeof candidate !== "object" || candidate === null) return false;
+        const lot = candidate as Partial<ILoteAutomatico>;
+        const lotCode = lot.codigo;
+        const capacity = lot.limiteVagas;
+        const prices = lot.precos;
+        if (
+            typeof lotCode !== "number" || !Number.isInteger(lotCode) || lotCode < 0 || lotCodes.has(lotCode) ||
+            typeof lot.nome !== "string" || !lot.nome.trim() ||
+            typeof capacity !== "number" || !Number.isInteger(capacity) || capacity <= 0 ||
+            typeof prices !== "object" || prices === null ||
+            ![prices.valorAVista, prices.valorBoleto, prices.valorDebito, prices.valorPix]
+                .every((value) => typeof value === "number" && Number.isFinite(value) && value >= 0) ||
+            !Array.isArray(prices.parcelamentos)
+        ) {
+            return false;
+        }
+
+        lotCodes.add(lotCode);
+        const installmentCodes = new Set<number>();
+        return prices.parcelamentos.every((installment) => {
+            if (typeof installment !== "object" || installment === null) return false;
+            if (
+                !Number.isInteger(installment.codigo) || installment.codigo < 0 ||
+                installmentCodes.has(installment.codigo) ||
+                !Number.isInteger(installment.totalParcelas) || installment.totalParcelas <= 0 ||
+                typeof installment.valorCadaParcela !== "number" ||
+                !Number.isFinite(installment.valorCadaParcela) || installment.valorCadaParcela < 0
+            ) {
+                return false;
+            }
+            installmentCodes.add(installment.codigo);
+            return true;
+        });
+    });
+};
 
 export default function Page() {
     const [loading, setLoading] = useState<boolean>(true)
     const [searchTerm, setSearchTerm] = useState<string>("")
     const [selectedStatus, setSelectedStatus] = useState<string>("")
     const [selectedPaymentType, setSelectedPaymentType] = useState<string>("")
+    const [selectedLot, setSelectedLot] = useState<string>("")
     const [startDate, setStartDate] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
     const [paymentData, setPaymentData] = useState<IPaymentConfig | null>(null)
-    const [payedUsers, setPayedUsers] = useState<IUser[]>([])
+    const [paymentDataError, setPaymentDataError] = useState<string | null>(null)
+    const [payedUsers, setPayedUsers] = useState<AdminUserSummary[]>([])
+    const [payedUsersLoading, setPayedUsersLoading] = useState(false)
+    const [payedUsersError, setPayedUsersError] = useState<string | null>(null)
     const [editableParcelamentos, setEditableParcelamentos] = useState<IParcelamento[]>([]);
     const [isEditingInfo, setIsEditingInfo] = useState(false);
     const [isEditingParcelamentos, setIsEditingParcelamentos] = useState(false);
+    const [editingLotCode, setEditingLotCode] = useState<number | null>(null);
+    const [editableLot, setEditableLot] = useState<ILoteAutomatico | null>(null);
+    const [editableLotOpensAt, setEditableLotOpensAt] = useState("");
+    const [lotOccupancy, setLotOccupancy] = useState<IAutomaticLotOccupancy | null>(null);
+    const [lotOccupancyLoading, setLotOccupancyLoading] = useState(false);
+    const [lotOccupancyError, setLotOccupancyError] = useState<string | null>(null);
+    const [organizerPriceSaving, setOrganizerPriceSaving] = useState(false);
     const [editableInfo, setEditableInfo] = useState({
         nome: '',
         edicaoId: '',
         valorAVista: 0,
         valorBoleto: 0,
         valorDebito: 0,
-        valorPix: 0
+        valorPix: 0,
+        valorOrganizador: 0,
     });
     const allPaymentTypes: IPaymentConfig["pagamentosAceitos"] = ["PIX", "BOLETO", "CREDIT_CARD", "DEBIT_CARD"]
+
+    const loadLotOccupancy = useCallback(async (configId: string) => {
+        setLotOccupancyLoading(true);
+        setLotOccupancyError(null);
+
+        try {
+            const response = await fetch(
+                `/api/get/pagamentos/ocupacaoLotes?configId=${encodeURIComponent(configId)}`,
+                { cache: "no-store" },
+            );
+            const payload = await response.json().catch(() => ({})) as Partial<IAutomaticLotOccupancy> & {
+                message?: string;
+            };
+            if (!response.ok) {
+                throw new Error(payload.message ?? "Não foi possível atualizar a ocupação dos lotes.");
+            }
+            if (payload.configId !== configId || !Array.isArray(payload.lotes)) {
+                throw new Error("A ocupação recebida não corresponde à configuração carregada.");
+            }
+
+            setLotOccupancy(payload as IAutomaticLotOccupancy);
+        } catch (error) {
+            setLotOccupancyError(
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível atualizar a ocupação dos lotes.",
+            );
+        } finally {
+            setLotOccupancyLoading(false);
+        }
+    }, []);
+
+    const loadPaymentConfig = useCallback(async () => {
+        setPaymentDataError(null)
+        try {
+            const response = await fetch("/api/get/pagamentos/configuracaoPagamento", { cache: "no-store" })
+            const payload: unknown = await response.json().catch(() => null)
+            const config = parseAdminPaymentConfigHttpResponse(response.ok, payload)
+            if (!config) {
+                const message = typeof payload === "object" && payload !== null &&
+                    "message" in payload && typeof payload.message === "string"
+                    ? payload.message
+                    : response.ok
+                        ? "A configuração financeira recebida está em formato inválido."
+                        : "Não foi possível carregar a configuração financeira."
+                throw new Error(message)
+            }
+
+            setPaymentData(config)
+            setEditableInfo({
+                nome: config.nome,
+                edicaoId: config.edicaoId ?? '',
+                valorAVista: config.valorAVista,
+                valorBoleto: config.valorBoleto,
+                valorDebito: config.valorDebito,
+                valorPix: config.valorPix,
+                valorOrganizador: (config.configuracaoOrganizador?.valorFinalCentavos ?? 0) / 100,
+            })
+            if (config.modo === "automatico") {
+                void loadLotOccupancy(config._id)
+            }
+        } catch (error) {
+            setPaymentDataError(
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível carregar a configuração financeira.",
+            )
+        }
+    }, [loadLotOccupancy])
+
+    const loadPayedUsers = useCallback(async () => {
+        setPayedUsersLoading(true)
+        setPayedUsersError(null)
+        try {
+            const response = await fetch("/api/get/pagamentos/listaInscritos/", { cache: "no-store" })
+            const payload: unknown = await response.json().catch(() => null)
+            const users = parseAdminUserListHttpResponse(response.ok, payload)
+            if (!users) {
+                const message = typeof payload === "object" && payload !== null &&
+                    "message" in payload && typeof payload.message === "string"
+                    ? payload.message
+                    : response.ok
+                        ? "A lista de pagantes recebida está em formato inválido."
+                        : "Não foi possível carregar a lista de pagantes."
+                throw new Error(message)
+            }
+            setPayedUsers(users)
+        } catch (error) {
+            setPayedUsersError(
+                error instanceof Error
+                    ? error.message
+                    : "Não foi possível carregar a lista de pagantes.",
+            )
+        } finally {
+            setPayedUsersLoading(false)
+        }
+    }, [])
+
+    const reloadPageData = useCallback(async () => {
+        setLoading(true)
+        await Promise.all([loadPaymentConfig(), loadPayedUsers()])
+        setLoading(false)
+    }, [loadPaymentConfig, loadPayedUsers])
+
+    const handleStartLotEdit = (lot: ILoteAutomatico) => {
+        setEditingLotCode(lot.codigo);
+        setEditableLot(structuredClone(lot));
+        setEditableLotOpensAt(toBrasiliaInputValue(lot.abreEm));
+    };
+
+    // O novo lote começa como cópia do último: mesmas opções de parcela, preços para ajustar.
+    const handleStartLotCreate = () => {
+        const lastLot = paymentData?.configuracaoLotesAutomaticos?.lotes?.at(-1);
+        if (!lastLot) return;
+        setEditingLotCode(NEW_LOT_CODE);
+        setEditableLot({ ...structuredClone(lastLot), codigo: NEW_LOT_CODE, nome: "", abreEm: undefined });
+        setEditableLotOpensAt("");
+    };
+
+    const handleCancelLotEdit = () => {
+        setEditingLotCode(null);
+        setEditableLot(null);
+        setEditableLotOpensAt("");
+    };
+
+    // Mesma lógica dos lotes anteriores: um preço único e parcelas sem juros (centavos arredondados para baixo).
+    const handleSplitInstallmentsFromPix = () => {
+        setEditableLot((current) => {
+            if (!current) return current;
+            const pixCents = Math.round(current.precos.valorPix * 100);
+            const price = pixCents / 100;
+            return {
+                ...current,
+                precos: {
+                    ...current.precos,
+                    valorBoleto: price,
+                    valorDebito: price,
+                    valorAVista: price,
+                    parcelamentos: current.precos.parcelamentos.map((installment) => ({
+                        ...installment,
+                        valorCadaParcela: Math.floor(pixCents / installment.totalParcelas) / 100,
+                    })),
+                },
+            };
+        });
+    };
+
+    const handleLotFieldChange = (field: "nome" | "limiteVagas", value: string) => {
+        setEditableLot((current) => current ? ({
+            ...current,
+            [field]: field === "nome" ? value : Number(value),
+        }) : current);
+    };
+
+    const handleLotPriceChange = (
+        field: "valorAVista" | "valorBoleto" | "valorDebito" | "valorPix",
+        value: string,
+    ) => {
+        setEditableLot((current) => current ? ({
+            ...current,
+            precos: { ...current.precos, [field]: Number(value) },
+        }) : current);
+    };
+
+    const handleLotInstallmentChange = (
+        index: number,
+        field: "totalParcelas" | "valorCadaParcela",
+        value: string,
+    ) => {
+        setEditableLot((current) => {
+            if (!current) return current;
+            const parcelamentos = [...current.precos.parcelamentos];
+            parcelamentos[index] = { ...parcelamentos[index], [field]: Number(value) };
+            return { ...current, precos: { ...current.precos, parcelamentos } };
+        });
+    };
+
+    const handleAddLotInstallment = () => {
+        setEditableLot((current) => {
+            if (!current) return current;
+            const nextCode = current.precos.parcelamentos.reduce(
+                (maximum, installment) => Math.max(maximum, installment.codigo),
+                -1,
+            ) + 1;
+            return {
+                ...current,
+                precos: {
+                    ...current.precos,
+                    parcelamentos: [
+                        ...current.precos.parcelamentos,
+                        { codigo: nextCode, totalParcelas: 2, valorCadaParcela: 0 },
+                    ],
+                },
+            };
+        });
+    };
+
+    const handleDeleteLotInstallment = (codigo: number) => {
+        setEditableLot((current) => current ? ({
+            ...current,
+            precos: {
+                ...current.precos,
+                parcelamentos: current.precos.parcelamentos.filter(
+                    (installment) => installment.codigo !== codigo,
+                ),
+            },
+        }) : current);
+    };
+
+    const handleSaveAutomaticLot = async () => {
+        if (!paymentData || !editableLot || editingLotCode === null) return;
+
+        const isCreating = editingLotCode === NEW_LOT_CODE;
+        const lote = {
+            nome: editableLot.nome,
+            limiteVagas: editableLot.limiteVagas,
+            precos: editableLot.precos,
+            abreEm: editableLotOpensAt || null,
+        };
+
+        try {
+            setLoading(true);
+            const response = await fetch(
+                isCreating ? "/api/post/pagamentos/loteAutomatico" : "/api/put/pagamentos/configuracaoLoteAutomatico",
+                {
+                    method: isCreating ? "POST" : "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(isCreating
+                        ? { configId: paymentData._id, lote }
+                        : { configId: paymentData._id, loteCodigo: editingLotCode, lote }),
+                },
+            );
+            const result: unknown = await response.json().catch(() => null);
+            if (!response.ok) {
+                const message = typeof result === "object" && result !== null &&
+                    "message" in result && typeof result.message === "string"
+                    ? result.message
+                    : "Falha ao salvar o lote."
+                throw new Error(message);
+            }
+
+            await loadPaymentConfig();
+            handleCancelLotEdit();
+            await loadLotOccupancy(paymentData._id);
+            alert(isCreating ? "Lote automático criado com sucesso!" : "Lote automático atualizado com sucesso!");
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Não foi possível salvar o lote.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleActivateEditParcelamentos = () => {
         if (paymentData) {
@@ -50,6 +403,7 @@ export default function Page() {
         setSearchTerm("")
         setSelectedStatus("")
         setSelectedPaymentType("")
+        setSelectedLot("")
         setStartDate("")
         setEndDate("")
     }
@@ -69,23 +423,14 @@ export default function Page() {
         setEditableParcelamentos(updatedParcelamentos);
     };
 
-    const filteredUsers = payedUsers.filter(user => {
-        const term = searchTerm.toLowerCase()
-        const creationDate = new Date(user.informacoes_usuario.data_criacao).toISOString().split('T')[0]
-
-        const searchMatch = term === "" ||
-            user?._id?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.email?.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.nome.toLowerCase()?.includes(term) ||
-            user?.informacoes_usuario?.numero_telefone?.includes(term)
-
-        const statusMatch = selectedStatus === "" || user.pagamento.situacao === parseInt(selectedStatus, 10)
-        const paymentTypeMatch = selectedPaymentType === "" || user.pagamento.tipo_pagamento === selectedPaymentType
-        const startDateMatch = startDate === "" || creationDate >= startDate
-        const endDateMatch = endDate === "" || creationDate <= endDate
-
-        return searchMatch && statusMatch && paymentTypeMatch && startDateMatch && endDateMatch
-    })
+    const filteredUsers = useMemo(() => filterAdminUsers(payedUsers, {
+        searchTerm,
+        selectedStatus,
+        selectedPaymentType,
+        selectedLot,
+        startDate,
+        endDate,
+    }), [payedUsers, searchTerm, selectedStatus, selectedPaymentType, selectedLot, startDate, endDate])
 
     const handleSaveParcelamentos = async () => {
         try {
@@ -114,40 +459,12 @@ export default function Page() {
     const router = useRouter()
 
     useEffect(() => {
-        const fetchData = async () => {
-            const data = await fetch("/api/get/pagamentos/configuracaoPagamento")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            const fetchedData = await data.json()
-            setPaymentData(fetchedData)
-            setEditableInfo({
-                nome: fetchedData.nome,
-                edicaoId: fetchedData.edicaoId ?? '',
-                valorAVista: fetchedData.valorAVista,
-                valorBoleto: fetchedData.valorBoleto,
-                valorDebito: fetchedData.valorDebito,
-                valorPix: fetchedData.valorPix
-            })
-            setLoading(false)
-        }
-
-        const fetchDataPayedUsers = async () => {
-            const data = await fetch("/api/get/pagamentos/listaInscritos/")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            setPayedUsers(await data.json())
-            setLoading(false)
-        }
-
-        fetchData()
-        fetchDataPayedUsers()
-    }, [])
+        void reloadPageData()
+    }, [reloadPageData])
 
     const handleInfoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        const numericFields = ["valorAVista", "valorBoleto", "valorDebito", "valorPix"];
+        const numericFields = ["valorAVista", "valorBoleto", "valorDebito", "valorPix", "valorOrganizador"];
         setEditableInfo(prev => ({
             ...prev,
             [name]: numericFields.includes(name) ? parseFloat(value) || 0 : value
@@ -170,7 +487,17 @@ export default function Page() {
             const response = await fetch('/api/put/pagamentos/configuracaoGeralPagamento', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...editableInfo, _id: paymentData?._id }),
+                body: JSON.stringify({
+                    ...editableInfo,
+                    _id: paymentData?._id,
+                    ...(editableInfo.valorOrganizador > 0
+                        ? {
+                            configuracaoOrganizador: {
+                                valorFinalCentavos: Math.round(editableInfo.valorOrganizador * 100),
+                            },
+                        }
+                        : {}),
+                }),
             });
 
             if (!response.ok) {
@@ -179,8 +506,10 @@ export default function Page() {
                 return;
             };
 
-            const updatedData = await response.json();
-            setPaymentData(prev => prev ? ({ ...prev, ...updatedData.data }) : prev);
+            await loadPaymentConfig();
+            if (paymentData?.modo === "automatico" && paymentData._id) {
+                void loadLotOccupancy(paymentData._id);
+            }
             setLoading(false)
 
         } catch (error) {
@@ -199,10 +528,40 @@ export default function Page() {
                 valorAVista: paymentData.valorAVista,
                 valorBoleto: paymentData.valorBoleto,
                 valorDebito: paymentData.valorDebito,
-                valorPix: paymentData.valorPix
+                valorPix: paymentData.valorPix,
+                valorOrganizador: (paymentData.configuracaoOrganizador?.valorFinalCentavos ?? 0) / 100,
             });
         }
         setIsEditingInfo(false);
+    };
+
+    const handleSaveOrganizerPrice = async () => {
+        if (!paymentData || editableInfo.valorOrganizador <= 0) {
+            alert("Informe um preço de organizador maior que zero.");
+            return;
+        }
+        try {
+            setOrganizerPriceSaving(true);
+            const response = await fetch('/api/put/pagamentos/configuracaoGeralPagamento', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...editableInfo,
+                    _id: paymentData._id,
+                    configuracaoOrganizador: {
+                        valorFinalCentavos: Math.round(editableInfo.valorOrganizador * 100),
+                    },
+                }),
+            });
+            const payload = await response.json().catch(() => ({})) as { message?: string };
+            if (!response.ok) throw new Error(payload.message ?? "Não foi possível salvar o preço.");
+            await loadPaymentConfig();
+            alert("Preço de organizador salvo com sucesso.");
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Não foi possível salvar o preço.");
+        } finally {
+            setOrganizerPriceSaving(false);
+        }
     };
 
     const handleAddParcelamento = () => {
@@ -231,42 +590,32 @@ export default function Page() {
             return
         }
 
-        const fetchData = async () => {
-            const data = await fetch("/api/get/pagamentos/configuracaoPagamento")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            const fetchedData = await data.json()
-            setPaymentData(fetchedData)
-            setEditableInfo({
-                nome: fetchedData.nome,
-                edicaoId: fetchedData.edicaoId ?? '',
-                valorAVista: fetchedData.valorAVista,
-                valorBoleto: fetchedData.valorBoleto,
-                valorDebito: fetchedData.valorDebito,
-                valorPix: fetchedData.valorPix
-            })
-            setLoading(false)
-        }
-
-        const fetchDataPayedUsers = async () => {
-            const data = await fetch("/api/get/pagamentos/listaInscritos/")
-            if (!data.ok) {
-                alert("Ocorreu algum erro ao se conectar ao banco de dados. Recarregue a página e tente novamente")
-            }
-            setPayedUsers(await data.json())
-            setLoading(false)
-        }
-
-        await fetchData()
-        await fetchDataPayedUsers()
+        await Promise.all([loadPaymentConfig(), loadPayedUsers()])
         setLoading(false)
         alert("Pagamentos aceitos alterados com sucesso!")
     }
 
+    // Opções do filtro vêm dos próprios inscritos, com contagem, inclusive lotes que já saíram da configuração.
+    const lotOptions = useMemo(() => {
+        const options = new Map<string, { label: string; count: number }>()
+        for (const user of payedUsers) {
+            const key = adminUserLotKey(user)
+            const option = options.get(key) ?? { label: adminUserLotLabel(user), count: 0 }
+            option.count += 1
+            options.set(key, option)
+        }
+        const order = (key: string) => Number.isFinite(Number(key)) ? Number(key) : Infinity
+        return Array.from(options, ([key, option]) => ({ key, ...option }))
+            .sort((a, b) => order(a.key) - order(b.key) || a.label.localeCompare(b.label, "pt-BR"))
+    }, [payedUsers])
+
     const paymentTypes = useMemo(() => {
         if (!payedUsers.length) return []
-        const types = new Set(payedUsers.map(user => user.pagamento.tipo_pagamento).filter(Boolean))
+        const types = new Set(
+            payedUsers
+                .map(user => user.pagamento.tipo_pagamento)
+                .filter((type): type is string => Boolean(type)),
+        )
         return Array.from(types)
     }, [payedUsers])
 
@@ -284,10 +633,157 @@ export default function Page() {
             <div className="admin-state admin-state--error" role="alert">
                 <span className="admin-state__mark">!</span>
                 <h1>Não foi possível carregar o financeiro</h1>
-                <p>Atualize a página ou tente novamente em alguns instantes.</p>
+                <p>{paymentDataError ?? "Atualize a página ou tente novamente em alguns instantes."}</p>
+                <button type="button" className="financeiro-btn financeiro-btn-primary" onClick={() => void reloadPageData()}>
+                    Tentar novamente
+                </button>
             </div>
         );
     }
+
+    const automaticLots = paymentData.configuracaoLotesAutomaticos?.lotes;
+    const automaticStructureValid = hasValidAutomaticStructure(automaticLots);
+
+    const renderLotForm = (idSuffix: string) => editableLot && (
+        <div className="financeiro-lot-edit-form">
+            <div className="financeiro-form-row">
+                <div className="financeiro-form-group">
+                    <label className="financeiro-label" htmlFor={`lot-name-${idSuffix}`}>Nome</label>
+                    <input
+                        id={`lot-name-${idSuffix}`}
+                        className="financeiro-input"
+                        value={editableLot.nome}
+                        onChange={(event) => handleLotFieldChange("nome", event.target.value)}
+                    />
+                </div>
+                <div className="financeiro-form-group">
+                    <label className="financeiro-label" htmlFor={`lot-limit-${idSuffix}`}>Limite de vagas</label>
+                    <input
+                        id={`lot-limit-${idSuffix}`}
+                        type="number"
+                        min="1"
+                        step="1"
+                        className="financeiro-input"
+                        value={editableLot.limiteVagas}
+                        onChange={(event) => handleLotFieldChange("limiteVagas", event.target.value)}
+                    />
+                </div>
+                <div className="financeiro-form-group">
+                    <label className="financeiro-label" htmlFor={`lot-opens-${idSuffix}`}>
+                        Abre em (horário de Brasília)
+                        <span className="financeiro-info-text">
+                            Opcional. Antes desse horário o checkout não vende este lote.
+                        </span>
+                    </label>
+                    <input
+                        id={`lot-opens-${idSuffix}`}
+                        type="datetime-local"
+                        className="financeiro-input"
+                        value={editableLotOpensAt}
+                        onChange={(event) => setEditableLotOpensAt(event.target.value)}
+                    />
+                </div>
+            </div>
+
+            <div className="financeiro-lot-subheading">
+                <h4>Preços</h4>
+                <button
+                    type="button"
+                    onClick={handleSplitInstallmentsFromPix}
+                    className="financeiro-btn financeiro-btn-secondary"
+                >
+                    Dividir parcelas pelo valor PIX
+                </button>
+            </div>
+            <div className="financeiro-lot-prices-grid">
+                {([
+                    ["valorPix", "PIX"],
+                    ["valorBoleto", "Boleto"],
+                    ["valorDebito", "Débito"],
+                    ["valorAVista", "Crédito à vista"],
+                ] as const).map(([field, label]) => (
+                    <div className="financeiro-form-group" key={field}>
+                        <label className="financeiro-label" htmlFor={`${field}-${idSuffix}`}>{label} (R$)</label>
+                        <input
+                            id={`${field}-${idSuffix}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="financeiro-input"
+                            value={editableLot.precos[field]}
+                            onChange={(event) => handleLotPriceChange(field, event.target.value)}
+                        />
+                    </div>
+                ))}
+            </div>
+
+            <div className="financeiro-lot-installments">
+                <div className="financeiro-lot-subheading">
+                    <h4>Parcelamentos do lote</h4>
+                    <button
+                        type="button"
+                        onClick={handleAddLotInstallment}
+                        className="financeiro-btn financeiro-btn-secondary"
+                    >
+                        <Plus size={17} />
+                        Adicionar opção
+                    </button>
+                </div>
+                {editableLot.precos.parcelamentos.length === 0 ? (
+                    <p className="financeiro-info-note">Nenhuma opção de parcelamento cadastrada.</p>
+                ) : (
+                    <div className="financeiro-lot-installment-list">
+                        {editableLot.precos.parcelamentos.map((installment, index) => (
+                            <div className="financeiro-lot-installment-row" key={installment.codigo}>
+                                <span className="financeiro-lot-code">Código {installment.codigo}</span>
+                                <label>
+                                    Parcelas
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        className="financeiro-input"
+                                        value={installment.totalParcelas}
+                                        onChange={(event) => handleLotInstallmentChange(index, "totalParcelas", event.target.value)}
+                                    />
+                                </label>
+                                <label>
+                                    Valor por parcela (R$)
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className="financeiro-input"
+                                        value={installment.valorCadaParcela}
+                                        onChange={(event) => handleLotInstallmentChange(index, "valorCadaParcela", event.target.value)}
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    className="financeiro-delete-btn financeiro-delete-btn--inline"
+                                    onClick={() => handleDeleteLotInstallment(installment.codigo)}
+                                    aria-label={`Remover parcelamento ${installment.codigo}`}
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="financeiro-form-actions">
+                <button type="button" onClick={handleSaveAutomaticLot} className="financeiro-btn financeiro-btn-success">
+                    <Save size={18} />
+                    {editingLotCode === NEW_LOT_CODE ? "Criar lote" : "Salvar este lote"}
+                </button>
+                <button type="button" onClick={handleCancelLotEdit} className="financeiro-btn financeiro-btn-secondary">
+                    <X size={18} />
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    );
 
     return (
         <>
@@ -299,6 +795,25 @@ export default function Page() {
                 <p className="main-subtitle">
                     Gerencie valores, formas de pagamento, parcelamentos e inscrições.
                 </p>
+
+                <div className="financeiro-config-summary" aria-label="Configuração financeira carregada">
+                    <div>
+                        <span className="financeiro-config-summary-label">Documento</span>
+                        <strong>{paymentData._id}</strong>
+                    </div>
+                    <div>
+                        <span className="financeiro-config-summary-label">Edição</span>
+                        <strong>{paymentData.edicaoId ?? "Não configurada"}</strong>
+                    </div>
+                    <div>
+                        <span className="financeiro-config-summary-label">Modo</span>
+                        <strong className={`financeiro-mode-badge financeiro-mode-badge--${paymentData.modo ?? "legado"}`}>
+                            {paymentData.modo === "automatico"
+                                ? "Automático"
+                                : paymentData.modo === "manual" ? "Manual" : "Legado"}
+                        </strong>
+                    </div>
+                </div>
 
                 {/* Estatísticas */}
                 <div className="financeiro-estatisticas">
@@ -314,8 +829,14 @@ export default function Page() {
                     </div>
                     <div className="financeiro-estatistica-card">
                         <DollarSign size={32} style={{ marginBottom: '0.3rem', color: '#4CAF50' }} />
-                        <span className="financeiro-estatistica-valor">{paymentData.parcelamentos.length}</span>
-                        <span className="financeiro-estatistica-label">Parcelamentos</span>
+                        <span className="financeiro-estatistica-valor">
+                            {paymentData.modo === "automatico"
+                                ? (automaticLots?.length ?? 0)
+                                : (paymentData.parcelamentos?.length ?? 0)}
+                        </span>
+                        <span className="financeiro-estatistica-label">
+                            {paymentData.modo === "automatico" ? "Lotes automáticos" : "Parcelamentos"}
+                        </span>
                     </div>
                 </div>
 
@@ -338,6 +859,228 @@ export default function Page() {
                         Gerenciar códigos
                     </button>
                 </div>
+
+                <div className="financeiro-section financeiro-organizer-price-section">
+                    <div className="financeiro-section-heading-row">
+                        <div>
+                            <h2 className="financeiro-section-title">
+                                <UserCheck size={24} />
+                                Preço reservado para organizadores
+                            </h2>
+                            <p className="financeiro-section-description">
+                                Total fixo aplicado em qualquer meio de pagamento quando um desconto individual estiver marcado como organizador. Essas inscrições não ocupam vagas dos lotes.
+                            </p>
+                        </div>
+                        <span className="financeiro-mode-badge financeiro-mode-badge--automatico">
+                            Por edição
+                        </span>
+                    </div>
+                    <div className="financeiro-organizer-price-form">
+                        <div className="financeiro-form-group">
+                            <label htmlFor="valorOrganizador" className="financeiro-label">
+                                Valor final (R$)
+                            </label>
+                            <input
+                                id="valorOrganizador"
+                                name="valorOrganizador"
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                value={editableInfo.valorOrganizador}
+                                onChange={handleInfoInputChange}
+                                className="financeiro-input"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            className="financeiro-btn financeiro-btn-primary"
+                            onClick={() => void handleSaveOrganizerPrice()}
+                            disabled={organizerPriceSaving || editableInfo.valorOrganizador <= 0}
+                        >
+                            <Save size={18} />
+                            {organizerPriceSaving ? "Salvando" : "Salvar preço"}
+                        </button>
+                    </div>
+                </div>
+
+                {paymentData.modo === "automatico" && (
+                    <div className="financeiro-section financeiro-automatic-section">
+                        <div className="financeiro-section-heading-row">
+                            <div>
+                                <h2 className="financeiro-section-title">
+                                    <DollarSign size={24} />
+                                    Lotes usados pelo checkout
+                                </h2>
+                                <p className="financeiro-section-description">
+                                    Cada lote tem preços próprios. Salvar um card altera somente aquele lote.
+                                </p>
+                            </div>
+                            <div className="financeiro-lot-section-actions">
+                                <span className="financeiro-mode-badge financeiro-mode-badge--automatico">
+                                    Configuração automática
+                                </span>
+                                <button
+                                    type="button"
+                                    className="financeiro-btn financeiro-btn-primary financeiro-lot-refresh-button"
+                                    onClick={() => void loadLotOccupancy(paymentData._id)}
+                                    disabled={lotOccupancyLoading}
+                                >
+                                    <RefreshCw
+                                        size={17}
+                                        className={lotOccupancyLoading ? "financeiro-refresh-icon--spinning" : undefined}
+                                    />
+                                    {lotOccupancyLoading ? "Atualizando" : "Atualizar números"}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="financeiro-btn financeiro-btn-success"
+                                    onClick={handleStartLotCreate}
+                                    disabled={!automaticStructureValid || editingLotCode !== null}
+                                >
+                                    <Plus size={17} />
+                                    Criar novo lote
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="financeiro-warning">
+                            <AlertTriangle size={20} />
+                            <span>
+                                Sessões de pagamento já criadas mantêm o lote e os valores originais. As alterações abaixo valem apenas para novas sessões.
+                            </span>
+                        </div>
+
+                        {lotOccupancy && (
+                            <div className="financeiro-lot-occupancy-summary" role="status" aria-live="polite">
+                                <div>
+                                    <strong>{formatCount(lotOccupancy.confirmadas.total)}</strong>
+                                    <span>Vendas confirmadas</span>
+                                </div>
+                                <div>
+                                    <strong>{formatCount(lotOccupancy.reservasAtivas)}</strong>
+                                    <span>Em pagamento / reservadas</span>
+                                </div>
+                                <div>
+                                    <strong>{formatCount(lotOccupancy.ocupadasEfetivas)}</strong>
+                                    <span>Vagas ocupadas no checkout</span>
+                                </div>
+                                <small>
+                                    Atualizado às {formatOccupancyTime(lotOccupancy.calculadoEm) ?? "—"}
+                                </small>
+                            </div>
+                        )}
+
+                        {lotOccupancyLoading && !lotOccupancy && (
+                            <div className="financeiro-lot-occupancy-state" role="status">
+                                <RefreshCw size={18} className="financeiro-refresh-icon--spinning" />
+                                Calculando vendas e vagas disponíveis…
+                            </div>
+                        )}
+
+                        {lotOccupancyError && (
+                            <div className="financeiro-lot-occupancy-state financeiro-lot-occupancy-state--error" role="alert">
+                                <AlertTriangle size={18} />
+                                <span>
+                                    {lotOccupancyError}
+                                    {lotOccupancy ? " Os últimos números calculados permanecem visíveis." : ""}
+                                </span>
+                            </div>
+                        )}
+
+                        {lotOccupancy && lotOccupancy.excedente > 0 && (
+                            <div className="financeiro-lot-occupancy-state financeiro-lot-occupancy-state--warning" role="alert">
+                                <AlertTriangle size={18} />
+                                A ocupação excede a capacidade configurada em {formatCount(lotOccupancy.excedente)} vagas.
+                            </div>
+                        )}
+
+                        {!automaticStructureValid ? (
+                            <div className="admin-state admin-state--error" role="alert">
+                                <span className="admin-state__mark">!</span>
+                                <h3>Estrutura automática inválida</h3>
+                                <p>
+                                    Nenhum lote será criado ou preenchido a partir dos valores legados. Corrija a estrutura da configuração antes de editar preços.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="financeiro-lots-grid">
+                                {automaticLots!.map((lot) => {
+                                    const isEditing = editingLotCode === lot.codigo && editableLot;
+                                    const lotAvailability = lotOccupancy?.lotes.find(
+                                        (item) => item.codigo === lot.codigo && item.limiteVagas === lot.limiteVagas,
+                                    );
+                                    return (
+                                        <article key={lot.codigo} className="financeiro-lot-card">
+                                            <div className="financeiro-lot-header">
+                                                <div>
+                                                    <span className="financeiro-lot-code">Lote #{lot.codigo}</span>
+                                                    <h3>{lot.nome}</h3>
+                                                    {isFutureOpening(lot.abreEm) && (
+                                                        <span className="financeiro-mode-badge financeiro-mode-badge--manual">
+                                                            Abre em {formatLotOpening(lot.abreEm)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {!isEditing && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleStartLotEdit(lot)}
+                                                        className="financeiro-btn financeiro-btn-primary"
+                                                        disabled={editingLotCode !== null}
+                                                    >
+                                                        <Edit3 size={18} />
+                                                        Editar lote
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {isEditing ? renderLotForm(String(lot.codigo)) : (
+                                                <>
+                                                    <div className="financeiro-lot-details-grid">
+                                                        <div>
+                                                            <span>Limite</span>
+                                                            <strong>{formatCount(lot.limiteVagas)} vagas</strong>
+                                                            <small className={lotAvailability ? "financeiro-lot-remaining" : "financeiro-lot-remaining financeiro-lot-remaining--unavailable"}>
+                                                                {lotAvailability
+                                                                    ? formatRemainingPlaces(lotAvailability.restantes)
+                                                                    : lotOccupancyLoading ? "Calculando disponibilidade…" : "Disponibilidade indisponível"}
+                                                            </small>
+                                                        </div>
+                                                        <div><span>PIX</span><strong>{formatCurrency(lot.precos.valorPix)}</strong></div>
+                                                        <div><span>Boleto</span><strong>{formatCurrency(lot.precos.valorBoleto)}</strong></div>
+                                                        <div><span>Débito</span><strong>{formatCurrency(lot.precos.valorDebito)}</strong></div>
+                                                        <div><span>Crédito à vista</span><strong>{formatCurrency(lot.precos.valorAVista)}</strong></div>
+                                                    </div>
+                                                    <div className="financeiro-lot-installment-summary">
+                                                        <h4>Parcelamentos</h4>
+                                                        {lot.precos.parcelamentos.length === 0 ? (
+                                                            <span>Nenhuma opção cadastrada</span>
+                                                        ) : lot.precos.parcelamentos.map((installment) => (
+                                                            <span key={installment.codigo}>
+                                                                Código {installment.codigo}: {installment.totalParcelas}x de {formatCurrency(installment.valorCadaParcela)}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </article>
+                                    );
+                                })}
+                                {editingLotCode === NEW_LOT_CODE && editableLot && (
+                                    <article className="financeiro-lot-card">
+                                        <div className="financeiro-lot-header">
+                                            <div>
+                                                <span className="financeiro-lot-code">Novo lote</span>
+                                                <h3>{editableLot.nome.trim() || "Sem nome"}</h3>
+                                            </div>
+                                        </div>
+                                        {renderLotForm("new")}
+                                    </article>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Pagamentos Aceitos */}
                 <div className="financeiro-section">
@@ -382,8 +1125,17 @@ export default function Page() {
                 <div className="financeiro-section">
                     <h2 className="financeiro-section-title">
                         <DollarSign size={24} />
-                        Informações Gerais de Pagamento
+                        Compatibilidade legada / modo manual
                     </h2>
+
+                    {paymentData.modo === "automatico" && (
+                        <div className="financeiro-legacy-warning" role="note">
+                            <Info size={20} />
+                            <span>
+                                Os valores e o nome abaixo permanecem por compatibilidade, mas não são os preços usados pelo checkout enquanto o modo for automático. Edite os cards de lotes acima para alterar novas compras.
+                            </span>
+                        </div>
+                    )}
 
                     {isEditingInfo ? (
                         <div className="financeiro-form">
@@ -514,7 +1266,7 @@ export default function Page() {
                             </div>
                             <button onClick={() => setIsEditingInfo(true)} className="financeiro-btn financeiro-btn-primary">
                                 <Edit3 size={18} />
-                                Editar Informações
+                                Editar campos legados
                             </button>
                         </div>
                     )}
@@ -524,17 +1276,17 @@ export default function Page() {
                 <div className="financeiro-section">
                     <div className="financeiro-warning">
                         <AlertTriangle size={20} />
-                        <span>Pagamentos já criados anteriormente manterão os valores antigos, a menos que sejam cancelados pelo banco.</span>
+                        <span>Pagamentos já criados preservam o snapshot dos valores originais e não são alterados por esta tela.</span>
                     </div>
 
                     <h2 className="financeiro-section-title">
                         <CreditCard size={24} />
-                        Formas de Parcelamento
+                        Parcelamentos legados
                     </h2>
 
                     {!isEditingParcelamentos ? (
                         <div className="financeiro-parcelamentos-grid">
-                            {paymentData.parcelamentos.map((payment) => (
+                            {(paymentData.parcelamentos ?? []).map((payment) => (
                                 <div key={payment.codigo} className="financeiro-parcelamento-card">
                                     <div className="financeiro-parcelamento-header">
                                         <span className="financeiro-parcelamento-codigo">Código: {payment.codigo}</span>
@@ -678,6 +1430,31 @@ export default function Page() {
                         </div>
                     </div>
 
+                    {payedUsersError && (
+                        <div className="financeiro-lot-occupancy-state financeiro-lot-occupancy-state--error" role="alert">
+                            <AlertTriangle size={18} />
+                            <span>
+                                {payedUsersError}
+                                {payedUsers.length > 0 ? " A última lista válida permanece visível." : ""}
+                            </span>
+                            <button
+                                type="button"
+                                className="financeiro-btn financeiro-btn-secondary"
+                                onClick={() => void loadPayedUsers()}
+                                disabled={payedUsersLoading}
+                            >
+                                Tentar novamente
+                            </button>
+                        </div>
+                    )}
+
+                    {payedUsersLoading && (
+                        <div className="financeiro-lot-occupancy-state" role="status">
+                            <RefreshCw size={18} className="financeiro-refresh-icon--spinning" />
+                            Atualizando lista de pagantes…
+                        </div>
+                    )}
+
                     <div className="usuarios-filtros">
                         <div className="usuarios-filtros-grid">
                             <div className="usuarios-filtro-busca">
@@ -705,6 +1482,23 @@ export default function Page() {
                                 >
                                     <option value="">Todos os Tipos</option>
                                     {paymentTypes.map(type => <option key={type} value={type}>{type}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="usuarios-filtro-select">
+                                <label htmlFor="lotFilter" className="usuarios-label">Lote</label>
+                                <select
+                                    id="lotFilter"
+                                    value={selectedLot}
+                                    onChange={e => setSelectedLot(e.target.value)}
+                                    className="usuarios-select"
+                                >
+                                    <option value="">Todos os Lotes</option>
+                                    {lotOptions.map(option => (
+                                        <option key={option.key} value={option.key}>
+                                            {option.label} — {formatCount(option.count)}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -750,23 +1544,33 @@ export default function Page() {
                                 <div className="financeiro-user-info">
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">Nome:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.nome}</span>
+                                        <span className="financeiro-user-value">{displayUserName(user)}</span>
                                     </div>
+                                    {user.cadastroPendente && (
+                                        <div className="financeiro-user-item">
+                                            <span className="financeiro-user-label">Cadastro:</span>
+                                            <span className="financeiro-user-value">Cadastro pendente</span>
+                                        </div>
+                                    )}
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">Email:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.email}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.informacoes_usuario.email)}</span>
                                     </div>
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">Telefone:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.numero_telefone}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.informacoes_usuario.numero_telefone)}</span>
                                     </div>
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">CPF:</span>
-                                        <span className="financeiro-user-value">{user.informacoes_usuario.cpf}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.informacoes_usuario.cpf)}</span>
                                     </div>
                                     <div className="financeiro-user-item">
                                         <span className="financeiro-user-label">ID Asaas:</span>
-                                        <span className="financeiro-user-value">{user.id_api}</span>
+                                        <span className="financeiro-user-value">{displayUserField(user.id_api)}</span>
+                                    </div>
+                                    <div className="financeiro-user-item">
+                                        <span className="financeiro-user-label">Lote:</span>
+                                        <span className="financeiro-user-value">{adminUserLotLabel(user)}</span>
                                     </div>
                                 </div>
                                 <div className="financeiro-user-actions">
