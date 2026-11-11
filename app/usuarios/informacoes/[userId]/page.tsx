@@ -446,6 +446,8 @@ export default function Page() {
                     {courseNotice.text}
                 </p>
             )}
+            {/* O wrapper evita que a regra .admin-detail-page > div estreite e descentralize o modal fixo. */}
+            <div className="contents">
             <ConfirmationModal
                 isOpen={courseToCancel !== null}
                 onClose={() => { if (!isCancelingCourse) setCourseToCancel(null) }}
@@ -460,6 +462,7 @@ export default function Page() {
                     Essa opção <strong>NÃO</strong> estornará o valor ao congressista. Deseja mesmo continuar?
                 </p>
             </ConfirmationModal>
+            </div>
             <div className="max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5">
                 {
                     dataCourses.length === 0 ?
