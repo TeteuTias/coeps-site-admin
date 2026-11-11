@@ -1,45 +1,19 @@
 import { withApiAuthRequired } from "@/app/lib/auth0";
 import { NextResponse } from "next/server"
-import { ObjectId } from 'mongodb';
 import { connectToDatabase } from "@/app/lib/mongodb";
+import { gravarPresenca, lerCorpo, lerPedidoPresenca } from "@/app/lib/presenca/registro-presenca";
 
 
 export const POST = withApiAuthRequired(async function POST(request) {
-    const data = await request.json()
-    const { db } = await connectToDatabase();
-    const colecao = 'palestras'
-
-    if (data.listType !== "init" && data.listType !== "end") {
-        throw new Error("!listType")
-    }
+    const lido = lerPedidoPresenca(await lerCorpo(request), true)
+    if ("falha" in lido) return NextResponse.json(lido.falha.corpo, { status: lido.falha.status })
 
     try {
-        if (data.listType === "init") {
-            const response = await db.collection(colecao).updateOne(
-                { _id: new ObjectId(data.eventId) },  // Encontra o documento com o _id especificado
-                {
-                    $addToSet: {
-                        attendanceListInit: data.userId
-                    }
-                }  // Adiciona o userId se ele não estiver em attendanceList
-            );
-            return NextResponse.json({ data: response })
-        }
-        // else => end
-        const response = await db.collection(colecao).updateOne(
-            { _id: new ObjectId(data.eventId) },  // Encontra o documento com o _id especificado
-            {
-                $addToSet: {
-                    attendanceListEnd: data.userId
-                }
-            }  // Adiciona o userId se ele não estiver em attendanceList
-        );
-        return NextResponse.json({ data: response })
+        const { db } = await connectToDatabase();
+        const resposta = await gravarPresenca(db, "palestras", "dar", lido.pedido)
+        return NextResponse.json(resposta.corpo, { status: resposta.status })
     } catch (error) {
         console.log(error)
         return NextResponse.json({ "message": "Ocorreu Algum erro" }, { status: 500 })
     }
-
-
-
 })

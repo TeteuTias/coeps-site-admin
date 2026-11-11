@@ -399,3 +399,23 @@
     max-width: 96vw;
   }
 }
+
+.presenca-card-agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  margin: 0.4em 0 0.6em;
+  font-size: 0.92rem;
+  color: #555;
+}
+
+.presenca-card-agenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.presenca-card-agenda-extra {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
