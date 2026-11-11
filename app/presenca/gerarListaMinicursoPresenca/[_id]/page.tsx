@@ -180,7 +180,7 @@ export default function ChamadaMinicurso() {
     async function removerInscricao(pessoa: AdminUserSummary) {
         const confirmou = await confirmar({
             titulo: 'Remover a inscrição?',
-            descricao: `${displayUserName(pessoa)} sai da lista deste minicurso e perde a presença registrada. O valor pago NÃO é estornado por aqui.`,
+            descricao: `${displayUserName(pessoa)} sai da lista deste minicurso e perde a presença registrada. Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido NÃO é estornado por aqui.`,
             perigo: true,
             rotuloConfirmar: 'Remover inscrição',
         })

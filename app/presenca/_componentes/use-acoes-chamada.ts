@@ -59,15 +59,20 @@ export function useAcoesChamada({ enviar, aplicar, reconsultar }: {
 
     try {
       let efeito: Efeito;
+      let pagamentoMantido = false;
       try {
         const res = await enviar(p);
+        const corpo: unknown = await res.json().catch(() => null);
         if (!res.ok) {
+          // a rota explica a recusa (ex.: etapa de pacote, Asaas indisponível): mostra a mensagem dela
+          const motivo = typeof (corpo as { message?: unknown } | null)?.message === "string" ? (corpo as { message: string }).message : "";
           avisar("erro", "Não foi possível concluir", res.status === 401
             ? "Sua sessão expirou. Entre de novo e confira a lista antes de repetir."
-            : `${nome}: o servidor recusou a operação (código ${res.status}). Nada foi confirmado; confira a pessoa na lista.`);
+            : motivo ? `${nome}: ${motivo} Nada foi alterado.` : `${nome}: o servidor recusou a operação (código ${res.status}). Nada foi confirmado; confira a pessoa na lista.`);
           return "falha";
         }
-        efeito = interpretarEscrita(await res.json().catch(() => null));
+        efeito = interpretarEscrita(corpo);
+        pagamentoMantido = (corpo as { pagamentoMantido?: unknown } | null)?.pagamentoMantido === true;
       } catch {
         marcarIncerto(id, true);
         avisar("erro", "Sem resposta do servidor", `${nome}: confira a situação da pessoa antes de repetir a ação.`);
@@ -117,6 +122,7 @@ export function useAcoesChamada({ enviar, aplicar, reconsultar }: {
       }
       avisar("ok", rotulo, `${nome}${aoTurno}.${quer === "desinscrever" ? " A presença dessa pessoa também foi retirada." : ""}`);
       if (quer === "desinscrever") setRecentes((l) => l.filter((r) => r.id !== id));
+      if (pagamentoMantido) avisar("alerta", "Pagamento não estornado", `${nome} já tinha PAGO: o valor NÃO foi estornado. Se for o caso, faça o estorno pelo painel do Asaas.`);
       return "registrado";
     } finally {
       emVoo.current.delete(id);
