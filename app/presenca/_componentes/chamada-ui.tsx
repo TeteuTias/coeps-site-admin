@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode, RefObject } from "react";
 import { Download, X } from "lucide-react";
-import { Botao, CampoBusca, Selo, TabelaRolavel, classeTd, classeTh } from "@/app/components/ui";
+import { Aviso, Botao, CampoBusca, Selo, TabelaRolavel, classeTd, classeTh } from "@/app/components/ui";
 import { Estado } from "@/app/components/Estado";
 import { Copiavel } from "@/app/components/Copiavel";
 import { useAvisos } from "@/app/components/Avisos";
 import { formatarHora } from "@/app/lib/formatar";
 import { displayUserField, displayUserName } from "@/app/lib/users/admin-user-contract";
-import type { AdminUserDetails, AdminUserSummary } from "@/app/lib/users/admin-user-contract";
+import type { AdminUserSummary } from "@/app/lib/users/admin-user-contract";
 import type { Leitura } from "./use-leitura-qr";
 import type { Recente } from "./use-acoes-chamada";
 
@@ -176,7 +176,7 @@ export function Recentes({ itens }: { itens: Recente[] }) {
 export function ResultadoLeitura({ leitura, aoFechar, children }: {
   leitura: Leitura;
   aoFechar: () => void;
-  children?: (pessoa: AdminUserDetails) => ReactNode;
+  children?: (pessoa: AdminUserSummary) => ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const pronto = leitura.estado === "ok";
@@ -206,6 +206,11 @@ export function ResultadoLeitura({ leitura, aoFechar, children }: {
             </div>
             <Botao estilo="fantasma" tamanho="pequeno" onClick={aoFechar} aria-label="Fechar resultado da leitura"><X className="size-4" aria-hidden="true" /></Botao>
           </div>
+          {leitura.semRede && (
+            <Aviso tom="alerta" titulo="Sem conexão">
+              Dados da lista carregada nesta tela. A presença fica guardada neste aparelho e é enviada quando a internet voltar.
+            </Aviso>
+          )}
           {children?.(leitura.pessoa)}
           <details className="text-sm">
             <summary className="cursor-pointer text-sutil">Mais dados e código da credencial</summary>

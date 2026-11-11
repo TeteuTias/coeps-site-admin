@@ -7,7 +7,7 @@ import {
     displayUserName,
     parseAdminUserListPayload,
 } from '@/app/lib/users/admin-user-contract'
-import type { AdminUserDetails, AdminUserSummary } from '@/app/lib/users/admin-user-contract'
+import type { AdminUserSummary } from '@/app/lib/users/admin-user-contract'
 import { parseDataObjectPayload } from '@/app/lib/api-data-contract'
 import { useUser } from '@/app/lib/auth0-client'
 import { Aviso, Botao, Cabecalho, Metrica, Pagina, Secao, Selo } from '@/app/components/ui'
@@ -19,6 +19,8 @@ import { normalizarBusca } from '../../_componentes/chamada'
 import { useAcoesChamada } from '../../_componentes/use-acoes-chamada'
 import type { PedidoAcao, Turno } from '../../_componentes/use-acoes-chamada'
 import { useLeituraQr } from '../../_componentes/use-leitura-qr'
+import { usuariosComPresenca } from '../../_componentes/dados-chamada'
+import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca'
 import {
     BotaoExportar, BuscaChamada, FiltroPresenca, ListaChamada, ListaObservacoes, MarcasPessoa, Recentes,
     ResultadoLeitura, observacoesBase, useFocoBusca,
@@ -62,7 +64,7 @@ export default function ChamadaPalestra() {
     const [leitorAberto, setLeitorAberto] = useState(false)
     const [feito, setFeito] = useState<{ lido: number; texto: string } | null>(null)
     const { ref: refBusca, focar: focarBusca } = useFocoBusca()
-    const { leitura, ler, limpar } = useLeituraQr()
+    const { leitura, ler, limpar } = useLeituraQr(lista)
     const seq = useRef(0)
     const jaCarregou = useRef(false)
 
@@ -90,11 +92,20 @@ export default function ChamadaPalestra() {
 
     useEffect(() => { void carregar(false) }, [carregar])
 
+    // presença sem resposta do servidor fica guardada no aparelho e é reenviada; ao entregar, recarrega a lista
+    const { pendentes, enviarAgora } = usePendentesPresenca(_id, () => { void carregar(false) })
+    const guardados = useMemo(
+        () => new Map(pendentes.filter((p) => p.eventId === _id && p.turno === turno).map((p) => [p.userId, p.quer])),
+        [pendentes, _id, turno],
+    )
+
     const { ocupados, incertos, recentes, executar, conferir } = useAcoesChamada({
-        enviar: ({ pessoa, quer, turno: t }: PedidoAcao) => fetch(quer === 'dar' ? '/api/post/darPresencaPalestra' : '/api/post/retirarPresencaPalestra', {
+        atividade: { tipo: 'palestra', eventId: _id },
+        enviar: ({ pessoa, quer, turno: t }: PedidoAcao, signal) => fetch(quer === 'dar' ? '/api/post/darPresencaPalestra' : '/api/post/retirarPresencaPalestra', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ eventId: _id, userId: pessoa._id, listType: t }),
+            signal,
         }),
         aplicar: ({ pessoa, quer, turno: t }) => {
             const id = pessoa._id
@@ -156,16 +167,17 @@ export default function ChamadaPalestra() {
         avisar('info', `Agora registrando a ${NOME_TURNO[novo].toUpperCase()}`, 'Toda presença dada ou retirada daqui em diante vale para este turno.')
     }
 
-    async function daLeitura(pessoa: AdminUserDetails, quer: 'dar' | 'retirar', lido: number) {
+    async function daLeitura(pessoa: AdminUserSummary, quer: 'dar' | 'retirar', lido: number) {
         const desfecho = await executar({ pessoa, quer, turno })
         if (desfecho === 'ocupado') return
         if (desfecho === 'registrado') setFeito({ lido, texto: quer === 'dar' ? `Presença de ${nomeTurno} registrada agora.` : `Presença de ${nomeTurno} retirada agora.` })
         else if (desfecho === 'jaEstava') setFeito({ lido, texto: quer === 'dar' ? `Já estava com ${nomeTurno}: nada foi alterado.` : `Já estava sem ${nomeTurno}: nada foi alterado.` })
+        else if (desfecho === 'guardado') setFeito({ lido, texto: `${quer === 'dar' ? 'Presença' : 'Retirada'} de ${nomeTurno} guardada neste aparelho: será enviada quando a internet voltar.` })
         else if (desfecho === 'semResposta') setFeito({ lido, texto: 'Sem resposta do servidor: confira a pessoa na lista antes de repetir.' })
         requestAnimationFrame(focarBusca)
     }
 
-    function conteudoLeitura(pessoa: AdminUserDetails) {
+    function conteudoLeitura(pessoa: AdminUserSummary) {
         const id = pessoa._id
         const presente = ativo.has(id)
         const obs: Observacao[] = observacoesBase(pessoa)
@@ -203,6 +215,7 @@ export default function ChamadaPalestra() {
                     <span className="flex flex-wrap gap-1.5">
                         {e && s ? <Selo tom="ok">Ambas</Selo> : e ? <Selo tom="info">Só entrada</Selo> : s ? <Selo tom="alerta">Só saída</Selo> : <Selo>Sem registro</Selo>}
                         {incertos.has(u._id) && <Selo tom="alerta">Sem resposta: conferir</Selo>}
+                        {guardados.has(u._id) && <Selo tom="alerta">{guardados.get(u._id) === 'retirar' ? 'Retirada guardada, aguardando envio' : 'Presença guardada, aguardando envio'}</Selo>}
                     </span>
                 )
             },
@@ -225,15 +238,32 @@ export default function ChamadaPalestra() {
                             rotulo={`Exportar planilha (entrada ${formatarNumero(totais.entrada)} · saída ${formatarNumero(totais.saida)})`}
                             desabilitado={totais.entrada + totais.saida === 0}
                             gerar={async () => {
+                                // a tela pode estar velha (outros leitores registram ao mesmo tempo): usa as listas do servidor no momento do clique
+                                let ids = { init: [...entrada], end: [...saida] }
+                                let usuarios: AdminUserSummary[] = lista
+                                try {
+                                    const res = await fetch(`/api/get/palestraProps/${_id}`)
+                                    const atual = res.ok ? lerPalestra(await res.json().catch(() => null)) : null
+                                    if (!atual) throw new Error('palestra')
+                                    ids = { init: atual.entrada, end: atual.saida }
+                                    // quem tem presença mas não está entre os inscritos listados também entra na planilha
+                                    usuarios = await usuariosComPresenca([...ids.init, ...ids.end], lista)
+                                } catch {
+                                    ids = { init: [...entrada], end: [...saida] }
+                                    usuarios = lista
+                                    avisar('alerta', 'Planilha com a lista desta tela', 'Não foi possível buscar a lista atual no servidor: podem faltar presenças registradas em outros aparelhos.')
+                                }
+                                const guardadas = pendentes.filter((p) => p.eventId === _id).length
+                                if (guardadas) avisar('alerta', 'Há presenças fora da planilha', `${guardadas} presença(s) guardada(s) neste aparelho ainda não chegaram ao servidor e não estão na planilha.`)
                                 const XLSX = await import('xlsx')
-                                const linhas = (ids: ReadonlySet<string>) => lista.filter((u) => ids.has(u._id)).map((u) => ({
+                                const linhas = (porId: readonly string[]) => porId.map((id) => usuarios.find((u) => u._id === id)).filter((u): u is AdminUserSummary => !!u).sort(porNome).map((u) => ({
                                     NOME: displayUserName(u),
                                     CPF: displayUserField(u.informacoes_usuario.cpf),
                                     EMAIL: displayUserField(u.informacoes_usuario.email),
                                 }))
                                 const livro = XLSX.utils.book_new()
-                                for (const [aba, ids] of [['init', entrada], ['end', saida]] as const) {
-                                    const planilha = XLSX.utils.json_to_sheet(linhas(ids))
+                                for (const aba of ['init', 'end'] as const) {
+                                    const planilha = XLSX.utils.json_to_sheet(linhas(ids[aba]))
                                     planilha['!cols'] = [{ wch: 34 }, { wch: 16 }, { wch: 34 }]
                                     XLSX.utils.book_append_sheet(livro, planilha, aba)
                                 }
@@ -250,6 +280,8 @@ export default function ChamadaPalestra() {
                     <Metrica rotulo={`Sem ${nomeTurno}`} valor={formatarNumero(lista.length - (turno === 'init' ? totais.entrada : totais.saida))} />
                 </div>
             </Cabecalho>
+
+            <AvisoPendentes pendentes={pendentes} eventId={_id} enviarAgora={enviarAgora} />
 
             <section
                 aria-label="Turno ativo"

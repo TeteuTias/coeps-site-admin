@@ -4,12 +4,16 @@ import { useRef, useState } from "react";
 import { useAvisos } from "@/app/components/Avisos";
 import { displayUserName } from "@/app/lib/users/admin-user-contract";
 import type { AdminUserSummary } from "@/app/lib/users/admin-user-contract";
+import { destinoDoEnvio } from "../fila-presenca";
+import type { TipoAtividade } from "../fila-presenca";
+import { PRAZO_MS, descartarPendente, guardarPresenca, sinalizar } from "../presenca-bip";
 import { interpretarEscrita } from "./chamada";
 import type { Efeito } from "./chamada";
 
 export type Quer = "dar" | "retirar" | "desinscrever";
 export type Turno = "init" | "end";
-export type Desfecho = "registrado" | "jaEstava" | "falha" | "semResposta" | "ocupado";
+/** `guardado`: sem conexão, a presença ficou no aparelho e será reenviada (ver PendentesPresenca). */
+export type Desfecho = "registrado" | "jaEstava" | "falha" | "semResposta" | "ocupado" | "guardado";
 
 export interface PedidoAcao {
   pessoa: AdminUserSummary;
@@ -28,8 +32,11 @@ const rotuloTurno = (t?: Turno) => (t === "init" ? "entrada" : t === "end" ? "sa
  * Uma ação de presença por pessoa, sem recarregar a lista: manda, lê o que a rota fez de verdade (ver `interpretarEscrita`),
  * atualiza só essa pessoa e avisa o resultado. Rede perdida vira "confira antes de repetir", nunca silêncio.
  */
-export function useAcoesChamada({ enviar, aplicar, reconsultar }: {
-  enviar: (p: PedidoAcao) => Promise<Response>;
+export function useAcoesChamada({ atividade, enviar, aplicar, reconsultar }: {
+  /** Dar/retirar presença que não chega ao servidor (sem rede, tempo esgotado, 5xx) é guardado no aparelho e reenviado. */
+  atividade: { tipo: TipoAtividade; eventId: string };
+  /** `signal` vem preenchido nas presenças (dar/retirar): sem resposta no prazo conta como rede caída. */
+  enviar: (p: PedidoAcao, signal?: AbortSignal) => Promise<Response>;
   /** Grava na tela o estado novo dessa pessoa. */
   aplicar: (p: PedidoAcao) => void;
   /** Lê de novo o estado da pessoa no servidor (e o grava na tela). `null` = não foi possível. */
@@ -47,7 +54,14 @@ export function useAcoesChamada({ enviar, aplicar, reconsultar }: {
     return n;
   });
 
+  /** Som e vibração para quem opera o leitor sem olhar a tela: agudo = registrou, dois bipes = aviso, grave = erro. */
   async function executar(p: PedidoAcao): Promise<Desfecho> {
+    const desfecho = await executarSemSinal(p);
+    if (desfecho !== "ocupado") sinalizar(desfecho === "registrado" ? "ok" : desfecho === "falha" ? "erro" : "aviso");
+    return desfecho;
+  }
+
+  async function executarSemSinal(p: PedidoAcao): Promise<Desfecho> {
     const { pessoa, quer, turno } = p;
     const id = pessoa._id;
     if (emVoo.current.has(id)) return "ocupado";
@@ -56,14 +70,25 @@ export function useAcoesChamada({ enviar, aplicar, reconsultar }: {
     const nome = displayUserName(pessoa);
     const aoTurno = turno ? ` (${rotuloTurno(turno)})` : "";
     const foco = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const guardavel = quer !== "desinscrever";
+    const pedidoFila = { ...atividade, turno, userId: id, nome: displayUserName(pessoa), quer: quer === "dar" ? "dar" as const : "retirar" as const };
+    const guardar = () => {
+      guardarPresenca(pedidoFila);
+      avisar("alerta", quer === "dar" ? "Presença guardada neste aparelho" : "Retirada guardada neste aparelho",
+        `${nome}${aoTurno}: sem conexão com o servidor. Será enviada sozinha quando a internet voltar. Não limpe os dados do navegador.`);
+      return "guardado" as const;
+    };
 
     try {
       let efeito: Efeito;
       let pagamentoMantido = false;
       try {
-        const res = await enviar(p);
+        // a ação nova vale mais que a guardada para esta pessoa (ex.: deu presença sem rede e agora retira)
+        if (guardavel) descartarPendente(pedidoFila);
+        const res = await enviar(p, guardavel ? AbortSignal.timeout(PRAZO_MS) : undefined);
         const corpo: unknown = await res.json().catch(() => null);
         if (!res.ok) {
+          if (guardavel && destinoDoEnvio(res.status) === "tentarDepois") return guardar();
           // a rota explica a recusa (ex.: etapa de pacote, Asaas indisponível): mostra a mensagem dela
           const motivo = typeof (corpo as { message?: unknown } | null)?.message === "string" ? (corpo as { message: string }).message : "";
           avisar("erro", "Não foi possível concluir", res.status === 401
@@ -74,6 +99,7 @@ export function useAcoesChamada({ enviar, aplicar, reconsultar }: {
         efeito = interpretarEscrita(corpo);
         pagamentoMantido = (corpo as { pagamentoMantido?: unknown } | null)?.pagamentoMantido === true;
       } catch {
+        if (guardavel) return guardar();
         marcarIncerto(id, true);
         avisar("erro", "Sem resposta do servidor", `${nome}: confira a situação da pessoa antes de repetir a ação.`);
         return "semResposta";

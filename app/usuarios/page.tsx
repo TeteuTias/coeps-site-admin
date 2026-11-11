@@ -1,5 +1,6 @@
 "use client"
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { RefreshCw } from "lucide-react"
 import {
@@ -20,19 +21,17 @@ import {
     type TomSelo,
 } from "../components/ui"
 import { Atualizando, Estado } from "../components/Estado"
-import { useAvisos } from "../components/Avisos"
 import QrCodeUserSearch from "../components/QrCodeUserSearch"
 import {
     type AdminUserSummary,
     displayUserField,
     displayUserName,
-    filterAdminUsers,
-    parseAdminUserListHttpResponse,
+    normalizeAdminUserList,
 } from "../lib/users/admin-user-contract"
+import { CONGRESSISTAS_MIN_QUERY_LENGTH, CONGRESSISTAS_PAGE_SIZE } from "../lib/users/congressistas-busca"
 import { participationModeLabel } from "../lib/users/admin-remote-work"
 import { formatarData, formatarNumero } from "../lib/formatar"
 
-const POR_PAGINA = 50
 const PARAMS = ["q", "situacao", "modo", "pgto", "de", "ate", "pag"] as const
 
 const SITUACOES: Record<number, { rotulo: string; tom: TomSelo }> = {
@@ -72,17 +71,55 @@ function resumoParticipacao(u: AdminUserSummary): string {
     return partes.join(" · ")
 }
 
+interface Resumo {
+    total: number
+    inscritos: number
+    naoInscritos: number
+    pagamentoAberto: number
+    participantesRemotos: number
+    paymentTypes: string[]
+}
+
+interface PaginaBusca {
+    users: AdminUserSummary[]
+    total: number
+    page: number
+    totalPages: number
+}
+
+const ehContagem = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
+
+function lerResumo(valor: unknown): Resumo | null {
+    if (typeof valor !== "object" || valor === null) return null
+    const r = valor as Record<string, unknown>
+    if (![r.total, r.inscritos, r.naoInscritos, r.pagamentoAberto, r.participantesRemotos].every(ehContagem)) return null
+    if (!Array.isArray(r.paymentTypes) || !r.paymentTypes.every(t => typeof t === "string")) return null
+    return r as unknown as Resumo
+}
+
+function lerPagina(valor: unknown): PaginaBusca | null {
+    if (typeof valor !== "object" || valor === null) return null
+    const r = valor as Record<string, unknown>
+    const users = normalizeAdminUserList(r.data)
+    if (!users || !ehContagem(r.total) || !ehContagem(r.page) || !ehContagem(r.totalPages)) return null
+    return { users, total: r.total, page: r.page, totalPages: r.totalPages }
+}
+
+function mensagemDe(corpo: unknown, padrao: string): string {
+    return typeof corpo === "object" && corpo !== null && "message" in corpo && typeof corpo.message === "string" ? corpo.message : padrao
+}
+
 function Lista() {
     const router = useRouter()
     const pathname = usePathname()
     const params = useSearchParams()
-    const { avisar } = useAvisos()
 
-    const [usuarios, setUsuarios] = useState<AdminUserSummary[] | null>(null)
+    const [resumo, setResumo] = useState<Resumo | null>(null)
+    const [resultados, setResultados] = useState<PaginaBusca | null>(null)
+    const [buscando, setBuscando] = useState(false)
     const [erro, setErro] = useState<string | null>(null)
-    const [atualizando, setAtualizando] = useState(false)
+    const [tentativa, setTentativa] = useState(0)
     const topoRef = useRef<HTMLDivElement>(null)
-    const temLista = useRef(false)
 
     const q = params.get("q") ?? ""
     const situacao = params.get("situacao") ?? ""
@@ -120,57 +157,73 @@ function Lista() {
         return () => clearTimeout(t)
     }, [busca, mudarParams])
 
-    const carregar = useCallback(async () => {
-        setAtualizando(true)
-        try {
-            const response = await fetch(`/api/get/todosCongressistas/`, { cache: "no-store" })
-            const payload: unknown = await response.json().catch(() => null)
-            const lista = parseAdminUserListHttpResponse(response.ok, payload)
-            if (!lista) {
-                const mensagem = typeof payload === "object" && payload !== null &&
-                    "message" in payload && typeof payload.message === "string"
-                    ? payload.message
-                    : response.ok
-                        ? "A lista de congressistas recebida está em formato inválido."
-                        : "Não foi possível carregar os congressistas."
-                throw new Error(mensagem)
-            }
-            temLista.current = true
-            setUsuarios(lista)
-            setErro(null)
-        } catch (cause) {
-            const mensagem = cause instanceof Error ? cause.message : "Não foi possível carregar os congressistas."
-            // Já havia lista: mantém a última válida e só avisa.
-            if (temLista.current) avisar("erro", "Não foi possível atualizar a lista", `${mensagem} Os dados abaixo podem estar desatualizados.`)
-            else setErro(mensagem)
-        } finally {
-            setAtualizando(false)
-        }
-    }, [avisar])
-
-    useEffect(() => { void carregar() }, [carregar])
-
-    const tiposPagamento = useMemo(() => {
-        const tipos = new Set((usuarios ?? []).map(u => u.pagamento.tipo_pagamento).filter((t): t is string => Boolean(t)))
-        if (pgto) tipos.add(pgto)
-        return Array.from(tipos).sort((a, b) => a.localeCompare(b, "pt-BR"))
-    }, [usuarios, pgto])
-
-    const filtrados = useMemo(() => filterAdminUsers(usuarios ?? [], {
-        searchTerm: q,
-        selectedStatus: situacao,
-        selectedPaymentType: pgto,
-        selectedParticipationMode: modo,
-        startDate: de,
-        endDate: ate,
-    }), [usuarios, q, situacao, pgto, modo, de, ate])
-
-    const totalPaginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA))
-    const pagina = Math.min(Math.max(Number.isFinite(pagParam) ? pagParam : 1, 1), totalPaginas)
-    const inicio = (pagina - 1) * POR_PAGINA
-    const visiveis = filtrados.slice(inicio, inicio + POR_PAGINA)
-
+    const termo = q.trim()
     const temFiltro = Boolean(q || situacao || modo || pgto || de || ate)
+    const buscaAtiva = termo.length >= CONGRESSISTAS_MIN_QUERY_LENGTH || Boolean(situacao || modo || pgto || de || ate)
+    const pagina = Number.isFinite(pagParam) && pagParam >= 1 ? pagParam : 1
+
+    // Resumo (métricas e tipos de pagamento): não bloqueia a tela; se falhar, as métricas mostram "Indisponível".
+    useEffect(() => {
+        const controle = new AbortController()
+        void (async () => {
+            try {
+                const response = await fetch("/api/get/congressistasResumo/", { cache: "no-store", signal: controle.signal })
+                const lido = response.ok ? lerResumo(await response.json().catch(() => null)) : null
+                if (lido && !controle.signal.aborted) setResumo(lido)
+            } catch { /* sem resumo: a métrica fica "Indisponível" */ }
+        })()
+        return () => controle.abort()
+    }, [tentativa])
+
+    // A busca roda no servidor, 12 por página. O AbortController descarta a resposta de uma busca já substituída.
+    useEffect(() => {
+        if (!buscaAtiva) {
+            setResultados(null)
+            setBuscando(false)
+            setErro(null)
+            return
+        }
+        const controle = new AbortController()
+        void (async () => {
+            setBuscando(true)
+            setErro(null)
+            try {
+                const qs = new URLSearchParams()
+                if (termo) qs.set("q", termo)
+                if (situacao) qs.set("status", situacao)
+                if (pgto) qs.set("paymentType", pgto)
+                if (modo) qs.set("mode", modo)
+                if (de) qs.set("startDate", de)
+                if (ate) qs.set("endDate", ate)
+                qs.set("page", String(pagina))
+                const response = await fetch(`/api/get/congressistasBusca/?${qs.toString()}`, { cache: "no-store", signal: controle.signal })
+                const corpo: unknown = await response.json().catch(() => null)
+                const lida = response.ok ? lerPagina(corpo) : null
+                if (!lida) {
+                    throw new Error(mensagemDe(corpo, response.ok
+                        ? "A lista de congressistas recebida está em formato inválido."
+                        : "Não foi possível buscar os congressistas."))
+                }
+                if (controle.signal.aborted) return
+                setResultados(lida)
+                setBuscando(false)
+            } catch (cause) {
+                if (controle.signal.aborted) return
+                setResultados(null)
+                setErro(cause instanceof Error ? cause.message : "Não foi possível buscar os congressistas.")
+                setBuscando(false)
+            }
+        })()
+        return () => controle.abort()
+    }, [buscaAtiva, termo, situacao, pgto, modo, de, ate, pagina, tentativa])
+
+    const tiposPagamento = Array.from(new Set([...(resumo?.paymentTypes ?? []), ...(pgto ? [pgto] : [])]))
+        .sort((a, b) => a.localeCompare(b, "pt-BR"))
+
+    const visiveis = resultados?.users ?? []
+    const total = resultados?.total ?? 0
+    const inicio = resultados ? (resultados.page - 1) * CONGRESSISTAS_PAGE_SIZE : 0
+
     const limpar = () => {
         ultimoEnviado.current = ""
         setBusca("")
@@ -181,7 +234,6 @@ function Lista() {
         topoRef.current?.scrollIntoView({ block: "start" })
     }
 
-    const contar = (fn: (u: AdminUserSummary) => boolean) => (usuarios ? usuarios.filter(fn).length : null)
     const filtro = (chave: (typeof PARAMS)[number]) => (e: { target: { value: string } }) =>
         mudarParams({ [chave]: e.target.value, pag: "" })
 
@@ -192,18 +244,18 @@ function Lista() {
                 titulo="Usuários"
                 sub="Congressistas cadastrados, com situação de pagamento e participação."
                 acoes={
-                    <Botao estilo="contorno" carregando={atualizando && usuarios !== null} onClick={() => void carregar()}>
-                        {!(atualizando && usuarios !== null) && <RefreshCw className="size-4" aria-hidden="true" />}
+                    <Botao estilo="contorno" carregando={buscando && resultados !== null} onClick={() => setTentativa(t => t + 1)}>
+                        {!(buscando && resultados !== null) && <RefreshCw className="size-4" aria-hidden="true" />}
                         Atualizar lista
                     </Botao>
                 }
             >
                 <section aria-label="Resumo" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-                    <Metrica className="col-span-2 lg:col-span-1" rotulo="Total" valor={usuarios ? formatarNumero(usuarios.length) : null} />
-                    <Metrica rotulo="Inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 1))} />
-                    <Metrica rotulo="Não inscritos" valor={formatarNullable(contar(u => u.pagamento.situacao === 0))} />
-                    <Metrica rotulo="Pagamento em aberto" valor={formatarNullable(contar(u => u.pagamento.situacao === 2))} />
-                    <Metrica rotulo="Acesso remoto" valor={formatarNullable(contar(u => ["REMOTE", "BOTH"].includes(u.participacao.mode)))} />
+                    <Metrica className="col-span-2 lg:col-span-1" rotulo="Total" valor={resumo ? formatarNumero(resumo.total) : null} />
+                    <Metrica rotulo="Inscritos" valor={resumo ? formatarNumero(resumo.inscritos) : null} />
+                    <Metrica rotulo="Não inscritos" valor={resumo ? formatarNumero(resumo.naoInscritos) : null} />
+                    <Metrica rotulo="Pagamento em aberto" valor={resumo ? formatarNumero(resumo.pagamentoAberto) : null} />
+                    <Metrica rotulo="Acesso remoto" valor={resumo ? formatarNumero(resumo.participantesRemotos) : null} />
                 </section>
             </Cabecalho>
 
@@ -212,7 +264,7 @@ function Lista() {
                     <CampoBusca
                         rotulo="Buscar usuário"
                         rotuloOculto={false}
-                        placeholder="Nome, e-mail, telefone ou ID"
+                        placeholder="Mínimo de 4 letras: nome, e-mail, telefone ou ID"
                         value={busca}
                         onChange={e => setBusca(e.target.value)}
                     />
@@ -248,22 +300,23 @@ function Lista() {
             </Cartao>
 
             <div ref={topoRef} className="grid scroll-mt-4 gap-3">
-                {usuarios === null && !erro && <Estado tipo="carregando" titulo="Carregando congressistas…" linhas={5} />}
-                {usuarios === null && erro && <Estado tipo="erro" titulo="Não foi possível carregar os congressistas" texto={erro} aoTentar={() => void carregar()} />}
-                {usuarios !== null && (
+                {!buscaAtiva && (
+                    <Estado tipo="vazio" titulo="Digite pelo menos 4 letras para buscar um congressista" texto="Pesquise por nome, e-mail, ID ou telefone, ou use algum dos filtros acima." />
+                )}
+                {buscaAtiva && buscando && !resultados && !erro && <Estado tipo="carregando" titulo="Buscando congressistas…" linhas={5} />}
+                {buscaAtiva && erro && <Estado tipo="erro" titulo="Não foi possível buscar os congressistas" texto={erro} aoTentar={() => setTentativa(t => t + 1)} />}
+                {buscaAtiva && resultados && (
                     <>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="num text-sm text-sutil" aria-live="polite">
-                                {filtrados.length === 0
+                                {total === 0
                                     ? "Nenhum usuário"
-                                    : `${formatarNumero(inicio + 1)}–${formatarNumero(inicio + visiveis.length)} de ${formatarNumero(filtrados.length)}`}
-                                {temFiltro && usuarios.length !== filtrados.length ? ` (filtrado de ${formatarNumero(usuarios.length)})` : ""}
+                                    : `${formatarNumero(inicio + 1)}–${formatarNumero(inicio + visiveis.length)} de ${formatarNumero(total)}`}
                             </p>
-                            <Atualizando ativo={atualizando} />
+                            <Atualizando ativo={buscando} />
                         </div>
 
-                        {usuarios.length === 0 && <Estado tipo="vazio" titulo="Nenhum congressista cadastrado" texto="Ainda não há usuários cadastrados no sistema." />}
-                        {usuarios.length > 0 && filtrados.length === 0 && (
+                        {total === 0 && !buscando && (
                             <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={limpar}>Limpar busca e filtros</Botao>} />
                         )}
 
@@ -285,7 +338,9 @@ function Lista() {
                                             {visiveis.map(u => (
                                                 <tr key={u._id}>
                                                     <td className={`${classeTd} max-w-64`}>
-                                                        <p className="truncate font-medium" title={displayUserName(u)}>{displayUserName(u)}</p>
+                                                        <p className="truncate font-medium" title={displayUserName(u)}>
+                                                            <Link href={`/usuarios/informacoes/${u._id}`} prefetch={false} className="hover:underline">{displayUserName(u)}</Link>
+                                                        </p>
                                                         {u.informacoes_usuario.profissao && <p className="truncate text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
                                                         {u.informacoes_usuario.matricula_municipio && <p className="truncate text-xs text-sutil">Matrícula do município: {u.informacoes_usuario.matricula_municipio}</p>}
                                                         {u.informacoes_usuario.unidade_origem && <p className="truncate text-xs text-sutil">Unidade de Origem: {u.informacoes_usuario.unidade_origem}</p>}
@@ -314,7 +369,9 @@ function Lista() {
                                     {visiveis.map(u => (
                                         <li key={u._id} className="grid gap-2 rounded-2xl bg-cartao p-4 ring-1 ring-linha/60">
                                             <div className="min-w-0">
-                                                <p className="break-words font-semibold">{displayUserName(u)}</p>
+                                                <p className="break-words font-semibold">
+                                                    <Link href={`/usuarios/informacoes/${u._id}`} prefetch={false} className="-my-2 inline-block py-2 hover:underline">{displayUserName(u)}</Link>
+                                                </p>
                                                 <p className="break-all text-sm text-sutil">{displayUserField(u.informacoes_usuario.email)}</p>
                                                 {u.informacoes_usuario.profissao && <p className="text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
                                                 {u.informacoes_usuario.matricula_municipio && <p className="text-xs text-sutil">Matrícula do município: {u.informacoes_usuario.matricula_municipio}</p>}
@@ -331,17 +388,12 @@ function Lista() {
                             </>
                         )}
 
-                        <Paginacao pagina={pagina} total={filtrados.length} porPagina={POR_PAGINA} aoMudar={irParaPagina} rotulo="usuários" />
+                        <Paginacao pagina={resultados.page} total={total} porPagina={CONGRESSISTAS_PAGE_SIZE} aoMudar={irParaPagina} rotulo="usuários" />
                     </>
                 )}
             </div>
         </Pagina>
     )
-}
-
-// Contagem que ainda não carregou fica null para a Métrica mostrar "Indisponível", nunca 0.
-function formatarNullable(n: number | null): string | null {
-    return n === null ? null : formatarNumero(n)
 }
 
 export default function Page() {

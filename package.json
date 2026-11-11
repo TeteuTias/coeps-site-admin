@@ -11,7 +11,7 @@
     "test:academic-works": "node --experimental-strip-types --test \"app/lib/__tests__/academic-work-*.test.ts\"",
     "test:admin-users": "node --experimental-strip-types --test \"app/lib/users/__tests__/*.test.ts\"",
     "test:formatar": "node --experimental-strip-types --test \"app/lib/__tests__/formatar.test.ts\"",
-    "test:presenca": "node --experimental-strip-types --test \"app/presenca/_componentes/__tests__/*.test.ts\" \"app/lib/presenca/__tests__/*.test.ts\"",
+    "test:presenca": "node --experimental-strip-types --test \"app/presenca/__tests__/*.test.ts\" \"app/presenca/_componentes/__tests__/*.test.ts\" \"app/lib/presenca/__tests__/*.test.ts\"",
     "test:minicursos": "node --experimental-strip-types --test \"app/lib/minicursos/__tests__/*.test.ts\"",
     "test:payments-admin": "node --experimental-strip-types --test \"app/lib/payments/__tests__/*.test.ts\"",
     "test:trabalhos-email": "node --experimental-strip-types --test \"app/lib/trabalhos/__tests__/*.test.ts\""

@@ -7,7 +7,7 @@ import {
     displayUserName,
     parseAdminUserListPayload,
 } from '@/app/lib/users/admin-user-contract'
-import type { AdminUserDetails, AdminUserSummary } from '@/app/lib/users/admin-user-contract'
+import type { AdminUserSummary } from '@/app/lib/users/admin-user-contract'
 import { parseDataObjectPayload } from '@/app/lib/api-data-contract'
 import { useUser } from '@/app/lib/auth0-client'
 import { Aviso, Botao, Cabecalho, Metrica, Pagina, Secao, Selo } from '@/app/components/ui'
@@ -19,6 +19,8 @@ import { normalizarBusca } from '../../_componentes/chamada'
 import { useAcoesChamada } from '../../_componentes/use-acoes-chamada'
 import type { PedidoAcao } from '../../_componentes/use-acoes-chamada'
 import { useLeituraQr } from '../../_componentes/use-leitura-qr'
+import { usuariosComPresenca } from '../../_componentes/dados-chamada'
+import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca'
 import {
     BotaoExportar, BuscaChamada, ListaChamada, ListaObservacoes, MarcasPessoa, Recentes, ResultadoLeitura,
     FiltroPresenca, observacoesBase, useFocoBusca,
@@ -63,7 +65,7 @@ export default function ChamadaMinicurso() {
     const [leitorAberto, setLeitorAberto] = useState(false)
     const [feito, setFeito] = useState<{ lido: number; texto: string } | null>(null)
     const { ref: refBusca, focar: focarBusca } = useFocoBusca()
-    const { leitura, ler, limpar } = useLeituraQr()
+    const { leitura, ler, limpar } = useLeituraQr(todos)
     const seq = useRef(0)
     const jaCarregou = useRef(false)
 
@@ -96,10 +98,15 @@ export default function ChamadaMinicurso() {
 
     useEffect(() => { void carregar(false) }, [carregar])
 
+    // presença sem resposta do servidor fica guardada no aparelho e é reenviada; ao entregar, recarrega a lista
+    const { pendentes, enviarAgora } = usePendentesPresenca(_id, () => { void carregar(false) })
+    const guardados = useMemo(() => new Map(pendentes.filter((p) => p.eventId === _id).map((p) => [p.userId, p.quer])), [pendentes, _id])
+
     const { ocupados, incertos, recentes, executar, conferir } = useAcoesChamada({
-        enviar: ({ pessoa, quer }: PedidoAcao) => quer === 'desinscrever'
+        atividade: { tipo: 'minicurso', eventId: _id },
+        enviar: ({ pessoa, quer }: PedidoAcao, signal) => quer === 'desinscrever'
             ? fetch('/api/delete/removerInscricaoMinicurso/', { method: 'DELETE', body: JSON.stringify({ eventId: _id, userId: pessoa._id }) })
-            : fetch(quer === 'dar' ? '/api/post/darPresenca' : '/api/post/retirarPresenca', { method: 'POST', headers: jsonPost, body: JSON.stringify({ eventId: _id, userId: pessoa._id }) }),
+            : fetch(quer === 'dar' ? '/api/post/darPresenca' : '/api/post/retirarPresenca', { method: 'POST', headers: jsonPost, body: JSON.stringify({ eventId: _id, userId: pessoa._id }), signal }),
         aplicar: ({ pessoa, quer, inscreveJunto }) => {
             const id = pessoa._id
             if (quer === 'dar') {
@@ -190,16 +197,17 @@ export default function ChamadaMinicurso() {
         if (desfecho === 'registrado' || desfecho === 'jaEstava') requestAnimationFrame(focarBusca)
     }
 
-    async function daLeitura(pessoa: AdminUserDetails, quer: 'dar' | 'retirar', lido: number) {
+    async function daLeitura(pessoa: AdminUserSummary, quer: 'dar' | 'retirar', lido: number) {
         const desfecho = quer === 'dar' ? await darPresenca(pessoa) : await executar({ pessoa, quer })
         if (desfecho === 'ocupado') return
         if (desfecho === 'registrado') setFeito({ lido, texto: quer === 'dar' ? 'Presença registrada agora.' : 'Presença retirada agora.' })
         else if (desfecho === 'jaEstava') setFeito({ lido, texto: quer === 'dar' ? 'Já estava presente: nada foi alterado.' : 'Já estava sem presença: nada foi alterado.' })
+        else if (desfecho === 'guardado') setFeito({ lido, texto: quer === 'dar' ? 'Presença guardada neste aparelho: será enviada quando a internet voltar.' : 'Retirada guardada neste aparelho: será enviada quando a internet voltar.' })
         else if (desfecho === 'semResposta') setFeito({ lido, texto: 'Sem resposta do servidor: confira a pessoa na lista antes de repetir.' })
         requestAnimationFrame(focarBusca)
     }
 
-    function conteudoLeitura(pessoa: AdminUserDetails) {
+    function conteudoLeitura(pessoa: AdminUserSummary) {
         const id = pessoa._id
         const presente = presentes.has(id)
         const inscrito = inscritos.has(id)
@@ -232,6 +240,7 @@ export default function ChamadaMinicurso() {
                 {presentes.has(u._id) ? <Selo tom="ok">Presente</Selo> : <Selo>Inscrito, ainda não chegou</Selo>}
                 {naHora.has(u._id) && <Selo tom="info">Inscrito na hora</Selo>}
                 {incertos.has(u._id) && <Selo tom="alerta">Sem resposta: conferir</Selo>}
+                {guardados.has(u._id) && <Selo tom="alerta">{guardados.get(u._id) === 'retirar' ? 'Retirada guardada, aguardando envio' : 'Presença guardada, aguardando envio'}</Selo>}
             </span>
         ),
     }
@@ -252,8 +261,24 @@ export default function ChamadaMinicurso() {
                             rotulo={`Exportar presentes (${formatarNumero(totalPresentes)})`}
                             desabilitado={totalPresentes === 0}
                             gerar={async () => {
+                                // a tela pode estar velha (outros leitores registram ao mesmo tempo): usa a lista do servidor no momento do clique
+                                let ids = lista.filter((u) => presentes.has(u._id)).map((u) => u._id)
+                                let usuarios: AdminUserSummary[] = lista
+                                try {
+                                    const res = await fetch(`/api/get/minicursoProps/${_id}`)
+                                    const atual = res.ok ? lerCurso(await res.json().catch(() => null)) : null
+                                    if (!atual) throw new Error('curso')
+                                    ids = atual.attendanceList
+                                    usuarios = await usuariosComPresenca(ids, [...lista, ...todos])
+                                } catch {
+                                    ids = lista.filter((u) => presentes.has(u._id)).map((u) => u._id)
+                                    usuarios = lista
+                                    avisar('alerta', 'Planilha com a lista desta tela', 'Não foi possível buscar a lista atual no servidor: podem faltar presenças registradas em outros aparelhos.')
+                                }
+                                const guardadas = pendentes.filter((p) => p.eventId === _id).length
+                                if (guardadas) avisar('alerta', 'Há presenças fora da planilha', `${guardadas} presença(s) guardada(s) neste aparelho ainda não chegaram ao servidor e não estão na planilha.`)
                                 const XLSX = await import('xlsx')
-                                const linhas = lista.filter((u) => presentes.has(u._id)).map((u) => ({
+                                const linhas = ids.map((id) => usuarios.find((u) => u._id === id)).filter((u): u is AdminUserSummary => !!u).sort(porNome).map((u) => ({
                                     NOME: displayUserName(u),
                                     CPF: displayUserField(u.informacoes_usuario.cpf),
                                     EMAIL: displayUserField(u.informacoes_usuario.email),
@@ -275,6 +300,8 @@ export default function ChamadaMinicurso() {
                     <Metrica rotulo="Ainda não chegaram" valor={formatarNumero(lista.length - totalPresentes)} />
                 </div>
             </Cabecalho>
+
+            <AvisoPendentes pendentes={pendentes} eventId={_id} enviarAgora={enviarAgora} />
 
             <Secao titulo="Credenciamento" descricao="Leia o QR da credencial ou busque a pessoa. A busca também filtra a lista abaixo.">
                 <Aviso tom="info" titulo="Presença e inscrição andam juntas">
