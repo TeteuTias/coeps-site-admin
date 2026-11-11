@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import {
     type AdminUserSummary,
     adminDateToIso,
@@ -329,7 +330,9 @@ export default function Page() {
                                         </div>
                                         <div className="usuarios-user-info">
                                             <h3 className="usuarios-user-name" title={displayUserName(user)}>
-                                                {displayUserName(user)}
+                                                <Link href={`/usuarios/informacoes/${user._id}`} prefetch={false} className="usuarios-user-name-link">
+                                                    {displayUserName(user)}
+                                                </Link>
                                             </h3>
                                             <p className="usuarios-user-email" title={displayUserField(user.informacoes_usuario.email)}>
                                                 <Mail className="h-4 w-4" />

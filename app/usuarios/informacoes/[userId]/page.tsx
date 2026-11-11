@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState, FormEvent, ChangeEvent } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ICourse } from "@/app/lib/types/events/event.t";
+import ConfirmationModal from "@/app/components/ConfirmationModal";
 import { ObjectId } from "bson";
 import { getPaymentStatusTone } from "@/app/lib/payments/payment-status-appearance";
 
@@ -96,7 +97,46 @@ export default function Page() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isSavingRemoteReview, setIsSavingRemoteReview] = useState(false)
+    const [courseToCancel, setCourseToCancel] = useState<ICourse | null>(null)
+    const [isCancelingCourse, setIsCancelingCourse] = useState(false)
+    const [courseNotice, setCourseNotice] = useState<{ tone: "success" | "error", text: string } | null>(null)
     const router = useRouter()
+
+    const handleCancelCourse = async () => {
+        const course = courseToCancel
+        if (!course || isCancelingCourse) return
+        setIsCancelingCourse(true)
+        setCourseNotice(null)
+        try {
+            const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
+                method: "DELETE",
+                body: JSON.stringify({ eventId: course._id, userId }),
+            })
+            const payload: unknown = await response.json().catch(() => null)
+            const record = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : {}
+            if (!response.ok) {
+                setCourseNotice({
+                    tone: "error",
+                    text: typeof record.message === "string" && record.message
+                        ? record.message
+                        : "Não foi possível retirar a inscrição. Tente novamente.",
+                })
+                return
+            }
+            setCourses((current) => current.filter((item) => item._id !== course._id))
+            setCourseNotice({
+                tone: "success",
+                text: record.pagamentoMantido === true
+                    ? "Inscrição retirada. A cobrança desta atividade já estava paga e foi mantida; o estorno, se houver, é feito no Asaas."
+                    : "Inscrição retirada do minicurso.",
+            })
+        } catch {
+            setCourseNotice({ tone: "error", text: "Não foi possível retirar a inscrição. Tente novamente." })
+        } finally {
+            setIsCancelingCourse(false)
+            setCourseToCancel(null)
+        }
+    }
 
     const fetchData = useCallback(async () => {
         setLoadError(null)
@@ -398,11 +438,33 @@ export default function Page() {
             <div className="w-full text-center font-bold text-2xl text-white">
                 <h1>MINICURSOS INSCRITOS</h1>
             </div>
+            {courseNotice && (
+                <p
+                    className={`max-w-2xl mx-auto rounded-lg border p-4 text-sm font-semibold ${courseNotice.tone === "success" ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"}`}
+                    role={courseNotice.tone === "success" ? "status" : "alert"}
+                >
+                    {courseNotice.text}
+                </p>
+            )}
+            <ConfirmationModal
+                isOpen={courseToCancel !== null}
+                onClose={() => { if (!isCancelingCourse) setCourseToCancel(null) }}
+                onConfirm={() => void handleCancelCourse()}
+                title="Atenção!"
+                confirmText={isCancelingCourse ? "Retirando..." : "Continuar"}
+                cancelText="Fechar"
+            >
+                <p>
+                    Você está prestes a retirar a inscrição do usuário
+                    {courseToCancel ? ` do minicurso "${courseToCancel.name}"` : " do minicurso"}.
+                    Essa opção <strong>NÃO</strong> estornará o valor ao congressista. Deseja mesmo continuar?
+                </p>
+            </ConfirmationModal>
             <div className="max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5">
                 {
                     dataCourses.length === 0 ?
                         <p className="w-full text-center py-2 font-semibold">Não há pagamentos prévios</p> :
-                        dataCourses.map((minicurso) => <CourseCard key={minicurso._id} minicurso={{ ...minicurso }} />)
+                        dataCourses.map((minicurso) => <CourseCard key={minicurso._id} minicurso={{ ...minicurso }} onCancelEnrollment={() => { setCourseNotice(null); setCourseToCancel(minicurso) }} />)
                 }
             </div>
             {canViewModernPayments && (
@@ -580,7 +642,7 @@ const RemoteParticipationPanel: React.FC<{
     )
 }
 
-const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
+const CourseCard: React.FC<{ minicurso: ICourse, onCancelEnrollment?: () => void }> = ({ minicurso, onCancelEnrollment }) => {
     const router = useRouter()
     const { name, description, maxParticipants, participantsCount, timeline, isOpen, isFree, value, emoji } = minicurso;
 
@@ -665,6 +727,13 @@ const CourseCard: React.FC<{ minicurso: ICourse }> = ({ minicurso }) => {
             {/* Rodapé com Botões */}
             <div className="mt-auto bg-gray-50 p-4 border-t border-gray-200">
                 <div className="flex flex-col sm:flex-row justify-end gap-3">
+                    {onCancelEnrollment && (
+                        <button type="button" className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-red-700 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                            onClick={onCancelEnrollment}
+                        >
+                            Cancelar inscrição
+                        </button>
+                    )}
                     <button className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
                         onClick={() => router.push(`/presenca/gerarListaMinicursoPresenca/${minicurso._id}`)}
                     >
