@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   activityChargeIds,
+  AsaasNotConfiguredError,
   AsaasUnavailableError,
   cancelOpenActivityCharges,
 } from "../activity-charge-cancellation.ts";
@@ -79,5 +80,5 @@ test("Asaas fora do ar ou com erro interrompe, para a inscrição não sair", as
 
 test("sem cobrança não chama o Asaas; com cobrança e sem chave, recusa", async () => {
   assert.deepEqual(await cancelOpenActivityCharges({ chargeIds: [] }), []);
-  await assert.rejects(cancelOpenActivityCharges({ chargeIds: ["pay_1"], apiUrl }), AsaasUnavailableError);
+  await assert.rejects(cancelOpenActivityCharges({ chargeIds: ["pay_1"], apiUrl }), AsaasNotConfiguredError);
 });

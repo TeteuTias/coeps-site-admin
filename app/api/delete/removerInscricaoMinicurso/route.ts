@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 import { connectToDatabase } from "@/app/lib/mongodb";
 import {
     activityChargeIds,
+    AsaasNotConfiguredError,
     AsaasUnavailableError,
     cancelOpenActivityCharges,
 } from "@/app/lib/payments/activity-charge-cancellation";
@@ -21,6 +22,18 @@ export const DELETE = withApiAuthRequired(async function DELETE(request) {
 
 
     try {
+        // A cobrança do pacote fica na atividade principal: remover só a etapa deixaria a cobrança aberta.
+        const atividade = await db.collection(colecao).findOne(
+            { _id: new ObjectId(eventId) },
+            { projection: { somenteViaPacote: 1 } }
+        )
+        if (atividade?.somenteViaPacote) {
+            return NextResponse.json(
+                { "message": "Esta etapa faz parte de um pacote. Remova a inscrição pela lista da atividade principal (a prática), que tira a pessoa de todas as etapas e cancela a cobrança." },
+                { status: 400 }
+            )
+        }
+
         // Primeiro a cobrança: se o Asaas falhar, a inscrição continua e o admin tenta de novo.
         const usuario = await db.collection('usuarios').findOne(
             { _id: new ObjectId(userId) },
@@ -61,6 +74,13 @@ export const DELETE = withApiAuthRequired(async function DELETE(request) {
         })
     } catch (error) {
         console.log(error)
+        if (error instanceof AsaasNotConfiguredError) {
+            console.error("removerInscricaoMinicurso: ASAAS_API_KEY/ASAAS_API_URL ausentes no Admin")
+            return NextResponse.json(
+                { "message": "O Admin não está configurado para falar com o Asaas (faltam ASAAS_API_KEY e ASAAS_API_URL). A inscrição NÃO foi retirada. Avise quem cuida da Vercel." },
+                { status: 503 }
+            )
+        }
         if (error instanceof AsaasUnavailableError) {
             return NextResponse.json(
                 { "message": "Não foi possível cancelar a cobrança no Asaas. A inscrição NÃO foi retirada. Tente novamente em instantes." },

@@ -11,6 +11,8 @@ export interface ActivityChargeOutcome {
 }
 
 export class AsaasUnavailableError extends Error {}
+/** Faltam ASAAS_API_KEY/ASAAS_API_URL no Admin: tentar de novo não resolve. */
+export class AsaasNotConfiguredError extends AsaasUnavailableError {}
 
 const OPEN_STATUSES = new Set(["PENDING", "OVERDUE"]);
 const PAID_STATUSES = new Set(["RECEIVED", "CONFIRMED", "RECEIVED_IN_CASH"]);
@@ -53,7 +55,7 @@ export async function cancelOpenActivityCharges(options: {
 }): Promise<ActivityChargeOutcome[]> {
   const { chargeIds, apiUrl, apiKey, fetcher = fetch } = options;
   if (chargeIds.length === 0) return [];
-  if (!apiUrl || !apiKey) throw new AsaasUnavailableError("Asaas não configurado no Admin.");
+  if (!apiUrl || !apiKey) throw new AsaasNotConfiguredError("Asaas não configurado no Admin.");
 
   const outcomes: ActivityChargeOutcome[] = [];
   for (const id of chargeIds) {
