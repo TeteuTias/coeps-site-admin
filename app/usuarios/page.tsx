@@ -110,6 +110,12 @@ export default function Page() {
     // Mudou busca ou filtro: volta para a página 1.
     const currentPage = pageState.key === queryKey ? pageState.page : 1
 
+    // Descarta a página guardada de uma busca anterior: voltar a uma busca já
+    // feita não deve reabrir a página em que ela estava.
+    useEffect(() => {
+        setPageState((state) => (state.key === queryKey ? state : { key: queryKey, page: 1 }))
+    }, [queryKey])
+
     useEffect(() => {
         if (!searchActive) {
             setResults(null)
