@@ -220,7 +220,8 @@ const MyComponent = () => {
 
     const presentes = dataPresentes[listType].length;
     const ausentes = data2.length - presentes;
-    const canManageAttendance = Boolean(user?.user?.sub?.includes("67098341f7397b370e9cb8ba"));
+    // conta de admin (mesmo id de app/lib/user/userPermissionsServerSide.ts)
+    const canManageAttendance = Boolean(user?.user?.sub?.includes("6a8799078ecd649be9bdb061"));
 
     return (
         <main className="presenca-lista-main-container">

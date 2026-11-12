@@ -67,6 +67,7 @@ const MyComponent = () => {
         cancelText: "Fechar",
     })
     const [isOpenAllUsers, setIsOpenAllUsers] = useState<boolean>(false)
+    const [usuarioEscolhido, setUsuarioEscolhido] = useState<string | null>(null)
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>("");
@@ -228,7 +229,8 @@ const MyComponent = () => {
 
     const presentes = dataPresentes.length;
     const ausentes = data2.length - presentes;
-    const canManageAttendance = Boolean(user?.user?.sub?.includes("67098341f7397b370e9cb8ba"));
+    // conta de admin (mesmo id de app/lib/user/userPermissionsServerSide.ts)
+    const canManageAttendance = Boolean(user?.user?.sub?.includes("6a8799078ecd649be9bdb061"));
 
     return (
         <main className="presenca-lista-main-container">
@@ -326,34 +328,44 @@ const MyComponent = () => {
                                         aria-label={`Remover inscrição de ${displayUserName(item)}`}
                                         title="Remover inscrição"
                                         onClick={() => {
+                                            const remover = async (semEstorno: boolean) => {
+                                                setLoading(true)
+                                                const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
+                                                    method: "DELETE",
+                                                    body: JSON.stringify({
+                                                        eventId: _id,
+                                                        userId: item._id,
+                                                        semEstorno,
+                                                    }),
+                                                })
+                                                const result = await response.json().catch(() => null)
+                                                if (!response.ok) {
+                                                    alert(result?.message || "Ocorreu algum erro. Recarregue a página e tente novamente.")
+                                                } else if (semEstorno) {
+                                                    alert("Inscrição cancelada sem estorno. Nada foi cancelado nem estornado no Asaas.")
+                                                } else if (result?.pagamentoMantido) {
+                                                    alert("Inscrição retirada. Esta pessoa já tinha PAGO o minicurso: o valor NÃO foi estornado. Se for o caso, faça o estorno pelo painel do Asaas.")
+                                                }
+                                                await hydrateData()
+                                                setLoading(false)
+                                                setIsModalProps((prev) => ({ ...prev, isOpen: false }))
+                                            }
+                                            const pago = courseData.isFree !== true
                                             setIsModalProps(() => ({
                                                 isOpen: true,
                                                 onClose: () => {
                                                     setIsModalProps((prev) => ({ ...prev, isOpen: false }))
                                                 },
-                                                onConfirm: async () => {
-                                                    setLoading(true)
-                                                    const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
-                                                        method: "DELETE",
-                                                        body: JSON.stringify({
-                                                            eventId: _id,
-                                                            userId: item._id,
-                                                        }),
-                                                    })
-                                                    const result = await response.json().catch(() => null)
-                                                    if (!response.ok) {
-                                                        alert(result?.message || "Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                    } else if (result?.pagamentoMantido) {
-                                                        alert("Inscrição retirada. Esta pessoa já tinha PAGO o minicurso: o valor NÃO foi estornado. Se for o caso, faça o estorno pelo painel do Asaas.")
-                                                    }
-                                                    await hydrateData()
-                                                    setLoading(false)
-                                                    setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-                                                },
+                                                onConfirm: () => { void remover(false) },
+                                                extraText: pago ? "Cancelar sem estorno" : undefined,
+                                                onExtra: pago ? () => { void remover(true) } : undefined,
                                                 title: "Atenção!",
                                                 children: (
                                                     <>
                                                         <p className="presenca-lista-confirmation-copy">Você está prestes a retirar a inscrição do usuário do minicurso. Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido <strong className="presenca-lista-confirmation-emphasis">NÃO</strong> será estornado. Deseja mesmo continuar?</p>
+                                                        {pago && (
+                                                            <p className="presenca-lista-confirmation-copy"><strong className="presenca-lista-confirmation-emphasis">Cancelar sem estorno</strong>: o congressista aceitou perder o dinheiro. A inscrição sai só do site e nada é cancelado nem estornado no Asaas. Se uma cobrança em aberto for paga depois, a pessoa não volta para o minicurso.</p>
+                                                        )}
                                                     </>
                                                 ),
                                                 confirmText: "Continuar",
@@ -422,22 +434,15 @@ const MyComponent = () => {
                     isOpen={true}
                     onClose={() => { setIsOpenAllUsers(false) }}
                     onUserSelect={async (userId: string) => {
-                        setLoadingContent(true)
-                        const nome = allUsers.find((u) => `${u._id}` === userId)?.informacoes_usuario?.nome ?? ""
-                        const r = await registrarPresenca({ tipo: "minicurso", eventId: _id, userId, nome, quer: "dar" })
-                        if (r.estado === "registrado" || r.estado === "jaEstava") {
-                            setDataPresente(prev => prev.includes(userId) ? prev : [...prev, userId])
-                        } else {
-                            alert(r.mensagem)
-                            setLoadingContent(false)
-                            return;
-                        }
-                        await hydrateData()
+                        // mesmo modal do QR: avisos de pagamento/inscrição e os botões Inscrever / Inscrever e Dar Presença
                         setIsOpenAllUsers(false)
-                        setLoadingContent(false)
+                        setUsuarioEscolhido(userId)
                     }}
                     usersData={allUsers}
                 />
+            )}
+            {usuarioEscolhido && (
+                <ModalUserFound courseData={courseData} hydrateData={hydrateData} qrCodeResult={usuarioEscolhido} closeModal={() => setUsuarioEscolhido(null)} usuariosCarregados={allUsers} />
             )}
         </main>
     );
@@ -770,6 +775,35 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                         </section>
                     </div>
                     <footer className="attendance-modal-actions">
+                        {user && !courseData.participants.includes(`${user._id}`) && (
+                            <button
+                                type="button"
+                                onClick={
+                                    async () => {
+                                        // inscreve sem presença; o admin passa por cima de horário, vagas e pagamento (os avisos acima só informam)
+                                        setIsLoading(true)
+                                        const response = await fetch("/api/post/darPresenca", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ eventId: courseData._id, userId: user._id, apenasInscrever: true }),
+                                        }).catch(() => null)
+                                        const result = await response?.json().catch(() => null)
+                                        if (response?.ok) {
+                                            await hydrateData()
+                                            setIsLoading(false)
+                                            alert(`${displayUserName(user)}: inscrito no minicurso (sem presença).`)
+                                            closeModal()
+                                            return
+                                        }
+                                        setIsLoading(false)
+                                        alert(result?.message || "Não foi possível inscrever. Confira a conexão e tente de novo.")
+                                    }
+                                }
+                                className="presenca-lista-btn presenca-lista-btn-primary"
+                            >
+                                Inscrever
+                            </button>
+                        )}
                         {user && !courseData.attendanceList.includes(`${user._id}`) && (
                             <button
                                 type="button"

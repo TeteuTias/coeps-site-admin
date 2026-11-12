@@ -23,6 +23,30 @@ interface StoredPayment {
   _eventID?: unknown;
 }
 
+export const NO_REFUND_REASON = "SEM_ESTORNO_ACEITO";
+
+export interface NoRefundCancellation {
+  userId: string;
+  cobrancas: string[];
+  motivo: typeof NO_REFUND_REASON;
+  canceladoEm: Date;
+  canceladoPor: string;
+}
+
+/**
+ * Registro gravado em `minicursos.cancelamentosSemEstorno` quando o admin cancela sem mexer no Asaas
+ * (o congressista aceitou perder o valor). As cobranças ficam como estão no Asaas; o webhook do site
+ * usa `cobrancas` para não reinscrever a pessoa se uma delas for paga ou confirmada depois.
+ */
+export function noRefundCancellationRecord(
+  userId: string,
+  chargeIds: string[],
+  operatorId: string,
+  now = new Date(),
+): NoRefundCancellation {
+  return { userId, cobrancas: chargeIds, motivo: NO_REFUND_REASON, canceladoEm: now, canceladoPor: operatorId };
+}
+
 /** Ids das cobranças de atividade do usuário para este minicurso. */
 export function activityChargeIds(payments: unknown, eventId: string): string[] {
   if (!Array.isArray(payments)) return [];

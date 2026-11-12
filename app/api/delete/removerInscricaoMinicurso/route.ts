@@ -1,4 +1,4 @@
-import { withApiAuthRequired } from "@/app/lib/auth0";
+import { getSession, withApiAuthRequired } from "@/app/lib/auth0";
 import { NextResponse } from "next/server"
 import { ObjectId } from 'mongodb';
 import { connectToDatabase } from "@/app/lib/mongodb";
@@ -7,6 +7,7 @@ import {
     AsaasNotConfiguredError,
     AsaasUnavailableError,
     cancelOpenActivityCharges,
+    noRefundCancellationRecord,
 } from "@/app/lib/payments/activity-charge-cancellation";
 
 
@@ -14,8 +15,18 @@ export const DELETE = withApiAuthRequired(async function DELETE(request) {
     const data = await request.json().catch(() => null)
     const eventId = String(data?.eventId ?? "")
     const userId = String(data?.userId ?? "")
+    // semEstorno: o congressista aceitou perder o valor; sai do minicurso sem nenhuma chamada ao Asaas.
+    const semEstorno = data?.semEstorno === true
     if (!ObjectId.isValid(eventId) || !ObjectId.isValid(userId)) {
         return NextResponse.json({ "message": "Inscrição inválida." }, { status: 400 })
+    }
+    let operador = ""
+    if (semEstorno) {
+        const session = await getSession(request).catch(() => null)
+        operador = String(session?.user?.sub ?? "").replace(/^auth0\|/, "")
+        if (!operador) {
+            return NextResponse.json({ "message": "Sessão expirada. Entre de novo para cancelar." }, { status: 401 })
+        }
     }
     const { db } = await connectToDatabase();
     const colecao = 'minicursos'
@@ -39,20 +50,20 @@ export const DELETE = withApiAuthRequired(async function DELETE(request) {
             { _id: new ObjectId(userId) },
             { projection: { 'pagamento.lista_pagamentos': 1 } }
         )
-        const cobrancas = await cancelOpenActivityCharges({
-            chargeIds: activityChargeIds(usuario?.pagamento?.lista_pagamentos, eventId),
+        const chargeIds = activityChargeIds(usuario?.pagamento?.lista_pagamentos, eventId)
+        const cobrancas = semEstorno ? [] : await cancelOpenActivityCharges({
+            chargeIds,
             apiUrl: process.env.ASAAS_API_URL,
             apiKey: process.env.ASAAS_API_KEY,
         })
 
+        const retirar = { participants: userId, attendanceList: userId }
         const minicurso = await db.collection(colecao).findOneAndUpdate(
-            { _id: new ObjectId(eventId) },  // Encontra o documento com o _id especificado
-            {
-                $pull: {
-                    participants: userId,
-                    attendanceList: userId
-                }
-            },
+            // Sem estorno só grava o registro se a pessoa ainda estava inscrita (clique duplo não duplica).
+            semEstorno ? { _id: new ObjectId(eventId), participants: userId } : { _id: new ObjectId(eventId) },
+            semEstorno
+                ? { $pull: retirar, $push: { cancelamentosSemEstorno: noRefundCancellationRecord(userId, chargeIds, operador) } }
+                : { $pull: retirar },
             { projection: { incluiAtividades: 1 } }
         );
 
@@ -70,6 +81,7 @@ export const DELETE = withApiAuthRequired(async function DELETE(request) {
         return NextResponse.json({
             data: { matchedCount: minicurso ? 1 : 0 },
             cobrancas,
+            semEstorno,
             pagamentoMantido: cobrancas.some((item) => item.resultado === "paga"),
         })
     } catch (error) {

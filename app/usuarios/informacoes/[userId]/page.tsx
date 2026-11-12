@@ -102,7 +102,7 @@ export default function Page() {
     const [courseNotice, setCourseNotice] = useState<{ tone: "success" | "error", text: string } | null>(null)
     const router = useRouter()
 
-    const handleCancelCourse = async () => {
+    const handleCancelCourse = async (semEstorno = false) => {
         const course = courseToCancel
         if (!course || isCancelingCourse) return
         setIsCancelingCourse(true)
@@ -110,7 +110,7 @@ export default function Page() {
         try {
             const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
                 method: "DELETE",
-                body: JSON.stringify({ eventId: course._id, userId }),
+                body: JSON.stringify({ eventId: course._id, userId, semEstorno }),
             })
             const payload: unknown = await response.json().catch(() => null)
             const record = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : {}
@@ -126,7 +126,9 @@ export default function Page() {
             setCourses((current) => current.filter((item) => item._id !== course._id))
             setCourseNotice({
                 tone: "success",
-                text: record.pagamentoMantido === true
+                text: semEstorno
+                    ? "Inscrição cancelada sem estorno. Nada foi cancelado nem estornado no Asaas."
+                    : record.pagamentoMantido === true
                     ? "Inscrição retirada. A cobrança desta atividade já estava paga e foi mantida; o estorno, se houver, é feito no Asaas."
                     : "Inscrição retirada do minicurso.",
             })
@@ -452,6 +454,8 @@ export default function Page() {
                 isOpen={courseToCancel !== null}
                 onClose={() => { if (!isCancelingCourse) setCourseToCancel(null) }}
                 onConfirm={() => void handleCancelCourse()}
+                extraText={courseToCancel?.isFree === true ? undefined : isCancelingCourse ? "Retirando..." : "Cancelar sem estorno"}
+                onExtra={() => void handleCancelCourse(true)}
                 title="Atenção!"
                 confirmText={isCancelingCourse ? "Retirando..." : "Continuar"}
                 cancelText="Fechar"
@@ -459,8 +463,13 @@ export default function Page() {
                 <p>
                     Você está prestes a retirar a inscrição do usuário
                     {courseToCancel ? ` do minicurso "${courseToCancel.name}"` : " do minicurso"}.
-                    Essa opção <strong>NÃO</strong> estornará o valor ao congressista. Deseja mesmo continuar?
+                    Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido <strong>NÃO</strong> será estornado. Deseja mesmo continuar?
                 </p>
+                {courseToCancel?.isFree !== true && (
+                    <p>
+                        <strong>Cancelar sem estorno</strong>: o congressista aceitou perder o dinheiro. A inscrição sai só do site e nada é cancelado nem estornado no Asaas. Se uma cobrança em aberto for paga depois, a pessoa não volta para o minicurso.
+                    </p>
+                )}
             </ConfirmationModal>
             </div>
             <div className="max-w-2xl mx-auto bg-gray-200 p-1 rounded-lg space-y-5">
