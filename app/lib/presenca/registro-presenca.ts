@@ -45,18 +45,21 @@ function campoDaLista(colecao: "minicursos" | "palestras", turno?: Turno) {
  * Dá ou retira a presença. Responde `{ data: UpdateResult }` (a tela lê matchedCount/modifiedCount).
  * Dar presença exige que a credencial exista: um código qualquer de 24 caracteres não entra na lista.
  * No minicurso, dar presença também inscreve (regra que já existia).
+ * "inscrever" (só minicurso) põe na lista de inscritos sem presença. O admin não passa pela trava de
+ * horário, vagas nem pagamento do site: a tela só avisa.
  */
 export async function gravarPresenca(
     db: Db,
     colecao: "minicursos" | "palestras",
-    acao: "dar" | "retirar",
+    acao: "dar" | "retirar" | "inscrever",
     pedido: PedidoPresenca,
 ): Promise<Resposta> {
     const campo = campoDaLista(colecao, pedido.listType);
-    if (acao === "dar") {
+    if (acao === "inscrever" && colecao !== "minicursos") return erro(400, "sem_inscricao", "Palestra não tem inscrição.");
+    if (acao === "dar" || acao === "inscrever") {
         const usuario = await db.collection("usuarios").findOne({ _id: new ObjectId(pedido.userId) }, { projection: { _id: 1 } });
         if (!usuario) return erro(404, "credencial_inexistente", "Não existe cadastro com este código de credencial.");
-        const adicionar: Record<string, string> = { [campo]: pedido.userId };
+        const adicionar: Record<string, string> = acao === "inscrever" ? {} : { [campo]: pedido.userId };
         if (colecao === "minicursos") adicionar.participants = pedido.userId;
         const data = await db.collection(colecao).updateOne({ _id: new ObjectId(pedido.eventId) }, { $addToSet: adicionar });
         return { status: 200, corpo: { data } };

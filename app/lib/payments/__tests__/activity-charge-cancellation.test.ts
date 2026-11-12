@@ -5,6 +5,8 @@ import {
   AsaasNotConfiguredError,
   AsaasUnavailableError,
   cancelOpenActivityCharges,
+  NO_REFUND_REASON,
+  noRefundCancellationRecord,
 } from "../activity-charge-cancellation.ts";
 
 const apiUrl = "https://sandbox.asaas.com/api/v3/";
@@ -76,6 +78,17 @@ test("Asaas fora do ar ou com erro interrompe, para a inscrição não sair", as
       AsaasUnavailableError,
     );
   }
+});
+
+test("cancelar sem estorno registra quem, quando e as cobranças que o webhook deve ignorar", () => {
+  const now = new Date("2026-11-12T10:00:00-03:00");
+  assert.deepEqual(noRefundCancellationRecord("u1", ["pay_1"], "adm1", now), {
+    userId: "u1",
+    cobrancas: ["pay_1"],
+    motivo: NO_REFUND_REASON,
+    canceladoEm: now,
+    canceladoPor: "adm1",
+  });
 });
 
 test("sem cobrança não chama o Asaas; com cobrança e sem chave, recusa", async () => {

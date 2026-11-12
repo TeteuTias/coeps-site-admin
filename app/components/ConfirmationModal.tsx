@@ -11,6 +11,9 @@ export interface ModalProps {
     children: React.ReactNode;
     confirmText?: string;
     cancelText?: string;
+    /** Segunda ação opcional, mostrada entre "cancelar" e "confirmar". */
+    extraText?: string;
+    onExtra?: () => void;
 }
 
 /**
@@ -24,6 +27,8 @@ const ConfirmationModal: React.FC<ModalProps> = ({
     children,
     confirmText = "Confirmar",
     cancelText = "Cancelar",
+    extraText,
+    onExtra,
 }) => {
     const titleId = useId();
     const descriptionId = useId();
@@ -113,6 +118,15 @@ const ConfirmationModal: React.FC<ModalProps> = ({
                     >
                         {cancelText}
                     </button>
+                    {extraText && onExtra && (
+                        <button
+                            className={styles.secondaryButton}
+                            onClick={onExtra}
+                            type="button"
+                        >
+                            {extraText}
+                        </button>
+                    )}
                     <button
                         className={styles.primaryButton}
                         onClick={onConfirm}

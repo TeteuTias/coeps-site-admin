@@ -56,6 +56,20 @@ test("dar presença usa $addToSet só no id lido (nunca regrava a lista inteira)
     assert.deepEqual(docs[EV].participants, [U1])
 })
 
+test("inscrever (admin) põe só em participants, sem presença; palestra recusa", async () => {
+    const { db, ops, docs } = bancoFalso()
+    const r = await gravarPresenca(db, "minicursos", "inscrever", { eventId: EV, userId: U1 })
+    assert.equal(r.status, 200)
+    assert.deepEqual(ops[0].update, { $addToSet: { participants: U1 } })
+    assert.deepEqual(docs[EV].participants, [U1])
+    assert.deepEqual(docs[EV].attendanceList, [])
+    const fantasma = await gravarPresenca(db, "minicursos", "inscrever", { eventId: EV, userId: FANTASMA })
+    assert.equal(fantasma.status, 404)
+    const palestra = await gravarPresenca(db, "palestras", "inscrever", { eventId: EV, userId: U1, listType: "init" })
+    assert.equal(palestra.status, 400)
+    assert.equal(ops.length, 1)
+})
+
 test("palestra grava na lista do turno; retirar usa $pull", async () => {
     const { db, ops, docs } = bancoFalso()
     await gravarPresenca(db, "palestras", "dar", { eventId: EV, userId: U1, listType: "init" })
