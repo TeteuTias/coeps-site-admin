@@ -10,7 +10,8 @@ import { PRAZO_MS, descartarPendente, guardarPresenca, sinalizar } from "../pres
 import { interpretarEscrita } from "./chamada";
 import type { Efeito } from "./chamada";
 
-export type Quer = "dar" | "retirar" | "desinscrever";
+/** `inscrever`: só no minicurso, inscreve sem dar presença (o admin passa por cima de vagas e pagamento). */
+export type Quer = "dar" | "retirar" | "desinscrever" | "inscrever";
 export type Turno = "init" | "end";
 /** `guardado`: sem conexão, a presença ficou no aparelho e será reenviada (ver PendentesPresenca). */
 export type Desfecho = "registrado" | "jaEstava" | "falha" | "semResposta" | "ocupado" | "guardado";
@@ -22,6 +23,8 @@ export interface PedidoAcao {
   turno?: Turno;
   /** Só no minicurso: a pessoa não estava inscrita e dar presença também a inscreve. */
   inscreveJunto?: boolean;
+  /** Só ao remover inscrição paga: a pessoa aceitou perder o valor, então nada é cancelado nem estornado no Asaas. */
+  semEstorno?: boolean;
 }
 export interface EstadoPessoa { presente: boolean; inscrito: boolean }
 export interface Recente { id: string; nome: string; detalhe: string; quando: Date }
@@ -70,7 +73,7 @@ export function useAcoesChamada({ atividade, enviar, aplicar, reconsultar }: {
     const nome = displayUserName(pessoa);
     const aoTurno = turno ? ` (${rotuloTurno(turno)})` : "";
     const foco = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const guardavel = quer !== "desinscrever";
+    const guardavel = quer === "dar" || quer === "retirar";
     const pedidoFila = { ...atividade, turno, userId: id, nome: displayUserName(pessoa), quer: quer === "dar" ? "dar" as const : "retirar" as const };
     const guardar = () => {
       guardarPresenca(pedidoFila);
@@ -117,7 +120,7 @@ export function useAcoesChamada({ atividade, enviar, aplicar, reconsultar }: {
           avisar("alerta", "Resposta sem confirmação", `${nome}: o servidor não informou o que mudou. Confira a pessoa antes de repetir.`);
           return "semResposta";
         }
-        const confere = quer === "dar" ? estado.presente : quer === "retirar" ? !estado.presente : !estado.inscrito;
+        const confere = quer === "dar" ? estado.presente : quer === "retirar" ? !estado.presente : quer === "inscrever" ? estado.inscrito : !estado.inscrito;
         if (!confere) {
           avisar("erro", "A ação não foi aplicada", `${nome}: a conferência mostrou que nada mudou.`);
           return "falha";
@@ -138,6 +141,15 @@ export function useAcoesChamada({ atividade, enviar, aplicar, reconsultar }: {
           { id, nome, quando: new Date(), detalhe: turno ? `Registrada a ${rotuloTurno(turno)}` : p.inscreveJunto ? "Inscrita na hora" : "Presença registrada" },
           ...l.filter((r) => r.id !== id),
         ].slice(0, 6));
+        return "registrado";
+      }
+
+      if (quer === "inscrever") {
+        if (efeito === "jaEstava") {
+          avisar("info", "Já estava inscrito", `${nome} já estava inscrito neste minicurso. Nada foi alterado.`);
+          return "jaEstava";
+        }
+        avisar("ok", "Inscrição feita", `${nome} foi inscrito neste minicurso, sem presença.`);
         return "registrado";
       }
 

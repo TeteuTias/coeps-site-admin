@@ -5,12 +5,15 @@ import { gravarPresenca, lerCorpo, lerPedidoPresenca } from "@/app/lib/presenca/
 
 
 export const POST = withApiAuthRequired(async function POST(request) {
-    const lido = lerPedidoPresenca(await lerCorpo(request), false)
+    const corpo = await lerCorpo(request)
+    const lido = lerPedidoPresenca(corpo, false)
     if ("falha" in lido) return NextResponse.json(lido.falha.corpo, { status: lido.falha.status })
 
     try {
         const { db } = await connectToDatabase();
-        const resposta = await gravarPresenca(db, "minicursos", "dar", lido.pedido)
+        // apenasInscrever: o admin inscreve sem dar presença (botão "Inscrever" da lista).
+        const acao = corpo?.apenasInscrever === true ? "inscrever" : "dar"
+        const resposta = await gravarPresenca(db, "minicursos", acao, lido.pedido)
         return NextResponse.json(resposta.corpo, { status: resposta.status })
     } catch (error) {
         console.log(error)

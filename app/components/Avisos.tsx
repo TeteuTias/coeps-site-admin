@@ -13,17 +13,23 @@ export interface OpcoesConfirmar {
   descricao?: ReactNode;
   rotuloConfirmar?: string;
   rotuloCancelar?: string;
+  /** Terceira opção; só `escolher` a devolve (`confirmar` a trata como "não"). */
+  rotuloAlternativa?: string;
   perigo?: boolean;
   /** Texto a digitar para liberar a confirmação. */
   digitar?: string;
   conteudo?: ReactNode;
 }
 
+export type Escolha = "confirmar" | "alternativa" | "cancelar";
+
 interface Avisos {
   /** Substitui `alert()`. Sucesso some sozinho; erro e alerta ficam até a pessoa fechar. */
   avisar: (tom: Tom, titulo: string, texto?: string) => void;
   /** Substitui `confirm()`: `if (!(await confirmar({ titulo: "Excluir?", perigo: true }))) return;` */
   confirmar: (opcoes: OpcoesConfirmar) => Promise<boolean>;
+  /** Como `confirmar`, mas com a terceira opção `rotuloAlternativa`: devolve qual botão foi usado. */
+  escolher: (opcoes: OpcoesConfirmar) => Promise<Escolha>;
 }
 
 const Contexto = createContext<Avisos | null>(null);
@@ -44,7 +50,7 @@ const COR = {
 
 export function AvisosProvider({ children }: { children: ReactNode }) {
   const [avisos, setAvisos] = useState<AvisoItem[]>([]);
-  const [pendente, setPendente] = useState<{ opcoes: OpcoesConfirmar; resolver: (v: boolean) => void } | null>(null);
+  const [pendente, setPendente] = useState<{ opcoes: OpcoesConfirmar; resolver: (v: Escolha) => void } | null>(null);
   const proximo = useRef(1);
 
   const remover = useCallback((id: number) => setAvisos((l) => l.filter((a) => a.id !== id)), []);
@@ -55,13 +61,14 @@ export function AvisosProvider({ children }: { children: ReactNode }) {
     if (tom === "ok" || tom === "info") setTimeout(() => remover(id), 8000);
   }, [remover]);
 
-  const confirmar = useCallback<Avisos["confirmar"]>((opcoes) => new Promise<boolean>((resolver) => {
-    // um pedido novo encerra o anterior como "não"
-    setPendente((atual) => { atual?.resolver(false); return { opcoes, resolver }; });
+  const escolher = useCallback<Avisos["escolher"]>((opcoes) => new Promise<Escolha>((resolver) => {
+    // um pedido novo encerra o anterior como "cancelar"
+    setPendente((atual) => { atual?.resolver("cancelar"); return { opcoes, resolver }; });
   }), []);
+  const confirmar = useCallback<Avisos["confirmar"]>((opcoes) => escolher(opcoes).then((r) => r === "confirmar"), [escolher]);
 
-  const responder = (valor: boolean) => { pendente?.resolver(valor); setPendente(null); };
-  const valor = useMemo(() => ({ avisar, confirmar }), [avisar, confirmar]);
+  const responder = (valor: Escolha) => { pendente?.resolver(valor); setPendente(null); };
+  const valor = useMemo(() => ({ avisar, confirmar, escolher }), [avisar, confirmar, escolher]);
 
   return (
     <Contexto.Provider value={valor}>
@@ -91,8 +98,10 @@ export function AvisosProvider({ children }: { children: ReactNode }) {
         rotuloCancelar={pendente?.opcoes.rotuloCancelar}
         perigo={pendente?.opcoes.perigo}
         digitar={pendente?.opcoes.digitar}
-        onConfirmar={() => responder(true)}
-        onCancelar={() => responder(false)}
+        rotuloAlternativa={pendente?.opcoes.rotuloAlternativa}
+        onAlternativa={() => responder("alternativa")}
+        onConfirmar={() => responder("confirmar")}
+        onCancelar={() => responder("cancelar")}
       >
         {pendente?.opcoes.conteudo}
       </Dialogo>

@@ -11,6 +11,9 @@ export interface PropsDialogo {
   children?: ReactNode;
   rotuloConfirmar?: string;
   rotuloCancelar?: string;
+  /** Terceira opção, entre "Cancelar" e "Confirmar" (ex.: "Cancelar sem estorno"). */
+  rotuloAlternativa?: string;
+  onAlternativa?: () => void;
   /** Ação destrutiva: o foco começa em "Cancelar" e o botão de confirmar fica vermelho. */
   perigo?: boolean;
   /** Pedido em andamento: trava os botões, o Escape e o clique no fundo. */
@@ -60,7 +63,7 @@ export function Dialogo(props: PropsDialogo) {
   );
 }
 
-function Conteudo({ titulo, descricao, children, rotuloConfirmar = "Confirmar", rotuloCancelar = "Cancelar", perigo, ocupado, digitar, onConfirmar, onCancelar }: PropsDialogo) {
+function Conteudo({ titulo, descricao, children, rotuloConfirmar = "Confirmar", rotuloCancelar = "Cancelar", rotuloAlternativa, onAlternativa, perigo, ocupado, digitar, onConfirmar, onCancelar }: PropsDialogo) {
   const idTitulo = useId();
   const idDescricao = useId();
   const idDigitar = useId();
@@ -98,6 +101,9 @@ function Conteudo({ titulo, descricao, children, rotuloConfirmar = "Confirmar", 
         <Botao estilo="contorno" disabled={ocupado} onClick={onCancelar} {...(perigo && !digitar ? { "data-foco-inicial": "" } : {})}>
           {rotuloCancelar}
         </Botao>
+        {rotuloAlternativa && onAlternativa && (
+          <Botao estilo={perigo ? "perigo" : "contorno"} disabled={ocupado || !liberado} onClick={onAlternativa}>{rotuloAlternativa}</Botao>
+        )}
         <Botao type="submit" estilo={perigo ? "perigoSolido" : "principal"} carregando={ocupado} disabled={!liberado} {...(!perigo && !digitar ? { "data-foco-inicial": "" } : {})}>
           {rotuloConfirmar}
         </Botao>

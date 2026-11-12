@@ -27,14 +27,14 @@ import {
 } from '../../_componentes/chamada-ui'
 import type { Filtro, Observacao } from '../../_componentes/chamada-ui'
 
-interface Curso { nome: string; vagas: number; participants: string[]; attendanceList: string[]; encontros: { date_init?: string; local?: string }[] }
+interface Curso { nome: string; gratuito: boolean; vagas: number; participants: string[]; attendanceList: string[]; encontros: { date_init?: string; local?: string }[] }
 
 const ehTexto = (l: unknown): l is string[] => Array.isArray(l) && l.every((id) => typeof id === 'string')
 
 function lerCurso(payload: unknown): Curso | null {
     const c = parseDataObjectPayload(payload)
     if (!c || typeof c.name !== 'string' || typeof c.maxParticipants !== 'number' || !Number.isFinite(c.maxParticipants) || !ehTexto(c.participants) || !ehTexto(c.attendanceList)) return null
-    return { nome: c.name, vagas: c.maxParticipants, participants: c.participants, attendanceList: c.attendanceList, encontros: Array.isArray(c.timeline) ? c.timeline : [] }
+    return { nome: c.name, gratuito: c.isFree === true, vagas: c.maxParticipants, participants: c.participants, attendanceList: c.attendanceList, encontros: Array.isArray(c.timeline) ? c.timeline : [] }
 }
 
 const porNome = (a: AdminUserSummary, b: AdminUserSummary) => displayUserName(a).localeCompare(displayUserName(b), 'pt-BR')
@@ -48,7 +48,7 @@ const jsonPost = { 'Content-Type': 'application/json' }
 export default function ChamadaMinicurso() {
     const { _id } = useParams<{ _id: string }>()
     const user = useUser()
-    const { avisar, confirmar } = useAvisos()
+    const { avisar, confirmar, escolher } = useAvisos()
     // conta administradora atual (a mesma de userPermissionsServerSide); o servidor também valida
     const podeGerir = Boolean(user?.user?.sub?.includes('6a8799078ecd649be9bdb061'))
 
@@ -104,8 +104,10 @@ export default function ChamadaMinicurso() {
 
     const { ocupados, incertos, recentes, executar, conferir } = useAcoesChamada({
         atividade: { tipo: 'minicurso', eventId: _id },
-        enviar: ({ pessoa, quer }: PedidoAcao, signal) => quer === 'desinscrever'
-            ? fetch('/api/delete/removerInscricaoMinicurso/', { method: 'DELETE', body: JSON.stringify({ eventId: _id, userId: pessoa._id }) })
+        enviar: ({ pessoa, quer, semEstorno }: PedidoAcao, signal) => quer === 'desinscrever'
+            ? fetch('/api/delete/removerInscricaoMinicurso/', { method: 'DELETE', body: JSON.stringify({ eventId: _id, userId: pessoa._id, semEstorno: semEstorno === true }) })
+            : quer === 'inscrever'
+            ? fetch('/api/post/darPresenca', { method: 'POST', headers: jsonPost, body: JSON.stringify({ eventId: _id, userId: pessoa._id, apenasInscrever: true }) })
             : fetch(quer === 'dar' ? '/api/post/darPresenca' : '/api/post/retirarPresenca', { method: 'POST', headers: jsonPost, body: JSON.stringify({ eventId: _id, userId: pessoa._id }), signal }),
         aplicar: ({ pessoa, quer, inscreveJunto }) => {
             const id = pessoa._id
@@ -114,6 +116,10 @@ export default function ChamadaMinicurso() {
                 // dar presença também inscreve (a rota grava nas duas listas)
                 setInscritos((s) => comId(s, id, true))
                 if (inscreveJunto) setNaHora((s) => comId(s, id, true))
+                setLista((l) => (l.some((u) => u._id === id) ? l : [...l, pessoa].sort(porNome)))
+            } else if (quer === 'inscrever') {
+                setInscritos((s) => comId(s, id, true))
+                setNaHora((s) => comId(s, id, true))
                 setLista((l) => (l.some((u) => u._id === id) ? l : [...l, pessoa].sort(porNome)))
             } else if (quer === 'retirar') {
                 setPresentes((s) => comId(s, id, false))
@@ -184,15 +190,28 @@ export default function ChamadaMinicurso() {
         return executar({ pessoa, quer: 'dar', inscreveJunto })
     }
 
+    // Inscreve sem dar presença. O admin passa por cima de horário, vagas e pagamento: a tela só avisa.
+    async function inscrever(pessoa: AdminUserSummary) {
+        if (lotado && !(await confirmar({
+            titulo: 'Minicurso lotado',
+            descricao: `As ${curso!.vagas} vagas já estão preenchidas. Inscrever ${displayUserName(pessoa)} passa do limite. Continuar?`,
+            rotuloConfirmar: 'Inscrever',
+        }))) return 'ocupado' as const
+        return executar({ pessoa, quer: 'inscrever' })
+    }
+
     async function removerInscricao(pessoa: AdminUserSummary) {
-        const confirmou = await confirmar({
+        const pago = !curso!.gratuito
+        const escolha = await escolher({
             titulo: 'Remover a inscrição?',
             descricao: `${displayUserName(pessoa)} sai da lista deste minicurso e perde a presença registrada. Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido NÃO é estornado por aqui.`,
+            conteudo: pago ? <p className="text-sm text-sutil"><strong className="text-tinta">Cancelar sem estorno</strong>: o congressista aceitou perder o dinheiro. A inscrição sai só do site e nada é cancelado nem estornado no Asaas. Se uma cobrança em aberto for paga depois, a pessoa não volta para o minicurso.</p> : undefined,
             perigo: true,
             rotuloConfirmar: 'Remover inscrição',
+            rotuloAlternativa: pago ? 'Cancelar sem estorno' : undefined,
         })
-        if (!confirmou) return
-        const desfecho = await executar({ pessoa, quer: 'desinscrever' })
+        if (escolha === 'cancelar') return
+        const desfecho = await executar({ pessoa, quer: 'desinscrever', semEstorno: escolha === 'alternativa' })
         // a linha some: o foco vai para a busca, sem mexer na rolagem
         if (desfecho === 'registrado' || desfecho === 'jaEstava') requestAnimationFrame(focarBusca)
     }
@@ -227,6 +246,9 @@ export default function ChamadaMinicurso() {
                     {presente
                         ? <Botao estilo="contorno" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'retirar', leitura!.lido)}>Retirar presença</Botao>
                         : <Botao data-principal="" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'dar', leitura!.lido)}>{inscrito ? 'Dar presença' : 'Inscrever e dar presença'}</Botao>}
+                    {!inscrito && !presente && (
+                        <Botao estilo="contorno" carregando={ocupados.has(id)} onClick={() => void inscrever(pessoa)}>Inscrever (sem presença)</Botao>
+                    )}
                     <Botao estilo="fantasma" onClick={() => { limpar(); focarBusca() }}>Fechar</Botao>
                 </div>
             </>
@@ -360,7 +382,7 @@ export default function ChamadaMinicurso() {
             </Secao>
 
             {foraDaLista.length > 0 && (
-                <Secao titulo="Sem inscrição neste minicurso" descricao="Resultados da busca entre todos os congressistas. Dar presença também inscreve a pessoa.">
+                <Secao titulo="Sem inscrição neste minicurso" descricao="Resultados da busca entre todos os congressistas. Você pode só inscrever a pessoa ou inscrever e já dar presença.">
                     {lotado && <Aviso tom="alerta" titulo="Minicurso lotado">As {formatarNumero(curso.vagas)} vagas já estão preenchidas. Você será avisado antes de passar do limite.</Aviso>}
                     <ul className="grid gap-2">
                         {foraDaLista.map((u) => (
@@ -370,9 +392,14 @@ export default function ChamadaMinicurso() {
                                     <p className="break-all text-sm text-sutil">{displayUserField(u.informacoes_usuario.email)}</p>
                                     <div className="mt-1"><MarcasPessoa u={u} /></div>
                                 </div>
-                                <Botao carregando={ocupados.has(u._id)} onClick={() => void darPresenca(u)} aria-label={`Inscrever e dar presença a ${displayUserName(u)}`}>
-                                    <UserPlus className="size-4" aria-hidden="true" />Inscrever e dar presença
-                                </Botao>
+                                <div className="flex flex-wrap gap-2">
+                                    <Botao estilo="contorno" carregando={ocupados.has(u._id)} onClick={() => void inscrever(u)} aria-label={`Inscrever ${displayUserName(u)} sem presença`}>
+                                        <UserPlus className="size-4" aria-hidden="true" />Inscrever
+                                    </Botao>
+                                    <Botao carregando={ocupados.has(u._id)} onClick={() => void darPresenca(u)} aria-label={`Inscrever e dar presença a ${displayUserName(u)}`}>
+                                        Inscrever e dar presença
+                                    </Botao>
+                                </div>
                             </li>
                         ))}
                     </ul>

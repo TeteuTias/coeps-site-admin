@@ -32,7 +32,7 @@ export function AtividadesSecao({ carga, userId }: { carga: Carga<ICourse[]>; us
 }
 
 function Atividade({ curso, userId, aoRetirar }: { curso: ICourse; userId: string; aoRetirar: () => Promise<void> }) {
-    const { avisar, confirmar } = useAvisos()
+    const { avisar, escolher } = useAvisos()
     const [retirando, setRetirando] = useState(false)
     const linhas = curso.timeline ?? []
     const max = curso.maxParticipants
@@ -41,26 +41,31 @@ function Atividade({ curso, userId, aoRetirar }: { curso: ICourse; userId: strin
     const inscrito = contem(curso.participants, userId)
 
     const retirarInscricao = async () => {
-        const confirmou = await confirmar({
+        const pago = !curso.isFree
+        const escolha = await escolher({
             titulo: "Retirar a inscrição deste minicurso?",
-            descricao: <>Você vai retirar a inscrição da pessoa do minicurso &ldquo;{curso.name}&rdquo;. Essa ação <strong>NÃO</strong> estorna o valor ao congressista.</>,
+            descricao: <>Você vai retirar a inscrição da pessoa do minicurso &ldquo;{curso.name}&rdquo;. Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido <strong>NÃO</strong> será estornado.</>,
+            conteudo: pago ? <p className="text-sm text-sutil"><strong className="text-tinta">Cancelar sem estorno</strong>: o congressista aceitou perder o dinheiro. A inscrição sai só do site e nada é cancelado nem estornado no Asaas. Se uma cobrança em aberto for paga depois, a pessoa não volta para o minicurso.</p> : undefined,
             rotuloConfirmar: "Retirar inscrição",
+            rotuloAlternativa: pago ? "Cancelar sem estorno" : undefined,
             rotuloCancelar: "Voltar",
             perigo: true,
         })
-        if (!confirmou) return
+        if (escolha === "cancelar") return
+        const semEstorno = escolha === "alternativa"
         setRetirando(true)
         try {
             const r = await pedirJson("/api/delete/removerInscricaoMinicurso/", {
                 method: "DELETE",
-                body: JSON.stringify({ eventId: curso._id, userId }),
+                body: JSON.stringify({ eventId: curso._id, userId, semEstorno }),
             })
             if (!r.ok) {
                 avisar("erro", "Não foi possível retirar a inscrição", mensagemDe(r.corpo) ?? "Tente novamente.")
                 return
             }
             const mantido = typeof r.corpo === "object" && r.corpo !== null && "pagamentoMantido" in r.corpo && r.corpo.pagamentoMantido === true
-            if (mantido) avisar("alerta", "Inscrição retirada, mas o pagamento NÃO foi estornado", "A cobrança desta atividade já estava paga e foi mantida. O estorno, se houver, é feito pelo painel do Asaas.")
+            if (semEstorno) avisar("ok", "Inscrição cancelada sem estorno", "Nada foi cancelado nem estornado no Asaas.")
+            else if (mantido) avisar("alerta", "Inscrição retirada, mas o pagamento NÃO foi estornado", "A cobrança desta atividade já estava paga e foi mantida. O estorno, se houver, é feito pelo painel do Asaas.")
             else avisar("ok", "Inscrição retirada do minicurso")
             await aoRetirar()
         } catch (error) {
