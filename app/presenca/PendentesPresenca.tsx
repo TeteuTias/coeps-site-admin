@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Aviso, Botao } from "@/app/components/ui";
+import { useAvisos } from "@/app/components/Avisos";
 import { CHAVE_ARMAZENAMENTO } from "./fila-presenca";
 import type { Pendente } from "./fila-presenca";
 import { EVENTO_FILA, enviarPendentes, lerPendentes, sinalizar } from "./presenca-bip";
@@ -12,6 +14,7 @@ const REENVIO_MS = 15000;
  * e pede confirmação para fechar/recarregar a aba enquanto houver pendência.
  */
 export function usePendentesPresenca(eventId: string, aoEntregar: () => void) {
+  const { avisar } = useAvisos();
   const [pendentes, setPendentes] = useState<Pendente[]>([]);
   const aoEntregarRef = useRef(aoEntregar);
   useEffect(() => { aoEntregarRef.current = aoEntregar; });
@@ -19,9 +22,9 @@ export function usePendentesPresenca(eventId: string, aoEntregar: () => void) {
   const enviarAgora = useCallback(async () => {
     const { entregues, recusados } = await enviarPendentes();
     setPendentes(lerPendentes());
-    if (recusados.length) { sinalizar("erro"); alert(recusados.join("\n")); }
+    if (recusados.length) { sinalizar("erro"); avisar("erro", "Presença guardada não foi registrada", recusados.join("\n")); }
     if (entregues.some((p) => p.eventId === eventId)) aoEntregarRef.current();
-  }, [eventId]);
+  }, [eventId, avisar]);
 
   useEffect(() => {
     setPendentes(lerPendentes());
@@ -58,22 +61,19 @@ export function AvisoPendentes({ pendentes, eventId, enviarAgora }: { pendentes:
   if (!pendentes.length) return null;
   const aqui = pendentes.filter((p) => p.eventId === eventId);
   const n = pendentes.length;
+  const nomes = aqui.slice(0, 8).map((p) => `${p.nome || p.userId}${p.quer === "retirar" ? " (retirar)" : ""}${p.turno ? ` · ${p.turno === "end" ? "saída" : "entrada"}` : ""}`).join(", ");
   return (
-    <div className="presenca-lista-inline-error" role="status" aria-live="polite">
-      <strong>{n} {n === 1 ? "presença guardada" : "presenças guardadas"} neste aparelho, aguardando internet.</strong>{" "}
-      Já estão salvas aqui e são enviadas sozinhas quando a conexão voltar. Mantenha esta página aberta e não limpe os dados do navegador.
-      {aqui.length > 0 && (
-        <> Desta atividade: {aqui.slice(0, 8).map((p) => `${p.nome || p.userId}${p.quer === "retirar" ? " (retirar)" : ""}${p.turno ? ` · ${p.turno === "end" ? "fim" : "início"}` : ""}`).join(", ")}{aqui.length > 8 ? ` e mais ${aqui.length - 8}` : ""}.</>
-      )}
-      {aqui.length < n && <> {n - aqui.length} de outra atividade.</>}{" "}
-      <button
-        type="button"
-        className="presenca-lista-btn presenca-lista-btn-secondary"
-        disabled={enviando}
-        onClick={async () => { setEnviando(true); try { await enviarAgora(); } finally { setEnviando(false); } }}
-      >
-        {enviando ? "Enviando..." : "Enviar agora"}
-      </button>
-    </div>
+    <Aviso tom="alerta" titulo={`${n} ${n === 1 ? "presença guardada" : "presenças guardadas"} neste aparelho, aguardando internet`}>
+      <p>
+        Já estão salvas aqui e são enviadas sozinhas quando a conexão voltar. Mantenha esta página aberta e não limpe os dados do navegador.
+        {aqui.length > 0 && ` Desta atividade: ${nomes}${aqui.length > 8 ? ` e mais ${aqui.length - 8}` : ""}.`}
+        {aqui.length < n && ` ${n - aqui.length} de outra atividade.`}
+      </p>
+      <div className="mt-2">
+        <Botao estilo="contorno" tamanho="pequeno" carregando={enviando} onClick={async () => { setEnviando(true); try { await enviarAgora(); } finally { setEnviando(false); } }}>
+          Enviar agora
+        </Botao>
+      </div>
+    </Aviso>
   );
 }

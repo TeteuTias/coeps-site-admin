@@ -1,1051 +1,410 @@
 'use client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { QrCode, RefreshCw, UserPlus } from 'lucide-react'
 import {
-    type AdminUserDetails,
-    type AdminUserSummary,
-    adminUserInitial,
     displayUserField,
     displayUserName,
-    parseAdminUserDetailsPayload,
     parseAdminUserListPayload,
-} from '@/app/lib/users/admin-user-contract';
-import { parseDataObjectPayload, parseStringArrayDataPayload } from '@/app/lib/api-data-contract';
-import { useEffect, useState } from 'react';
-import { Html5Qrcode, CameraDevice, Html5QrcodeCameraScanConfig } from 'html5-qrcode';
-import LoadingModal from '@/app/components/LoadingModal';
-import { useRef } from 'react';
-import { ICourse } from '@/app/lib/types/events/event.t';
-import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModal';
-import '../../attendance-detail.css';
-import { Users, CheckCircle, XCircle, UserPlus, Loader2, Calendar, Clock, Table, QrCode } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { useUser } from '@/app/lib/auth0-client';
-import { useParams } from 'next/navigation';
-import { registrarPresenca, sinalizar } from '../../presenca-bip';
-import { limparCodigo } from '../../fila-presenca';
-import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca';
+} from '@/app/lib/users/admin-user-contract'
+import type { AdminUserSummary } from '@/app/lib/users/admin-user-contract'
+import { parseDataObjectPayload } from '@/app/lib/api-data-contract'
+import { useUser } from '@/app/lib/auth0-client'
+import { Aviso, Botao, Cabecalho, Metrica, Pagina, Secao, Selo } from '@/app/components/ui'
+import { Atualizando, Estado } from '@/app/components/Estado'
+import { useAvisos } from '@/app/components/Avisos'
+import { formatarDataHora, formatarHora, formatarNumero } from '@/app/lib/formatar'
+import { LeitorQr } from '../../_componentes/leitor-qr'
+import { normalizarBusca } from '../../_componentes/chamada'
+import { useAcoesChamada } from '../../_componentes/use-acoes-chamada'
+import type { PedidoAcao } from '../../_componentes/use-acoes-chamada'
+import { useLeituraQr } from '../../_componentes/use-leitura-qr'
+import { usuariosComPresenca } from '../../_componentes/dados-chamada'
+import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca'
+import {
+    BotaoExportar, BuscaChamada, ListaChamada, ListaObservacoes, MarcasPessoa, Recentes, ResultadoLeitura,
+    FiltroPresenca, observacoesBase, useFocoBusca,
+} from '../../_componentes/chamada-ui'
+import type { Filtro, Observacao } from '../../_componentes/chamada-ui'
 
-const parseCoursePayload = (value: unknown): ICourse | null => {
-    const course = parseDataObjectPayload(value)
-    if (
-        !course ||
-        typeof course._id !== "string" ||
-        typeof course.name !== "string" ||
-        typeof course.maxParticipants !== "number" ||
-        !Number.isFinite(course.maxParticipants) ||
-        !Array.isArray(course.participants) ||
-        !course.participants.every((id) => typeof id === "string") ||
-        !Array.isArray(course.attendanceList) ||
-        !course.attendanceList.every((id) => typeof id === "string")
-    ) {
-        return null
-    }
-    return course as unknown as ICourse
+interface Curso { nome: string; gratuito: boolean; vagas: number; participants: string[]; attendanceList: string[]; encontros: { date_init?: string; local?: string }[] }
+
+const ehTexto = (l: unknown): l is string[] => Array.isArray(l) && l.every((id) => typeof id === 'string')
+
+function lerCurso(payload: unknown): Curso | null {
+    const c = parseDataObjectPayload(payload)
+    if (!c || typeof c.name !== 'string' || typeof c.maxParticipants !== 'number' || !Number.isFinite(c.maxParticipants) || !ehTexto(c.participants) || !ehTexto(c.attendanceList)) return null
+    return { nome: c.name, gratuito: c.isFree === true, vagas: c.maxParticipants, participants: c.participants, attendanceList: c.attendanceList, encontros: Array.isArray(c.timeline) ? c.timeline : [] }
 }
 
-const MyComponent = () => {
-    const { _id } = useParams<{ _id: string }>();
-    const [data, setData] = useState<string[]>([]);
+const porNome = (a: AdminUserSummary, b: AdminUserSummary) => displayUserName(a).localeCompare(displayUserName(b), 'pt-BR')
+const comId = (s: ReadonlySet<string>, id: string, entra: boolean) => { const n = new Set(s); if (entra) n.add(id); else n.delete(id); return n }
+const casa = (u: AdminUserSummary, termo: string, bruto: string) =>
+    normalizarBusca(displayUserName(u)).includes(termo) || normalizarBusca(u.informacoes_usuario.email ?? '').includes(termo) || u._id === bruto.trim().toLowerCase()
+
+const VOLTAR = { href: '/presenca', rotulo: 'Voltar às listas de presença' }
+const jsonPost = { 'Content-Type': 'application/json' }
+
+export default function ChamadaMinicurso() {
+    const { _id } = useParams<{ _id: string }>()
     const user = useUser()
-    const [allUsers, setAllUsers] = useState<AdminUserSummary[]>([])
-    const [errorBolean, setErrorBolean] = useState<boolean>(false);
-    const [data2, setData2] = useState<AdminUserSummary[]>([]);
-    const [dataPresentes, setDataPresente] = useState<string[]>([])
-    const [courseData, setCourseData] = useState<ICourse | null>(null)
-    const [isModalProps, setIsModalProps] = useState<ModalProps>({
-        isOpen: false,
-        onClose: () => {
-            setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-        },
-        onConfirm: () => { },
-        title: "Atenção!",
-        children: (
-            <>
-                <p className="presenca-lista-confirmation-copy"></p>
-            </>
-        ),
-        confirmText: "Continuar",
-        cancelText: "Fechar",
-    })
-    const [isOpenAllUsers, setIsOpenAllUsers] = useState<boolean>(false)
-    const [usuarioEscolhido, setUsuarioEscolhido] = useState<string | null>(null)
+    const { avisar, confirmar, escolher } = useAvisos()
+    // conta administradora atual (a mesma de userPermissionsServerSide); o servidor também valida
+    const podeGerir = Boolean(user?.user?.sub?.includes('6a8799078ecd649be9bdb061'))
 
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string>("");
-    const [loadingContent, setLoadingContent] = useState<boolean>(false)
+    const [carga, setCarga] = useState<'carregando' | 'erro' | 'ok'>('carregando')
+    const [atualizando, setAtualizando] = useState(false)
+    const [curso, setCurso] = useState<Curso | null>(null)
+    const [todos, setTodos] = useState<AdminUserSummary[]>([])
+    const [lista, setLista] = useState<AdminUserSummary[]>([])
+    const [inscritos, setInscritos] = useState<ReadonlySet<string>>(new Set())
+    const [presentes, setPresentes] = useState<ReadonlySet<string>>(new Set())
+    const [naHora, setNaHora] = useState<ReadonlySet<string>>(new Set())
+    const [busca, setBusca] = useState('')
+    const [filtro, setFiltro] = useState<Filtro>('todos')
+    const [leitorAberto, setLeitorAberto] = useState(false)
+    const [feito, setFeito] = useState<{ lido: number; texto: string } | null>(null)
+    const { ref: refBusca, focar: focarBusca } = useFocoBusca()
+    const { leitura, ler, limpar } = useLeituraQr(todos)
+    const seq = useRef(0)
+    const jaCarregou = useRef(false)
 
-    const hydrateData = async () => {
+    const carregar = useCallback(async (manual: boolean) => {
+        const n = ++seq.current
+        if (manual) setAtualizando(true)
         try {
-            const fetchParticipantAndAttendanceData = async () => {
-                const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
-                    fetch(`/api/get/participantesMinicursos/${_id}`),
-                    fetch(`/api/get/listaDePresenca/${_id}`),
-                    fetch(`/api/get/minicursoProps/${_id}`),
-                    fetch(`/api/get/todosCongressistas/`),
-                ]);
-
-                if (!participantsResponse.ok || !attendanceResponse.ok || !courseResponse.ok || !allUsersResponse.ok) {
-                    throw new Error("Erro ao buscar dados de participantes ou lista de presença");
-                }
-
-                const participantsResult: unknown = await participantsResponse.json().catch(() => null);
-                const attendanceResult: unknown = await attendanceResponse.json().catch(() => null);
-                const courseResult: unknown = await courseResponse.json().catch(() => null)
-                const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
-                const participantIds = parseStringArrayDataPayload(participantsResult)
-                const attendanceIds = parseStringArrayDataPayload(attendanceResult)
-                const course = parseCoursePayload(courseResult)
-                const normalizedUsers = parseAdminUserListPayload(allUsersResult)
-                if (!participantIds || !attendanceIds || !course || !normalizedUsers) {
-                    throw new Error("Dados de participantes ou presença inválidos")
-                }
-
-                setData(participantIds);
-                setDataPresente(attendanceIds);
-                setCourseData(course)
-                setAllUsers(normalizedUsers)
-
-                return participantIds;
-            };
-
-            const fetchUserInfo = async (userIds: string[]) => {
-                const response = await fetch("/api/post/informacoesVariosUsuarios", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(userIds),
-                });
-
-                if (!response.ok) {
-                    throw new Error("Erro na resposta da API de informações de usuários");
-                }
-
-                const result: unknown = await response.json().catch(() => null);
-                const normalizedUsers = parseAdminUserListPayload(result)
-                if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
-                setData2(normalizedUsers);
-            };
-
-            const participantIds = await fetchParticipantAndAttendanceData();
-            await fetchUserInfo(participantIds);
-
-        } catch (error) {
-            setErrorBolean(true)
-            setError("OCORREU ALGO ERRADO. RECARREGUE");
+            const [cursoRes, todosRes] = await Promise.all([fetch(`/api/get/minicursoProps/${_id}`), fetch('/api/get/todosCongressistas/')])
+            if (!cursoRes.ok || !todosRes.ok) throw new Error('carga')
+            const c = lerCurso(await cursoRes.json().catch(() => null))
+            const t = parseAdminUserListPayload(await todosRes.json().catch(() => null))
+            if (!c || !t) throw new Error('dados')
+            const infoRes = await fetch('/api/post/informacoesVariosUsuarios', { method: 'POST', headers: jsonPost, body: JSON.stringify(c.participants) })
+            if (!infoRes.ok) throw new Error('inscritos')
+            const l = parseAdminUserListPayload(await infoRes.json().catch(() => null))
+            if (!l) throw new Error('inscritos')
+            if (n !== seq.current) return
+            setCurso(c); setTodos(t); setLista(l)
+            setInscritos(new Set(c.participants)); setPresentes(new Set(c.attendanceList)); setNaHora(new Set())
+            jaCarregou.current = true
+            setCarga('ok')
+        } catch {
+            if (n !== seq.current) return
+            if (jaCarregou.current) avisar('erro', 'Não foi possível atualizar a lista', 'A lista que está na tela foi mantida. Confira a conexão e tente de novo.')
+            else setCarga('erro')
         } finally {
-            setLoading(false);
+            if (n === seq.current) setAtualizando(false)
         }
-    };
+    }, [_id, avisar])
+
+    useEffect(() => { void carregar(false) }, [carregar])
 
     // presença sem resposta do servidor fica guardada no aparelho e é reenviada; ao entregar, recarrega a lista
-    const { pendentes, enviarAgora } = usePendentesPresenca(_id, () => { void hydrateData() })
-    const guardados = new Set(pendentes.filter((p) => p.eventId === _id).map((p) => p.userId))
+    const { pendentes, enviarAgora } = usePendentesPresenca(_id, () => { void carregar(false) })
+    const guardados = useMemo(() => new Map(pendentes.filter((p) => p.eventId === _id).map((p) => [p.userId, p.quer])), [pendentes, _id])
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const fetchParticipantAndAttendanceData = async () => {
-                    const [participantsResponse, attendanceResponse, courseResponse, allUsersResponse] = await Promise.all([
-                        fetch(`/api/get/participantesMinicursos/${_id}`),
-                        fetch(`/api/get/listaDePresenca/${_id}`),
-                        fetch(`/api/get/minicursoProps/${_id}`),
-                        fetch(`/api/get/todosCongressistas/`),
-                    ]);
-
-                    if (!participantsResponse.ok || !attendanceResponse.ok || !courseResponse.ok || !allUsersResponse.ok) {
-                        throw new Error("Erro ao buscar dados de participantes ou lista de presença");
-                    }
-
-                    const participantsResult: unknown = await participantsResponse.json().catch(() => null);
-                    const attendanceResult: unknown = await attendanceResponse.json().catch(() => null);
-                    const courseResult: unknown = await courseResponse.json().catch(() => null)
-                    const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
-                    const participantIds = parseStringArrayDataPayload(participantsResult)
-                    const attendanceIds = parseStringArrayDataPayload(attendanceResult)
-                    const course = parseCoursePayload(courseResult)
-                    const normalizedUsers = parseAdminUserListPayload(allUsersResult)
-                    if (!participantIds || !attendanceIds || !course || !normalizedUsers) {
-                        throw new Error("Dados de participantes ou presença inválidos")
-                    }
-
-                    setData(participantIds);
-                    setDataPresente(attendanceIds);
-                    setCourseData(course)
-                    setAllUsers(normalizedUsers)
-
-                    return participantIds;
-                };
-
-                const fetchUserInfo = async (userIds: string[]) => {
-                    const response = await fetch("/api/post/informacoesVariosUsuarios", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(userIds),
-                    });
-
-                    if (!response.ok) {
-                        throw new Error("Erro na resposta da API de informações de usuários");
-                    }
-
-                    const result: unknown = await response.json().catch(() => null);
-                    const normalizedUsers = parseAdminUserListPayload(result)
-                    if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
-                    setData2(normalizedUsers);
-                };
-
-                const participantIds = await fetchParticipantAndAttendanceData();
-                await fetchUserInfo(participantIds);
-
-            } catch (error) {
-                setErrorBolean(true)
-                setError("OCORREU ALGO ERRADO. RECARREGUE");
-            } finally {
-                setLoading(false);
+    const { ocupados, incertos, recentes, executar, conferir } = useAcoesChamada({
+        atividade: { tipo: 'minicurso', eventId: _id },
+        enviar: ({ pessoa, quer, semEstorno }: PedidoAcao, signal) => quer === 'desinscrever'
+            ? fetch('/api/delete/removerInscricaoMinicurso/', { method: 'DELETE', body: JSON.stringify({ eventId: _id, userId: pessoa._id, semEstorno: semEstorno === true }) })
+            : quer === 'inscrever'
+            ? fetch('/api/post/darPresenca', { method: 'POST', headers: jsonPost, body: JSON.stringify({ eventId: _id, userId: pessoa._id, apenasInscrever: true }) })
+            : fetch(quer === 'dar' ? '/api/post/darPresenca' : '/api/post/retirarPresenca', { method: 'POST', headers: jsonPost, body: JSON.stringify({ eventId: _id, userId: pessoa._id }), signal }),
+        aplicar: ({ pessoa, quer, inscreveJunto }) => {
+            const id = pessoa._id
+            if (quer === 'dar') {
+                setPresentes((s) => comId(s, id, true))
+                // dar presença também inscreve (a rota grava nas duas listas)
+                setInscritos((s) => comId(s, id, true))
+                if (inscreveJunto) setNaHora((s) => comId(s, id, true))
+                setLista((l) => (l.some((u) => u._id === id) ? l : [...l, pessoa].sort(porNome)))
+            } else if (quer === 'inscrever') {
+                setInscritos((s) => comId(s, id, true))
+                setNaHora((s) => comId(s, id, true))
+                setLista((l) => (l.some((u) => u._id === id) ? l : [...l, pessoa].sort(porNome)))
+            } else if (quer === 'retirar') {
+                setPresentes((s) => comId(s, id, false))
+            } else {
+                setPresentes((s) => comId(s, id, false)); setInscritos((s) => comId(s, id, false)); setNaHora((s) => comId(s, id, false))
+                setLista((l) => l.filter((u) => u._id !== id))
             }
-        };
-        fetchData();
-    }, [_id]);
+        },
+        reconsultar: async ({ pessoa }) => {
+            const res = await fetch(`/api/get/minicursoProps/${_id}`)
+            if (!res.ok) return null
+            const c = lerCurso(await res.json().catch(() => null))
+            if (!c) return null
+            setCurso(c); setInscritos(new Set(c.participants)); setPresentes(new Set(c.attendanceList))
+            return { presente: c.attendanceList.includes(pessoa._id), inscrito: c.participants.includes(pessoa._id) }
+        },
+    })
 
-    if (loading) {
+    const termo = normalizarBusca(busca)
+    const filtrados = useMemo(
+        () => lista.filter((u) => (filtro === 'todos' || (filtro === 'presentes') === presentes.has(u._id)) && (!termo || casa(u, termo, busca))),
+        [lista, filtro, presentes, termo, busca],
+    )
+    const foraDaLista = useMemo(
+        () => (podeGerir && termo.length >= 2 ? todos.filter((u) => !inscritos.has(u._id) && casa(u, termo, busca)).slice(0, 8) : []),
+        [podeGerir, termo, todos, inscritos, busca],
+    )
+    const totalPresentes = useMemo(() => lista.filter((u) => presentes.has(u._id)).length, [lista, presentes])
+
+    if (carga === 'carregando') {
         return (
-            <main className="presenca-lista-loading-container" role="status" aria-live="polite">
-                <div className="presenca-lista-spinner"><Loader2 size={44} aria-hidden="true" /></div>
-                <span className="presenca-lista-loading-text">Carregando lista de presença...</span>
-            </main>
-        );
+            <Pagina largura="ampla">
+                <Cabecalho etiqueta="Chamada · Minicurso" titulo="Lista de presença" voltar={VOLTAR} />
+                <Estado tipo="carregando" titulo="Carregando a chamada…" linhas={4} />
+            </Pagina>
+        )
+    }
+    if (carga === 'erro' || !curso) {
+        return (
+            <Pagina largura="ampla">
+                <Cabecalho etiqueta="Chamada · Minicurso" titulo="Lista de presença" voltar={VOLTAR} />
+                <Estado
+                    tipo="erro"
+                    titulo="Não foi possível abrir a chamada"
+                    texto="A lista não carregou ou este minicurso não existe mais. Confira a conexão e tente de novo."
+                    aoTentar={() => { setCarga('carregando'); void carregar(false) }}
+                />
+            </Pagina>
+        )
     }
 
-    if (error || !courseData) {
-        return (
-            <main className="presenca-lista-state" role="alert">
-                <span className="presenca-lista-state-kicker">Não foi possível abrir esta lista</span>
-                <h1>Erro ao carregar os dados</h1>
-                <p>{error || "O minicurso solicitado não foi encontrado."}</p>
-            </main>
-        );
+    // vagas 0 = limite não definido (o catálogo também trata assim): nunca "lotado"
+    const lotado = curso.vagas > 0 && inscritos.size >= curso.vagas
+    const primeiro = curso.encontros[0]
+    const sub = [
+        primeiro?.date_init ? formatarDataHora(primeiro.date_init) : null,
+        primeiro?.local || null,
+        curso.encontros.length > 1 ? `${curso.encontros.length} encontros` : null,
+    ].filter(Boolean).join(' · ') || undefined
+
+    async function darPresenca(pessoa: AdminUserSummary) {
+        const inscreveJunto = !inscritos.has(pessoa._id)
+        if (inscreveJunto && lotado && !(await confirmar({
+            titulo: 'Minicurso lotado',
+            descricao: `As ${curso!.vagas} vagas já estão preenchidas. Dar presença a ${displayUserName(pessoa)} também a inscreve e passa do limite. Continuar?`,
+            rotuloConfirmar: 'Inscrever e dar presença',
+        }))) return 'ocupado' as const
+        return executar({ pessoa, quer: 'dar', inscreveJunto })
     }
 
-    const presentes = dataPresentes.length;
-    const ausentes = data2.length - presentes;
-    // conta de admin (mesmo id de app/lib/user/userPermissionsServerSide.ts)
-    const canManageAttendance = Boolean(user?.user?.sub?.includes("6a8799078ecd649be9bdb061"));
+    // Inscreve sem dar presença. O admin passa por cima de horário, vagas e pagamento: a tela só avisa.
+    async function inscrever(pessoa: AdminUserSummary) {
+        if (lotado && !(await confirmar({
+            titulo: 'Minicurso lotado',
+            descricao: `As ${curso!.vagas} vagas já estão preenchidas. Inscrever ${displayUserName(pessoa)} passa do limite. Continuar?`,
+            rotuloConfirmar: 'Inscrever',
+        }))) return 'ocupado' as const
+        return executar({ pessoa, quer: 'inscrever' })
+    }
+
+    async function removerInscricao(pessoa: AdminUserSummary) {
+        const pago = !curso!.gratuito
+        const escolha = await escolher({
+            titulo: 'Remover a inscrição?',
+            descricao: `${displayUserName(pessoa)} sai da lista deste minicurso e perde a presença registrada. Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido NÃO é estornado por aqui.`,
+            conteudo: pago ? <p className="text-sm text-sutil"><strong className="text-tinta">Cancelar sem estorno</strong>: o congressista aceitou perder o dinheiro. A inscrição sai só do site e nada é cancelado nem estornado no Asaas. Se uma cobrança em aberto for paga depois, a pessoa não volta para o minicurso.</p> : undefined,
+            perigo: true,
+            rotuloConfirmar: 'Remover inscrição',
+            rotuloAlternativa: pago ? 'Cancelar sem estorno' : undefined,
+        })
+        if (escolha === 'cancelar') return
+        const desfecho = await executar({ pessoa, quer: 'desinscrever', semEstorno: escolha === 'alternativa' })
+        // a linha some: o foco vai para a busca, sem mexer na rolagem
+        if (desfecho === 'registrado' || desfecho === 'jaEstava') requestAnimationFrame(focarBusca)
+    }
+
+    async function daLeitura(pessoa: AdminUserSummary, quer: 'dar' | 'retirar', lido: number) {
+        const desfecho = quer === 'dar' ? await darPresenca(pessoa) : await executar({ pessoa, quer })
+        if (desfecho === 'ocupado') return
+        if (desfecho === 'registrado') setFeito({ lido, texto: quer === 'dar' ? 'Presença registrada agora.' : 'Presença retirada agora.' })
+        else if (desfecho === 'jaEstava') setFeito({ lido, texto: quer === 'dar' ? 'Já estava presente: nada foi alterado.' : 'Já estava sem presença: nada foi alterado.' })
+        else if (desfecho === 'guardado') setFeito({ lido, texto: quer === 'dar' ? 'Presença guardada neste aparelho: será enviada quando a internet voltar.' : 'Retirada guardada neste aparelho: será enviada quando a internet voltar.' })
+        else if (desfecho === 'semResposta') setFeito({ lido, texto: 'Sem resposta do servidor: confira a pessoa na lista antes de repetir.' })
+        requestAnimationFrame(focarBusca)
+    }
+
+    function conteudoLeitura(pessoa: AdminUserSummary) {
+        const id = pessoa._id
+        const presente = presentes.has(id)
+        const inscrito = inscritos.has(id)
+        const quando = recentes.find((r) => r.id === id)?.quando
+        const obs: Observacao[] = observacoesBase(pessoa)
+        obs.push(inscrito
+            ? { tom: 'ok', texto: 'Inscrita neste minicurso.' }
+            : { tom: 'alerta', texto: `Sem inscrição neste minicurso. Dar presença também inscreve a pessoa${lotado ? ` e passa do limite de ${curso!.vagas} vagas` : ''}.` })
+        if (presente && feito?.lido !== leitura?.lido) {
+            obs.push({ tom: 'info', texto: quando ? `Já estava presente: registrada às ${formatarHora(quando)} nesta tela.` : 'Já estava presente: a presença foi registrada antes.' })
+        }
+        return (
+            <>
+                <ListaObservacoes itens={obs} />
+                {feito && leitura && feito.lido === leitura.lido && <Aviso tom="ok" titulo={feito.texto} />}
+                <div className="flex flex-wrap gap-2">
+                    {presente
+                        ? <Botao estilo="contorno" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'retirar', leitura!.lido)}>Retirar presença</Botao>
+                        : <Botao data-principal="" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'dar', leitura!.lido)}>{inscrito ? 'Dar presença' : 'Inscrever e dar presença'}</Botao>}
+                    {podeGerir && !inscrito && !presente && (
+                        <Botao estilo="contorno" carregando={ocupados.has(id)} onClick={() => void inscrever(pessoa)}>Inscrever (sem presença)</Botao>
+                    )}
+                    <Botao estilo="fantasma" onClick={() => { limpar(); focarBusca() }}>Fechar</Botao>
+                </div>
+            </>
+        )
+    }
+
+    const colunaSituacao = {
+        titulo: 'Situação',
+        render: (u: AdminUserSummary) => (
+            <span className="flex flex-wrap gap-1.5">
+                {presentes.has(u._id) ? <Selo tom="ok">Presente</Selo> : <Selo>Inscrito, ainda não chegou</Selo>}
+                {naHora.has(u._id) && <Selo tom="info">Inscrito na hora</Selo>}
+                {incertos.has(u._id) && <Selo tom="alerta">Sem resposta: conferir</Selo>}
+                {guardados.has(u._id) && <Selo tom="alerta">{guardados.get(u._id) === 'retirar' ? 'Retirada guardada, aguardando envio' : 'Presença guardada, aguardando envio'}</Selo>}
+            </span>
+        ),
+    }
 
     return (
-        <main className="presenca-lista-main-container">
-            <header className="presenca-lista-header">
-                <span className="presenca-lista-eyebrow">CIEPS · Controle de presença</span>
-                <h1 className="presenca-lista-title">{courseData.name}</h1>
-                <p className="presenca-lista-subtitle">
-                    Acompanhe os inscritos, registre presenças e exporte a relação deste minicurso.
-                </p>
-            </header>
+        <Pagina largura="ampla">
+            <Cabecalho
+                etiqueta="Chamada · Minicurso"
+                titulo={curso.nome}
+                sub={sub}
+                voltar={VOLTAR}
+                acoes={(
+                    <>
+                        <Botao estilo="contorno" carregando={atualizando} onClick={() => void carregar(true)}>
+                            <RefreshCw className="size-4" aria-hidden="true" />Atualizar lista
+                        </Botao>
+                        <BotaoExportar
+                            rotulo={`Exportar presentes (${formatarNumero(totalPresentes)})`}
+                            desabilitado={totalPresentes === 0}
+                            gerar={async () => {
+                                // a tela pode estar velha (outros leitores registram ao mesmo tempo): usa a lista do servidor no momento do clique
+                                let ids = lista.filter((u) => presentes.has(u._id)).map((u) => u._id)
+                                let usuarios: AdminUserSummary[] = lista
+                                try {
+                                    const res = await fetch(`/api/get/minicursoProps/${_id}`)
+                                    const atual = res.ok ? lerCurso(await res.json().catch(() => null)) : null
+                                    if (!atual) throw new Error('curso')
+                                    ids = atual.attendanceList
+                                    usuarios = await usuariosComPresenca(ids, [...lista, ...todos])
+                                } catch {
+                                    ids = lista.filter((u) => presentes.has(u._id)).map((u) => u._id)
+                                    usuarios = lista
+                                    avisar('alerta', 'Planilha com a lista desta tela', 'Não foi possível buscar a lista atual no servidor: podem faltar presenças registradas em outros aparelhos.')
+                                }
+                                const guardadas = pendentes.filter((p) => p.eventId === _id).length
+                                if (guardadas) avisar('alerta', 'Há presenças fora da planilha', `${guardadas} presença(s) guardada(s) neste aparelho ainda não chegaram ao servidor e não estão na planilha.`)
+                                const XLSX = await import('xlsx')
+                                const linhas = ids.map((id) => usuarios.find((u) => u._id === id)).filter((u): u is AdminUserSummary => !!u).sort(porNome).map((u) => ({
+                                    NOME: displayUserName(u),
+                                    CPF: displayUserField(u.informacoes_usuario.cpf),
+                                    EMAIL: displayUserField(u.informacoes_usuario.email),
+                                }))
+                                const planilha = XLSX.utils.json_to_sheet(linhas)
+                                planilha['!cols'] = [{ wch: 34 }, { wch: 16 }, { wch: 34 }]
+                                const livro = XLSX.utils.book_new()
+                                XLSX.utils.book_append_sheet(livro, planilha, 'Dados')
+                                XLSX.writeFile(livro, 'MinhaPlanilha.xlsx')
+                            }}
+                        />
+                    </>
+                )}
+            >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <Metrica rotulo="Inscritos" valor={formatarNumero(lista.length)} />
+                    <Metrica rotulo="Vagas" valor={formatarNumero(curso.vagas)} detalhe={lotado ? 'Lotado' : `${formatarNumero(Math.max(curso.vagas - inscritos.size, 0))} livres`} />
+                    <Metrica rotulo="Presentes" valor={formatarNumero(totalPresentes)} />
+                    <Metrica rotulo="Ainda não chegaram" valor={formatarNumero(lista.length - totalPresentes)} />
+                </div>
+            </Cabecalho>
 
-            <section className="presenca-lista-estatisticas" aria-label="Resumo da lista de presença">
-                <div className="presenca-lista-estatistica-card">
-                    <Users size={28} className="presenca-lista-stat-icon stat-blue" aria-hidden="true" />
-                    <span className="presenca-lista-estatistica-valor">{data2.length}</span>
-                    <span className="presenca-lista-estatistica-label">Total de Inscritos</span>
-                </div>
-                <div className="presenca-lista-estatistica-card">
-                    <Users size={28} className="presenca-lista-stat-icon stat-yellow" aria-hidden="true" />
-                    <span className="presenca-lista-estatistica-valor">{courseData.maxParticipants}</span>
-                    <span className="presenca-lista-estatistica-label">Vagas</span>
-                </div>
-                <div className="presenca-lista-estatistica-card">
-                    <CheckCircle size={28} className="presenca-lista-stat-icon stat-green" aria-hidden="true" />
-                    <span className="presenca-lista-estatistica-valor">{presentes}</span>
-                    <span className="presenca-lista-estatistica-label">Presentes</span>
-                </div>
-                <div className="presenca-lista-estatistica-card">
-                    <XCircle size={28} className="presenca-lista-stat-icon stat-red" aria-hidden="true" />
-                    <span className="presenca-lista-estatistica-valor">{ausentes}</span>
-                    <span className="presenca-lista-estatistica-label">Ausentes</span>
-                </div>
-            </section>
-
-            <div className="presenca-lista-info" aria-label="Data e horário da consulta">
-                <div className="presenca-lista-info-item">
-                    <Calendar size={18} aria-hidden="true" />
-                    <span>{new Date().toLocaleDateString('pt-BR')}</span>
-                </div>
-                <div className="presenca-lista-info-item">
-                    <Clock size={18} aria-hidden="true" />
-                    <span>{new Date().toLocaleTimeString('pt-BR')}</span>
-                </div>
-            </div>
-
-            <section className="presenca-lista-actions" aria-label="Ações da lista">
-                <QRCodeScanner courseData={courseData} hydrateData={hydrateData} usuariosCarregados={allUsers} />
-                {
-                    canManageAttendance &&
-                    <button
-                        type="button"
-                        onClick={() => setIsOpenAllUsers(true)}
-                        className="presenca-lista-btn presenca-lista-btn-primary"
-                    >
-                        <UserPlus size={18} aria-hidden="true" />
-                        Adicionar Usuário
-                    </button>
-                }
-                <ExportButton eventId={_id} guardados={guardados.size} inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
-            </section>
-
-            {errorBolean && (
-                <p className="presenca-lista-inline-error" role="alert">
-                    Não foi possível concluir a última atualização. Tente novamente.
-                </p>
-            )}
             <AvisoPendentes pendentes={pendentes} eventId={_id} enviarAgora={enviarAgora} />
 
-            <div
-                className="presenca-lista-table-container"
-                role="region"
-                aria-label="Congressistas e status de presença"
-                tabIndex={0}
-            >
-                <table className="presenca-lista-table">
-                    <caption className="presenca-lista-sr-only">Congressistas e status de presença no minicurso</caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Nome</th>
-                            <th scope="col">Email</th>
-                            <th scope="col">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data2.map((item, index) => (
-                            <tr key={item._id} className="presenca-lista-row">
-                                <td className="presenca-lista-nome">
-                                    {canManageAttendance && <button
-                                        type="button"
-                                        className="presenca-lista-remove-btn"
-                                        aria-label={`Remover inscrição de ${displayUserName(item)}`}
-                                        title="Remover inscrição"
-                                        onClick={() => {
-                                            const remover = async (semEstorno: boolean) => {
-                                                setLoading(true)
-                                                const response = await fetch("/api/delete/removerInscricaoMinicurso/", {
-                                                    method: "DELETE",
-                                                    body: JSON.stringify({
-                                                        eventId: _id,
-                                                        userId: item._id,
-                                                        semEstorno,
-                                                    }),
-                                                })
-                                                const result = await response.json().catch(() => null)
-                                                if (!response.ok) {
-                                                    alert(result?.message || "Ocorreu algum erro. Recarregue a página e tente novamente.")
-                                                } else if (semEstorno) {
-                                                    alert("Inscrição cancelada sem estorno. Nada foi cancelado nem estornado no Asaas.")
-                                                } else if (result?.pagamentoMantido) {
-                                                    alert("Inscrição retirada. Esta pessoa já tinha PAGO o minicurso: o valor NÃO foi estornado. Se for o caso, faça o estorno pelo painel do Asaas.")
-                                                }
-                                                await hydrateData()
-                                                setLoading(false)
-                                                setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-                                            }
-                                            const pago = courseData.isFree !== true
-                                            setIsModalProps(() => ({
-                                                isOpen: true,
-                                                onClose: () => {
-                                                    setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-                                                },
-                                                onConfirm: () => { void remover(false) },
-                                                extraText: pago ? "Cancelar sem estorno" : undefined,
-                                                onExtra: pago ? () => { void remover(true) } : undefined,
-                                                title: "Atenção!",
-                                                children: (
-                                                    <>
-                                                        <p className="presenca-lista-confirmation-copy">Você está prestes a retirar a inscrição do usuário do minicurso. Se houver cobrança em aberto no Asaas, ela será cancelada. Pagamento já recebido <strong className="presenca-lista-confirmation-emphasis">NÃO</strong> será estornado. Deseja mesmo continuar?</p>
-                                                        {pago && (
-                                                            <p className="presenca-lista-confirmation-copy"><strong className="presenca-lista-confirmation-emphasis">Cancelar sem estorno</strong>: o congressista aceitou perder o dinheiro. A inscrição sai só do site e nada é cancelado nem estornado no Asaas. Se uma cobrança em aberto for paga depois, a pessoa não volta para o minicurso.</p>
-                                                        )}
-                                                    </>
-                                                ),
-                                                confirmText: "Continuar",
-                                                cancelText: "Fechar",
-                                            }))
-                                        }}
-                                    >
-                                        ×
-                                    </button>}
-                                    <span>{index + 1}. {displayUserName(item)}</span>
-                                </td>
-                                <td className="presenca-lista-email">{displayUserField(item.informacoes_usuario.email)}</td>
-                                <td className="presenca-lista-status">
-                                    {canManageAttendance ? (
-                                        <button
-                                            type="button"
-                                            className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}
-                                            title={dataPresentes.includes(item._id) ? "Clique para retirar a presença" : "Clique para dar presença"}
-                                            onClick={async () => {
-                                                setLoadingContent(true)
-                                                try {
-                                                    const quer = dataPresentes.includes(item._id) ? "retirar" : "dar"
-                                                    const r = await registrarPresenca({ tipo: "minicurso", eventId: _id, userId: item._id, nome: item.informacoes_usuario.nome ?? "", quer })
-                                                    if (r.estado === "registrado" || r.estado === "jaEstava") {
-                                                        setDataPresente(prev => quer === "retirar" ? prev.filter(id => id !== item._id) : prev.includes(item._id) ? prev : [...prev, item._id])
-                                                    } else {
-                                                        alert(r.mensagem)
-                                                    }
-                                                }
-                                                catch {
-                                                    setErrorBolean(true)
-                                                }
-                                                finally {
-                                                    setLoadingContent(false)
-                                                }
-                                            }}
-                                        >
-                                            {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
-                                        </button>
-                                    ) : (
-                                        <span className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}>
-                                            {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
-                                        </span>
-                                    )}
-                                    {guardados.has(item._id) && <span className="presenca-lista-status-badge ausente">GUARDADA, AGUARDANDO ENVIO</span>}
-                                </td>
-                            </tr>
-                        ))}
-                        {data2.length === 0 && (
-                            <tr>
-                                <td className="presenca-lista-empty-cell" colSpan={3}>
-                                    Nenhum congressista inscrito neste minicurso.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            <LoadingModal isLoading={loadingContent} />
-            <ConfirmationModal {...isModalProps} />
-            {isOpenAllUsers && (
-                <AllUsersModal
-                    courseData={courseData}
-                    isOpen={true}
-                    onClose={() => { setIsOpenAllUsers(false) }}
-                    onUserSelect={async (userId: string) => {
-                        // mesmo modal do QR: avisos de pagamento/inscrição e os botões Inscrever / Inscrever e Dar Presença
-                        setIsOpenAllUsers(false)
-                        setUsuarioEscolhido(userId)
-                    }}
-                    usersData={allUsers}
-                />
-            )}
-            {usuarioEscolhido && (
-                <ModalUserFound courseData={courseData} hydrateData={hydrateData} qrCodeResult={usuarioEscolhido} closeModal={() => setUsuarioEscolhido(null)} usuariosCarregados={allUsers} />
-            )}
-        </main>
-    );
-};
-//
-//
-const QRCodeScanner: React.FC<{ courseData: ICourse, hydrateData: () => Promise<void>, usuariosCarregados: AdminUserSummary[] }> = ({ courseData, hydrateData, usuariosCarregados }) => {
-    // Estado para controlar a visibilidade do scanner
-    const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
-    // Estado para armazenar a lista de câmeras disponíveis
-    const [cameras, setCameras] = useState<CameraDevice[]>([]);
-    // Estado para armazenar o ID da câmera selecionada
-    const [selectedCameraId, setSelectedCameraId] = useState<string>('');
-    // Estado para armazenar o resultado do QR Code lido
-    const [qrCodeResult, setQrCodeResult] = useState<string | null>(null);
-    const [scannerError, setScannerError] = useState<string>('');
-
-    // Referência para a instância do leitor de QR Code para podermos controlá-la
-    const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
-    const readerId = "qr-code-reader"; // ID do elemento div onde o vídeo da câmera será renderizado
-
-    // Hook para buscar as câmeras disponíveis quando o scanner for aberto
-    useEffect(() => {
-        const fetchCameras = async () => {
-            try {
-                const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length) {
-                    setCameras(devices);
-                    // Seleciona a primeira câmera da lista como padrão
-                    if (!selectedCameraId) {
-                        setSelectedCameraId(devices[0].id);
-                    }
-                } else {
-                    setScannerError("Nenhuma câmera foi encontrada neste dispositivo.");
-                }
-            } catch (error) {
-                console.error('Erro ao buscar câmeras:', error);
-                setScannerError("Não foi possível acessar a câmera. Confira a permissão do navegador.");
-            }
-        };
-
-        if (isScannerOpen) {
-            fetchCameras();
-        }
-    }, [isScannerOpen, selectedCameraId]);
-
-    // Hook para iniciar e parar o scanner
-    useEffect(() => {
-        // Inicia o scanner apenas se estiver aberto e uma câmera for selecionada
-        if (isScannerOpen && selectedCameraId) {
-            // Cria uma nova instância do leitor de QR code
-            const html5QrCode = new Html5Qrcode(readerId);
-            html5QrCodeRef.current = html5QrCode;
-
-            // Função de callback para quando um QR Code for lido com sucesso
-            const qrCodeSuccessCallback = (decodedText: string) => {
-                setQrCodeResult(decodedText);
-                closeScanner(); // Fecha o scanner automaticamente após a leitura
-            };
-
-            // Configurações do scanner
-            const config: Html5QrcodeCameraScanConfig = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                // aspectRatio: 1.0,
-            };
-
-            // Inicia o scanner
-            html5QrCode.start(
-                selectedCameraId,
-                config,
-                qrCodeSuccessCallback,
-                (errorMessage) => {
-                    // issaqui dá erro toda hora, e os erros não alteram a funcionalidade. então deixa isso pra lá, não compensa mostrar o erro na tela;
-                }
-            ).catch((err) => {
-                console.error(`Não foi possível iniciar o scanner: ${err}`);
-                setScannerError("Não foi possível iniciar a leitura. Selecione outra câmera ou confira a permissão do navegador.");
-            });
-        }
-
-        // Função de limpeza: para o scanner quando o componente é desmontado
-        return () => {
-            if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                html5QrCodeRef.current.stop().catch(err => {
-                    console.error("Falha ao parar o scanner.", err);
-                });
-            }
-        };
-    }, [isScannerOpen, selectedCameraId]);
-
-    const openScanner = () => {
-        setScannerError('');
-        setIsScannerOpen(true);
-    };
-
-    const closeScanner = () => {
-        if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-            html5QrCodeRef.current.stop().catch(err => {
-                console.error("Falha ao parar o scanner.", err);
-            });
-        }
-        setIsScannerOpen(false);
-    };
-
-    const closeModal = () => {
-        setQrCodeResult(null);
-    };
-
-    return (
-        <div className="attendance-scanner">
-            {/* Botão para iniciar o processo */}
-            <div className="attendance-scanner-trigger">
-                {!isScannerOpen && !qrCodeResult && (
-                    <button
-                        type="button"
-                        onClick={openScanner}
-                        className="presenca-lista-btn presenca-lista-btn-secondary"
-                    >
-                        <QrCode size={18} aria-hidden="true" />
-                        Presença por QrCode
-                    </button>
-                )}
-            </div>
-            {/* Seção do Scanner */}
-            {isScannerOpen && (
-                <section className="attendance-scanner-panel" aria-labelledby="scanner-title-minicurso">
-                    <div className="attendance-scanner-heading">
-                        <div>
-                            <span className="attendance-scanner-kicker">Leitura de credencial</span>
-                            <h2 id="scanner-title-minicurso">Escanear QR Code</h2>
+            <Secao titulo="Credenciamento" descricao="Leia o QR da credencial ou busque a pessoa. A busca também filtra a lista abaixo.">
+                <Aviso tom="info" titulo="Presença e inscrição andam juntas">
+                    Dar presença neste minicurso também inscreve a pessoa, e remover a inscrição retira a presença. O valor pago não é estornado por aqui.
+                </Aviso>
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+                    <div className="grid content-start gap-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <BuscaChamada valor={busca} aoMudar={setBusca} dica="Nome, e-mail ou código da credencial" foco={refBusca} />
+                            {!leitorAberto && (
+                                <Botao onClick={() => setLeitorAberto(true)}><QrCode className="size-4" aria-hidden="true" />Ler QR</Botao>
+                            )}
                         </div>
-                        <button
-                            type="button"
-                            onClick={closeScanner}
-                            className="presenca-lista-btn presenca-lista-btn-ghost"
-                        >
-                            Fechar Câmera
-                        </button>
+                        {leitorAberto && <LeitorQr aoLer={ler} aoFechar={() => setLeitorAberto(false)} />}
+                        {leitura && <ResultadoLeitura leitura={leitura} aoFechar={() => { limpar(); focarBusca() }}>{conteudoLeitura}</ResultadoLeitura>}
                     </div>
-                    <label className="attendance-scanner-label" htmlFor="camera-select-minicurso">
-                        Câmera
-                    </label>
-                    <select
-                        id="camera-select-minicurso"
-                        onChange={(e) => {
-                            setScannerError('');
-                            setSelectedCameraId(e.target.value);
-                        }}
-                        value={selectedCameraId}
-                        className="attendance-scanner-select"
-                    >
-                        {cameras.length === 0 && <option value="">Buscando câmeras...</option>}
-                        {cameras.map((camera) => (
-                            <option key={camera.id} value={camera.id}>
-                                {camera.label || `Câmera ${camera.id}`}
-                            </option>
-                        ))}
-                    </select>
-                    {scannerError && <p className="attendance-scanner-error" role="alert">{scannerError}</p>}
-                    {/* O quadrado da câmera será renderizado aqui */}
-                    <div id={readerId} className="attendance-scanner-reader" aria-label="Visualização da câmera"></div>
-                    <p className="attendance-scanner-help">Posicione o QR Code dentro da área destacada.</p>
-                </section>
-            )}
-
-            {/* Modal com o Resultado */}
-            {qrCodeResult && (
-                <ModalUserFound courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} usuariosCarregados={usuariosCarregados} />
-            )}
-        </div>
-    );
-};
-
-const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void>, usuariosCarregados: AdminUserSummary[] }> = ({ hydrateData, courseData, qrCodeResult, closeModal, usuariosCarregados }) => {
-    const [isLoading, setIsLoading] = useState<boolean>(true)
-    const [user, setUser] = useState<AdminUserDetails | AdminUserSummary | null>(null)
-    const [erroLeitura, setErroLeitura] = useState<string>("")
-    const [semRede, setSemRede] = useState<boolean>(false)
-    const [loadError, setLoadError] = useState<string | null>(null)
-    // "Inscrever" sem presença é só do admin (a rota recusa as outras contas)
-    const ehAdmin = Boolean(useUser()?.user?.sub?.includes("6a8799078ecd649be9bdb061"))
-    useEffect(() => {
-        const fetchUser = async () => {
-            const codigo = limparCodigo(qrCodeResult)
-            if (!codigo) {
-                sinalizar("erro")
-                setErroLeitura("QR inválido: este código não é de uma credencial do CIEPS. Nada foi registrado.")
-                setIsLoading(false)
-                return
-            }
-            try {
-                const userFetch = await fetch(`/api/get/usuarioPorId/${codigo}`)
-                if (userFetch.status >= 500) throw new Error("servidor")
-                const payload: unknown = await userFetch.json().catch(() => null)
-                if (!userFetch.ok) {
-                    sinalizar("erro")
-                    setErroLeitura(userFetch.status === 404 ? "Credencial não encontrada: não existe cadastro com este código. Nada foi registrado." : "Não foi possível consultar esta credencial. Leia de novo.")
-                    return
-                }
-                const normalizedUser = parseAdminUserDetailsPayload(payload)
-                if (!normalizedUser) {
-                    sinalizar("erro")
-                    setLoadError("Dados do usuário inválidos")
-                    return
-                }
-                setUser(normalizedUser)
-            } catch {
-                // sem internet: usa a lista que já está carregada nesta tela para a chamada continuar
-                const local = usuariosCarregados.find((u) => `${u._id}` === codigo)
-                if (local) {
-                    setUser(local)
-                    setSemRede(true)
-                } else {
-                    sinalizar("erro")
-                    setErroLeitura("Sem conexão e esta credencial não está na lista carregada nesta tela. Leia de novo quando a internet voltar.")
-                }
-            } finally {
-                setIsLoading(false)
-            }
-        }
-        fetchUser()
-    }, [qrCodeResult, usuariosCarregados])
-
-    useEffect(() => {
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                closeModal();
-            }
-        };
-        window.addEventListener("keydown", handleEscape);
-        return () => window.removeEventListener("keydown", handleEscape);
-    }, [closeModal]);
-
-    /**
-     * Tava sem ideia para nome de função, então coloquei esse kk
-     * Mas a ideia é dar um panorama geral para o adm de que se há pendências antes de realizar a presença:
-     * Exemplos:
-     *  - Notificar o adm se o evento já estourou o limite máximo;
-     *  - Notificar o adm se o usuário ainda não pagou sua inscrição;
-     *  - Etc.;
-     * Após perguntar, vamos verificar se o adm quer continuar com a inscrição.
-     */
-    const getFeedBack = (user: AdminUserSummary, courseData: ICourse): string[] => {
-        let listFeedBack: string[] = []
-        console.log(user)
-        if (user.pagamento.situacao == 2) {
-            listFeedBack.push("O usuário está com o pagamento do ingresso do congresso pendente;")
-        }
-        if (user.pagamento.situacao == 0) {
-            listFeedBack.push("O usuário não realizou o pagamento do ingresso do congresso;")
-        }
-        if (!courseData.participants.includes(`${user._id}`)) {
-            listFeedBack.push("O usuário não realizou a inscrição para este minicurso;")
-        }
-        if (courseData.attendanceList.includes(`${user._id}`)) {
-            listFeedBack.push("O usuário já está com a presença registrada;")
-        }
-
-        //
-        //
-        console.log(listFeedBack)
-        return listFeedBack
-    }
-    const feedback = user ? getFeedBack(user, courseData) : [];
-
-    return (
-        <>
-            <LoadingModal isLoading={isLoading} />
-            <div className="attendance-modal-overlay" onClick={closeModal}>
-                <div
-                    className="attendance-modal"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="qr-result-title-minicurso"
-                    onClick={(event) => event.stopPropagation()}
-                >
-                    <header className="attendance-modal-header">
-                        <div>
-                            <span className="attendance-modal-kicker">Leitura concluída</span>
-                            <h3 id="qr-result-title-minicurso">Usuário identificado</h3>
-                        </div>
-                        <button type="button" className="attendance-modal-close" onClick={closeModal} aria-label="Fechar modal">
-                            ×
-                        </button>
-                    </header>
-                    <div className="attendance-modal-body">
-                        <section className="attendance-modal-section">
-                            <span className="attendance-modal-label">ID de usuário</span>
-                            <p className="attendance-modal-code">{qrCodeResult}</p>
-                        </section>
-                        <section className="attendance-modal-section">
-                            <span className="attendance-modal-label">Informações gerais</span>
-                            <dl className="attendance-user-details">
-                                <div><dt>Nome</dt><dd>{user ? displayUserName(user) : "Não informado"}</dd></div>
-                                <div><dt>CPF</dt><dd>{displayUserField(user?.informacoes_usuario.cpf ?? null)}</dd></div>
-                                <div><dt>E-mail</dt><dd>{displayUserField(user?.informacoes_usuario.email ?? null)}</dd></div>
-                                <div><dt>Telefone</dt><dd>{displayUserField(user?.informacoes_usuario.numero_telefone ?? null)}</dd></div>
-                            </dl>
-                        </section>
-                        <section className="attendance-modal-section">
-                            <span className="attendance-modal-label">Observações</span>
-                            <div className="attendance-feedback-list" aria-live="polite">
-                                {erroLeitura && <p className="attendance-feedback attendance-feedback-warning" role="alert">{erroLeitura}</p>}
-                                {semRede && <p className="attendance-feedback attendance-feedback-warning">Sem conexão: dados da lista carregada nesta tela. A presença fica guardada neste aparelho e é enviada quando a internet voltar.</p>}
-                                {feedback.map((value, index) => (
-                                    <p key={`${user?._id}-${index}`} className="attendance-feedback attendance-feedback-warning">{value}</p>
-                                ))}
-                                {loadError && (
-                                    <p className="attendance-feedback attendance-feedback-warning">{loadError}</p>
-                                )}
-                                {user?.cadastroPendente && (
-                                    <p className="attendance-feedback attendance-feedback-warning">
-                                        Cadastro pendente: alguns dados pessoais ainda não foram informados.
-                                    </p>
-                                )}
-                                {user && courseData.participants.includes(`${user._id}`) && (
-                                    <p className="attendance-feedback attendance-feedback-positive">
-                                        O congressista está inscrito no minicurso.
-                                    </p>
-                                )}
-                                {user && courseData.participants.includes(`${user._id}`) &&
-                                    courseData.attendanceList.includes(`${user._id}`) && (
-                                        <p className="attendance-feedback attendance-feedback-positive">
-                                            O congressista já possui presença no minicurso.
-                                        </p>
-                                    )}
-                                {feedback.length === 0 && user && (
-                                    <p className="attendance-feedback attendance-feedback-neutral">Nenhuma pendência encontrada.</p>
-                                )}
-                            </div>
-                        </section>
-                    </div>
-                    <footer className="attendance-modal-actions">
-                        {ehAdmin && user && !courseData.participants.includes(`${user._id}`) && (
-                            <button
-                                type="button"
-                                onClick={
-                                    async () => {
-                                        // inscreve sem presença; o admin passa por cima de horário, vagas e pagamento (os avisos acima só informam)
-                                        setIsLoading(true)
-                                        const response = await fetch("/api/post/darPresenca", {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ eventId: courseData._id, userId: user._id, apenasInscrever: true }),
-                                        }).catch(() => null)
-                                        const result = await response?.json().catch(() => null)
-                                        if (response?.ok) {
-                                            await hydrateData()
-                                            setIsLoading(false)
-                                            alert(`${displayUserName(user)}: inscrito no minicurso (sem presença).`)
-                                            closeModal()
-                                            return
-                                        }
-                                        setIsLoading(false)
-                                        alert(result?.message || "Não foi possível inscrever. Confira a conexão e tente de novo.")
-                                    }
-                                }
-                                className="presenca-lista-btn presenca-lista-btn-primary"
-                            >
-                                Inscrever
-                            </button>
-                        )}
-                        {user && !courseData.attendanceList.includes(`${user._id}`) && (
-                            <button
-                                type="button"
-                                onClick={
-                                    async () => {
-                                        setIsLoading(true)
-                                        const r = await registrarPresenca({ tipo: "minicurso", eventId: courseData._id, userId: user._id, nome: user.informacoes_usuario?.nome ?? "", quer: "dar" })
-                                        if (r.estado === "registrado" || r.estado === "jaEstava") await hydrateData()
-                                        setIsLoading(false)
-                                        alert(r.mensagem)
-                                        if (r.estado !== "recusado" && r.estado !== "atividadeInexistente") closeModal()
-
-                                    }
-                                }
-                                className="presenca-lista-btn presenca-lista-btn-success"
-                            >
-                                {courseData.participants.includes(`${user._id}`) ? "Dar Presença" : "Inscrever e Dar Presença"}
-                            </button>
-                        )}
-                        {user && courseData.attendanceList.includes(`${user._id}`) && (
-                            <button
-                                type="button"
-                                onClick={
-                                    async () => {
-                                        //
-                                        setIsLoading(true)
-                                        const r = await registrarPresenca({ tipo: "minicurso", eventId: courseData._id, userId: user._id, nome: user.informacoes_usuario?.nome ?? "", quer: "retirar" })
-                                        if (r.estado === "registrado" || r.estado === "jaEstava") await hydrateData()
-                                        setIsLoading(false)
-                                        alert(r.mensagem)
-                                        if (r.estado !== "recusado" && r.estado !== "atividadeInexistente") closeModal()
-
-                                    }
-                                }
-                                className="presenca-lista-btn presenca-lista-btn-danger"
-                            >
-                                Retirar Presença
-                            </button>
-                        )}
-                        <button type="button" onClick={closeModal} className="presenca-lista-btn presenca-lista-btn-ghost">
-                            Fechar
-                        </button>
-                    </footer>
+                    <Recentes itens={recentes} />
                 </div>
-            </div>
-        </>
+            </Secao>
+
+            <Secao
+                titulo="Lista de inscritos"
+                descricao={`${formatarNumero(filtrados.length)} de ${formatarNumero(lista.length)} pessoas${termo ? ' na busca' : ''}.`}
+                acoes={<Atualizando ativo={atualizando} />}
+            >
+                <FiltroPresenca valor={filtro} aoMudar={setFiltro} rotulos={{ todos: 'Todos', ausentes: 'Ainda não chegaram', presentes: 'Presentes' }} />
+                {lista.length === 0 && (
+                    <Estado tipo="vazio" titulo="Ninguém inscrito neste minicurso" texto={podeGerir ? 'Busque uma pessoa acima para inscrevê-la e dar presença.' : 'Quando houver inscritos, eles aparecem aqui.'} />
+                )}
+                {lista.length > 0 && filtrados.length === 0 && (
+                    <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={() => { setBusca(''); setFiltro('todos') }}>Limpar busca e filtro</Botao>} />
+                )}
+                {filtrados.length > 0 && (
+                    <ListaChamada
+                        rotulo="Inscritos e presença no minicurso"
+                        pessoas={filtrados}
+                        classeTabela="[&_table]:min-w-[44rem]"
+                        colunas={[colunaSituacao]}
+                        extraNome={(u) => <MarcasPessoa u={u} />}
+                        acoes={(u) => {
+                            const nome = displayUserName(u)
+                            return (
+                                <>
+                                    {podeGerir && (incertos.has(u._id)
+                                        ? <Botao estilo="contorno" carregando={ocupados.has(u._id)} onClick={() => void conferir(u)} aria-label={`Conferir a situação de ${nome}`}>Conferir</Botao>
+                                        : presentes.has(u._id)
+                                            ? <Botao estilo="contorno" carregando={ocupados.has(u._id)} onClick={() => void executar({ pessoa: u, quer: 'retirar' })} aria-label={`Retirar a presença de ${nome}`}>Retirar presença</Botao>
+                                            : <Botao carregando={ocupados.has(u._id)} onClick={() => void darPresenca(u)} aria-label={`Dar presença a ${nome}`}>Dar presença</Botao>)}
+                                    {/* ajuste manual: só a conta de admin (a rota recusa as outras com 403) */}
+                                    {podeGerir && <Botao estilo="perigo" disabled={ocupados.has(u._id)} onClick={() => void removerInscricao(u)} aria-label={`Remover a inscrição de ${nome}`}>Remover inscrição</Botao>}
+                                </>
+                            )
+                        }}
+                    />
+                )}
+            </Secao>
+
+            {foraDaLista.length > 0 && (
+                <Secao titulo="Sem inscrição neste minicurso" descricao="Resultados da busca entre todos os congressistas. Você pode só inscrever a pessoa ou inscrever e já dar presença.">
+                    {lotado && <Aviso tom="alerta" titulo="Minicurso lotado">As {formatarNumero(curso.vagas)} vagas já estão preenchidas. Você será avisado antes de passar do limite.</Aviso>}
+                    <ul className="grid gap-2">
+                        {foraDaLista.map((u) => (
+                            <li key={u._id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-linha px-4 py-3">
+                                <div className="min-w-0">
+                                    <p className="break-words font-medium">{displayUserName(u)}</p>
+                                    <p className="break-all text-sm text-sutil">{displayUserField(u.informacoes_usuario.email)}</p>
+                                    <div className="mt-1"><MarcasPessoa u={u} /></div>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <Botao estilo="contorno" carregando={ocupados.has(u._id)} onClick={() => void inscrever(u)} aria-label={`Inscrever ${displayUserName(u)} sem presença`}>
+                                        <UserPlus className="size-4" aria-hidden="true" />Inscrever
+                                    </Botao>
+                                    <Botao carregando={ocupados.has(u._id)} onClick={() => void darPresenca(u)} aria-label={`Inscrever e dar presença a ${displayUserName(u)}`}>
+                                        Inscrever e dar presença
+                                    </Botao>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </Secao>
+            )}
+        </Pagina>
     )
 }
-//
-interface AllUsersModalProps {
-    courseData: ICourse;
-    isOpen: boolean;
-    onClose: () => void;
-    onUserSelect: (user: string) => Promise<void>; // Função para lidar com a seleção
-    usersData: AdminUserSummary[];
-}
-
-const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClose, onUserSelect, usersData }) => {
-
-    const [searchTerm, setSearchTerm] = useState('');
-    // Efeito para fechar com a tecla 'Esc'
-    useEffect(() => {
-        const handleEsc = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [onClose]);
-
-    // Não renderiza nada se não estiver aberto
-    if (!isOpen) {
-        return null;
-    }
-
-
-
-    const filteredUsers = usersData.filter(user => {
-        const term = searchTerm.toLowerCase().trim();
-        if (!term) return true; // Mostra todos se a busca estiver vazia
-
-        const nome = user?.informacoes_usuario?.nome?.toLowerCase();
-        const email = user?.informacoes_usuario?.email?.toLowerCase();
-
-        return nome?.includes(term) || email?.includes(term);
-    });
-
-    return (
-        <div className="all-users-modal-overlay">
-            <div className="all-users-modal-backdrop" onClick={onClose} aria-hidden="true"></div>
-            <div
-                className="all-users-modal-container"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="all-users-title-minicurso"
-            >
-                <div className="all-users-modal-header">
-                    <div>
-                        <span className="all-users-modal-kicker">Inclusão manual</span>
-                        <h2 id="all-users-title-minicurso" className="all-users-modal-title">Escolha um congressista</h2>
-                    </div>
-                    <button type="button" onClick={onClose} className="all-users-modal-close-btn" aria-label="Fechar modal">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                </div>
-                <div className="all-users-modal-search-section">
-                    <label className="all-users-modal-search-title" htmlFor="all-users-search-minicurso">Pesquisar congressista</label>
-                    <input
-                        id="all-users-search-minicurso"
-                        type="text"
-                        placeholder="Filtrar por nome ou e-mail..."
-                        className="all-users-modal-search-input"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <div className="all-users-modal-body">
-                    {courseData.participants.length >= courseData.maxParticipants && (
-                        <p className="all-users-modal-warning">Atenção, o evento já atingiu seu limite máximo</p>
-                    )}
-                    <div className="all-users-modal-list">
-                        {filteredUsers.map((user) => (
-                            <button
-                                type="button"
-                                key={user._id}
-                                onClick={() => onUserSelect(user._id)}
-                                className="all-users-modal-user-button"
-                            >
-                                <div className="all-users-modal-user-card">
-                                    <div className="all-users-modal-user-content">
-                                        <div className="all-users-modal-user-avatar">
-                                            <span className="all-users-modal-avatar-text">
-                                                {adminUserInitial(user)}
-                                            </span>
-                                        </div>
-                                        <div className="all-users-modal-user-info">
-                                            {courseData.participants.includes(`${user._id}`) && (
-                                                <p className="all-users-modal-badge">Já inscrito no minicurso</p>
-                                            )}
-                                            {user.cadastroPendente && (
-                                                <p className="all-users-modal-payment-status">Cadastro pendente</p>
-                                            )}
-                                            <p className="all-users-modal-user-name">
-                                                {user.informacoes_usuario.titulo_honorario} {displayUserName(user)}
-                                            </p>
-                                                <p className="all-users-modal-user-email">{displayUserField(user.informacoes_usuario.email)}</p>
-                                            {user.pagamento.situacao != 1 && (
-                                                <p className="all-users-modal-payment-status">
-                                                    Não inscrito no congresso
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </button>
-                        ))}
-                        {filteredUsers.length === 0 && (
-                            <p className="all-users-modal-empty">Nenhum congressista corresponde à busca.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-function ExportButton({ eventId, guardados, inscritos, presentes, todosUsuarios }: { eventId: string, guardados: number, inscritos: string[], presentes: string[], todosUsuarios: AdminUserSummary[] }) {
-    // a tela pode estar velha (outros leitores registram ao mesmo tempo): a planilha usa a lista do servidor no momento do clique
-    const montar = (presentes: string[], todosUsuarios: AdminUserSummary[]) => presentes
-        // 1. FILTRA: Mantém apenas os IDs que correspondem a um usuário existente
-        .map(usuarioId => todosUsuarios.find(u => u._id === usuarioId))
-        .filter(usuario => usuario !== undefined) // Remove todos os 'undefined'
-
-        // 2. MAP: Transforma os objetos de usuário encontrados no formato de planilha
-        .map(usuario => ({ //
-            NOME: displayUserName(usuario!),
-            CPF: displayUserField(usuario!.informacoes_usuario.cpf),
-            EMAIL: displayUserField(usuario!.informacoes_usuario.email),
-        }));
-
-    const handleDownload = async () => {
-        let ids = presentes
-        let usuarios = todosUsuarios
-        try {
-            const res = await fetch(`/api/get/listaDePresenca/${eventId}`)
-            if (!res.ok) throw new Error("lista")
-            ids = (await res.json()).data
-            const faltam = ids.filter((id) => !usuarios.some((u) => u._id === id))
-            if (faltam.length) {
-                const info = await fetch("/api/post/informacoesVariosUsuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(faltam) })
-                if (!info.ok) throw new Error("usuarios")
-                const extras = parseAdminUserListPayload(await info.json().catch(() => null))
-                if (!extras) throw new Error("usuarios")
-                usuarios = [...usuarios, ...extras]
-            }
-        } catch {
-            ids = presentes
-            usuarios = todosUsuarios
-            alert("Não foi possível buscar a lista atual no servidor. A planilha será gerada com a lista desta tela e podem faltar presenças registradas em outros aparelhos.")
-        }
-        if (guardados) alert(`${guardados} presença(s) guardada(s) neste aparelho ainda não chegaram ao servidor e não estão na planilha.`)
-        const data = montar(ids, usuarios)
-        // 1. Crie uma nova planilha a partir dos seus dados JSON
-        const worksheet = XLSX.utils.json_to_sheet(data);
-        // 2. Crie um novo livro (workbook) e adicione a planilha a ele
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Dados'); // "Dados" é o nome da aba da planilha
-
-        // 3. Personalize a largura das colunas (opcional)
-        worksheet['!cols'] = [
-            { wch: 20 }, // Coluna "nome" com 20 caracteres de largura
-            { wch: 15 }, // Coluna "categoria" com 15
-            { wch: 10 }, // Coluna "preco" com 10
-            { wch: 10 }, // Coluna "estoque" com 10
-        ];
-
-        // 4. 
-
-        if (worksheet['!ref']) {
-            // Pega o range atual (por exemplo, "A1:C10")
-            const range = XLSX.utils.decode_range(worksheet['!ref']);
-
-            // Define o novo final da linha como o número total de dados + 1 (para o cabeçalho)
-            range.e.r = data.length; // 'e.r' é o índice da última linha (base 0)
-
-            // Codifica o novo range de volta para o formato A1:C10 e aplica à planilha
-            worksheet['!ref'] = XLSX.utils.encode_range(range);
-        }
-        // 4. Gere o arquivo e acione o download
-        XLSX.writeFile(workbook, 'MinhaPlanilha.xlsx');
-    };
-
-    return (
-        <button
-            type="button"
-            onClick={handleDownload}
-            className="presenca-lista-btn presenca-lista-btn-primary"
-        >
-            <Table size={18} aria-hidden="true" />
-            Gerar Planilha
-        </button>
-    );
-}
-
-export default MyComponent;

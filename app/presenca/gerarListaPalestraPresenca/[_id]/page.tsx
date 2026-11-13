@@ -1,975 +1,354 @@
 'use client'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { LogIn, LogOut, QrCode, RefreshCw } from 'lucide-react'
 import {
-    type AdminUserDetails,
-    type AdminUserSummary,
-    adminUserInitial,
     displayUserField,
     displayUserName,
-    parseAdminUserDetailsPayload,
     parseAdminUserListPayload,
-} from '@/app/lib/users/admin-user-contract';
-import { parseDataObjectPayload } from '@/app/lib/api-data-contract';
-import { Dispatch, SetStateAction, useEffect, useState } from 'react';
-import { Html5Qrcode, CameraDevice, Html5QrcodeCameraScanConfig } from 'html5-qrcode';
-import LoadingModal from '@/app/components/LoadingModal';
-import { useRef } from 'react';
-import { ILecture } from '@/app/lib/types/events/event.t';
-import ConfirmationModal, { ModalProps } from '@/app/components/ConfirmationModal';
-import '../../attendance-detail.css';
-import { Users, CheckCircle, XCircle, QrCode, UserPlus, Loader2, Calendar, Clock, Table, ListChecksIcon } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { useUser } from '@/app/lib/auth0-client';
-import { useParams } from 'next/navigation';
-import { registrarPresenca, sinalizar } from '../../presenca-bip';
-import { limparCodigo } from '../../fila-presenca';
-import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca';
+} from '@/app/lib/users/admin-user-contract'
+import type { AdminUserSummary } from '@/app/lib/users/admin-user-contract'
+import { parseDataObjectPayload } from '@/app/lib/api-data-contract'
+import { useUser } from '@/app/lib/auth0-client'
+import { Aviso, Botao, Cabecalho, Metrica, Pagina, Secao, Selo } from '@/app/components/ui'
+import { Atualizando, Estado } from '@/app/components/Estado'
+import { useAvisos } from '@/app/components/Avisos'
+import { formatarDataHora, formatarNumero } from '@/app/lib/formatar'
+import { LeitorQr } from '../../_componentes/leitor-qr'
+import { normalizarBusca } from '../../_componentes/chamada'
+import { useAcoesChamada } from '../../_componentes/use-acoes-chamada'
+import type { PedidoAcao, Turno } from '../../_componentes/use-acoes-chamada'
+import { useLeituraQr } from '../../_componentes/use-leitura-qr'
+import { usuariosComPresenca } from '../../_componentes/dados-chamada'
+import { AvisoPendentes, usePendentesPresenca } from '../../PendentesPresenca'
+import {
+    BotaoExportar, BuscaChamada, FiltroPresenca, ListaChamada, ListaObservacoes, MarcasPessoa, Recentes,
+    ResultadoLeitura, observacoesBase, useFocoBusca,
+} from '../../_componentes/chamada-ui'
+import type { Filtro, Observacao } from '../../_componentes/chamada-ui'
 
-const parseLecturePayload = (value: unknown): ILecture | null => {
-    const lecture = parseDataObjectPayload(value)
-    if (
-        !lecture ||
-        typeof lecture._id !== "string" ||
-        typeof lecture.name !== "string" ||
-        !Array.isArray(lecture.attendanceListInit) ||
-        !lecture.attendanceListInit.every((id) => typeof id === "string") ||
-        !Array.isArray(lecture.attendanceListEnd) ||
-        !lecture.attendanceListEnd.every((id) => typeof id === "string")
-    ) {
-        return null
-    }
-    return lecture as unknown as ILecture
+interface Palestra { nome: string; entrada: string[]; saida: string[]; encontros: { date_init?: string; local?: string }[] }
+
+const ehTexto = (l: unknown): l is string[] => Array.isArray(l) && l.every((id) => typeof id === 'string')
+
+function lerPalestra(payload: unknown): Palestra | null {
+    const p = parseDataObjectPayload(payload)
+    if (!p || typeof p.name !== 'string' || !ehTexto(p.attendanceListInit) || !ehTexto(p.attendanceListEnd)) return null
+    return { nome: p.name, entrada: p.attendanceListInit, saida: p.attendanceListEnd, encontros: Array.isArray(p.timeline) ? p.timeline : [] }
 }
 
-const MyComponent = () => {
-    const { _id } = useParams<{ _id: string }>();
+const porNome = (a: AdminUserSummary, b: AdminUserSummary) => displayUserName(a).localeCompare(displayUserName(b), 'pt-BR')
+const comId = (s: ReadonlySet<string>, id: string, entra: boolean) => { const n = new Set(s); if (entra) n.add(id); else n.delete(id); return n }
+const casa = (u: AdminUserSummary, termo: string, bruto: string) =>
+    normalizarBusca(displayUserName(u)).includes(termo) || normalizarBusca(u.informacoes_usuario.email ?? '').includes(termo) || u._id === bruto.trim().toLowerCase()
+
+const NOME_TURNO = { init: 'entrada', end: 'saída' } as const
+const VOLTAR = { href: '/presenca', rotulo: 'Voltar às listas de presença' }
+
+export default function ChamadaPalestra() {
+    const { _id } = useParams<{ _id: string }>()
     const user = useUser()
-    const [data, setData] = useState<string[]>([]);
-    const [listType, setListType] = useState<"init" | "end">("init")
-    const [allUsers, setAllUsers] = useState<AdminUserSummary[]>([])
-    const [errorBolean, setErrorBolean] = useState<boolean>(false);
-    const [data2, setData2] = useState<AdminUserSummary[]>([]);
-    const [dataPresentes, setDataPresente] = useState<{
-        "init": string[],
-        "end": string[],
-    }>({
-        init: [],
-        end: []
-    })
-    const [courseData, setCourseData] = useState<ILecture | null>(null)
-    const [isModalProps, setIsModalProps] = useState<ModalProps>({
-        isOpen: false,
-        onClose: () => {
-            setIsModalProps((prev) => ({ ...prev, isOpen: false }))
-        },
-        onConfirm: () => { },
-        title: "Atenção!",
-        children: (
-            <>
-                <p className="presenca-lista-confirmation-copy"></p>
-            </>
-        ),
-        confirmText: "Continuar",
-        cancelText: "Fechar",
-    })
-    const [isOpenAllUsers, setIsOpenAllUsers] = useState<boolean>(false)
+    const { avisar } = useAvisos()
+    // conta administradora atual (a mesma de userPermissionsServerSide); o servidor também valida
+    const podeGerir = Boolean(user?.user?.sub?.includes('6a8799078ecd649be9bdb061'))
 
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string>("");
-    const [loadingContent, setLoadingContent] = useState<boolean>(false)
+    const [carga, setCarga] = useState<'carregando' | 'erro' | 'ok'>('carregando')
+    const [atualizando, setAtualizando] = useState(false)
+    const [palestra, setPalestra] = useState<Palestra | null>(null)
+    const [lista, setLista] = useState<AdminUserSummary[]>([])
+    const [entrada, setEntrada] = useState<ReadonlySet<string>>(new Set())
+    const [saida, setSaida] = useState<ReadonlySet<string>>(new Set())
+    const [turno, setTurno] = useState<Turno>('init')
+    const [busca, setBusca] = useState('')
+    const [filtro, setFiltro] = useState<Filtro>('todos')
+    const [leitorAberto, setLeitorAberto] = useState(false)
+    const [feito, setFeito] = useState<{ lido: number; texto: string } | null>(null)
+    const { ref: refBusca, focar: focarBusca } = useFocoBusca()
+    const { leitura, ler, limpar } = useLeituraQr(lista)
+    const seq = useRef(0)
+    const jaCarregou = useRef(false)
 
-    const hydrateData = async () => {
+    const carregar = useCallback(async (manual: boolean) => {
+        const n = ++seq.current
+        if (manual) setAtualizando(true)
         try {
-            const fetchParticipantAndAttendanceData = async () => {
-                const [courseResponse, allUsersResponse] = await Promise.all([
-                    fetch(`/api/get/palestraProps/${_id}`),
-                    fetch(`/api/get/todosCongressistasInscritos/`),
-                ]);
-
-                if (!courseResponse.ok || !allUsersResponse.ok) {
-                    throw new Error("Erro ao buscar dados de participantes ou lista de presença");
-                }
-
-                const courseResult: unknown = await courseResponse.json().catch(() => null)
-                const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
-                const lecture = parseLecturePayload(courseResult)
-                const normalizedUsers = parseAdminUserListPayload(allUsersResult)
-                if (!lecture || !normalizedUsers) throw new Error("Dados da palestra ou congressistas inválidos")
-
-                setCourseData(lecture)
-                setAllUsers(normalizedUsers)
-                setDataPresente({
-                    init: lecture.attendanceListInit,
-                    end: lecture.attendanceListEnd
-                })
-
-                return normalizedUsers.map((u) => `${u._id}`)
-            };
-
-            const fetchUserInfo = async (userIds: string[]) => {
-                const response = await fetch("/api/post/informacoesVariosUsuarios", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify(userIds),
-                });
-
-                if (!response.ok) {
-                    throw new Error("Erro na resposta da API de informações de usuários");
-                }
-
-                const result: unknown = await response.json().catch(() => null);
-                const normalizedUsers = parseAdminUserListPayload(result)
-                if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
-                setData2(normalizedUsers);
-            };
-
-            const participantIds = await fetchParticipantAndAttendanceData();
-            await fetchUserInfo(participantIds);
-
-        } catch (error) {
-            setErrorBolean(true)
-            setError("OCORREU ALGO ERRADO. RECARREGUE");
+            const [palestraRes, inscritosRes] = await Promise.all([fetch(`/api/get/palestraProps/${_id}`), fetch('/api/get/todosCongressistasInscritos/')])
+            if (!palestraRes.ok || !inscritosRes.ok) throw new Error('carga')
+            const p = lerPalestra(await palestraRes.json().catch(() => null))
+            const l = parseAdminUserListPayload(await inscritosRes.json().catch(() => null))
+            if (!p || !l) throw new Error('dados')
+            if (n !== seq.current) return
+            setPalestra(p); setLista(l); setEntrada(new Set(p.entrada)); setSaida(new Set(p.saida))
+            jaCarregou.current = true
+            setCarga('ok')
+        } catch {
+            if (n !== seq.current) return
+            if (jaCarregou.current) avisar('erro', 'Não foi possível atualizar a lista', 'A lista que está na tela foi mantida. Confira a conexão e tente de novo.')
+            else setCarga('erro')
         } finally {
-            setLoading(false);
+            if (n === seq.current) setAtualizando(false)
         }
-    };
+    }, [_id, avisar])
+
+    useEffect(() => { void carregar(false) }, [carregar])
 
     // presença sem resposta do servidor fica guardada no aparelho e é reenviada; ao entregar, recarrega a lista
-    const { pendentes, enviarAgora } = usePendentesPresenca(_id, () => { void hydrateData() })
-    const guardados = new Set(pendentes.filter((p) => p.eventId === _id && p.turno === listType).map((p) => p.userId))
-    const guardadosAqui = pendentes.filter((p) => p.eventId === _id).length
+    const { pendentes, enviarAgora } = usePendentesPresenca(_id, () => { void carregar(false) })
+    const guardados = useMemo(
+        () => new Map(pendentes.filter((p) => p.eventId === _id && p.turno === turno).map((p) => [p.userId, p.quer])),
+        [pendentes, _id, turno],
+    )
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const fetchParticipantAndAttendanceData = async () => {
-                    const [courseResponse, allUsersResponse] = await Promise.all([
-                        fetch(`/api/get/palestraProps/${_id}`),
-                        fetch(`/api/get/todosCongressistasInscritos/`),
-                    ]);
+    const { ocupados, incertos, recentes, executar, conferir } = useAcoesChamada({
+        atividade: { tipo: 'palestra', eventId: _id },
+        enviar: ({ pessoa, quer, turno: t }: PedidoAcao, signal) => fetch(quer === 'dar' ? '/api/post/darPresencaPalestra' : '/api/post/retirarPresencaPalestra', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ eventId: _id, userId: pessoa._id, listType: t }),
+            signal,
+        }),
+        aplicar: ({ pessoa, quer, turno: t }) => {
+            const id = pessoa._id
+            ;(t === 'end' ? setSaida : setEntrada)((s) => comId(s, id, quer === 'dar'))
+            // quem foi lido pelo QR sem estar na lista de inscritos entra na tela com a presença já marcada
+            setLista((l) => (l.some((u) => u._id === id) ? l : [...l, pessoa].sort(porNome)))
+        },
+        reconsultar: async ({ pessoa, turno: t }) => {
+            const res = await fetch(`/api/get/palestraProps/${_id}`)
+            if (!res.ok) return null
+            const p = lerPalestra(await res.json().catch(() => null))
+            if (!p) return null
+            setPalestra(p); setEntrada(new Set(p.entrada)); setSaida(new Set(p.saida))
+            return { presente: (t === 'end' ? p.saida : p.entrada).includes(pessoa._id), inscrito: true }
+        },
+    })
 
-                    if (!courseResponse.ok || !allUsersResponse.ok) {
-                        throw new Error("Erro ao buscar dados de participantes ou lista de presença");
-                    }
+    const ativo = turno === 'init' ? entrada : saida
+    const nomeTurno = NOME_TURNO[turno]
+    const termo = normalizarBusca(busca)
+    const filtrados = useMemo(
+        () => lista.filter((u) => (filtro === 'todos' || (filtro === 'presentes') === ativo.has(u._id)) && (!termo || casa(u, termo, busca))),
+        [lista, filtro, ativo, termo, busca],
+    )
+    const totais = useMemo(
+        () => ({ entrada: lista.filter((u) => entrada.has(u._id)).length, saida: lista.filter((u) => saida.has(u._id)).length }),
+        [lista, entrada, saida],
+    )
 
-                    const courseResult: unknown = await courseResponse.json().catch(() => null)
-                    const allUsersResult: unknown = await allUsersResponse.json().catch(() => null)
-                    const lecture = parseLecturePayload(courseResult)
-                    const normalizedUsers = parseAdminUserListPayload(allUsersResult)
-                    if (!lecture || !normalizedUsers) throw new Error("Dados da palestra ou congressistas inválidos")
-                    setCourseData(lecture)
-                    setAllUsers(normalizedUsers)
-                    setDataPresente({
-                        init: lecture.attendanceListInit,
-                        end: lecture.attendanceListEnd
-                    })
-                    return normalizedUsers.map((u) => `${u._id}`)
-                };
-
-                const fetchUserInfo = async (userIds: string[]) => {
-                    const response = await fetch("/api/post/informacoesVariosUsuarios", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(userIds),
-                    });
-
-                    if (!response.ok) {
-                        throw new Error("Erro na resposta da API de informações de usuários");
-                    }
-
-                    const result: unknown = await response.json().catch(() => null);
-                    const normalizedUsers = parseAdminUserListPayload(result)
-                    if (!normalizedUsers) throw new Error("Dados dos participantes inválidos")
-                    setData2(normalizedUsers);
-                };
-
-                const participantIds = await fetchParticipantAndAttendanceData();
-                await fetchUserInfo(participantIds);
-
-            } catch (error) {
-                setErrorBolean(true)
-                setError("OCORREU ALGO ERRADO. RECARREGUE");
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [_id]);
-
-    if (loading) {
+    if (carga === 'carregando') {
         return (
-            <main className="presenca-lista-loading-container" role="status" aria-live="polite">
-                <div className="presenca-lista-spinner"><Loader2 size={44} aria-hidden="true" /></div>
-                <span className="presenca-lista-loading-text">Carregando lista de presença...</span>
-            </main>
-        );
+            <Pagina largura="ampla">
+                <Cabecalho etiqueta="Chamada · Palestra" titulo="Lista de presença" voltar={VOLTAR} />
+                <Estado tipo="carregando" titulo="Carregando a chamada…" linhas={4} />
+            </Pagina>
+        )
+    }
+    if (carga === 'erro' || !palestra) {
+        return (
+            <Pagina largura="ampla">
+                <Cabecalho etiqueta="Chamada · Palestra" titulo="Lista de presença" voltar={VOLTAR} />
+                <Estado
+                    tipo="erro"
+                    titulo="Não foi possível abrir a chamada"
+                    texto="A lista não carregou ou esta palestra não existe mais. Confira a conexão e tente de novo."
+                    aoTentar={() => { setCarga('carregando'); void carregar(false) }}
+                />
+            </Pagina>
+        )
     }
 
-    if (error || !courseData) {
-        return (
-            <main className="presenca-lista-state" role="alert">
-                <span className="presenca-lista-state-kicker">Não foi possível abrir esta lista</span>
-                <h1>Erro ao carregar os dados</h1>
-                <p>{error || "A palestra solicitada não foi encontrada."}</p>
-            </main>
-        );
+    const primeiro = palestra.encontros[0]
+    const sub = [primeiro?.date_init ? formatarDataHora(primeiro.date_init) : null, primeiro?.local || null].filter(Boolean).join(' · ') || undefined
+
+    function trocarTurno(novo: Turno) {
+        if (novo === turno) return
+        setTurno(novo)
+        setFiltro('todos')
+        avisar('info', `Agora registrando a ${NOME_TURNO[novo].toUpperCase()}`, 'Toda presença dada ou retirada daqui em diante vale para este turno.')
     }
 
-    const presentes = dataPresentes[listType].length;
-    const ausentes = data2.length - presentes;
-    // conta de admin (mesmo id de app/lib/user/userPermissionsServerSide.ts)
-    const canManageAttendance = Boolean(user?.user?.sub?.includes("6a8799078ecd649be9bdb061"));
+    async function daLeitura(pessoa: AdminUserSummary, quer: 'dar' | 'retirar', lido: number) {
+        const desfecho = await executar({ pessoa, quer, turno })
+        if (desfecho === 'ocupado') return
+        if (desfecho === 'registrado') setFeito({ lido, texto: quer === 'dar' ? `Presença de ${nomeTurno} registrada agora.` : `Presença de ${nomeTurno} retirada agora.` })
+        else if (desfecho === 'jaEstava') setFeito({ lido, texto: quer === 'dar' ? `Já estava com ${nomeTurno}: nada foi alterado.` : `Já estava sem ${nomeTurno}: nada foi alterado.` })
+        else if (desfecho === 'guardado') setFeito({ lido, texto: `${quer === 'dar' ? 'Presença' : 'Retirada'} de ${nomeTurno} guardada neste aparelho: será enviada quando a internet voltar.` })
+        else if (desfecho === 'semResposta') setFeito({ lido, texto: 'Sem resposta do servidor: confira a pessoa na lista antes de repetir.' })
+        requestAnimationFrame(focarBusca)
+    }
+
+    function conteudoLeitura(pessoa: AdminUserSummary) {
+        const id = pessoa._id
+        const presente = ativo.has(id)
+        const obs: Observacao[] = observacoesBase(pessoa)
+        obs.push(presente
+            ? { tom: 'info', texto: `Já tem a ${nomeTurno} registrada.` }
+            : { tom: 'neutro', texto: `A ${nomeTurno} ainda não foi registrada.` })
+        return (
+            <>
+                <div className="flex flex-wrap gap-2">
+                    <Selo tom={entrada.has(id) ? 'ok' : 'neutro'}>Entrada: {entrada.has(id) ? 'registrada' : 'não registrada'}</Selo>
+                    <Selo tom={saida.has(id) ? 'ok' : 'neutro'}>Saída: {saida.has(id) ? 'registrada' : 'não registrada'}</Selo>
+                </div>
+                <ListaObservacoes itens={obs} />
+                {feito && leitura && feito.lido === leitura.lido && <Aviso tom="ok" titulo={feito.texto} />}
+                <div className="flex flex-wrap gap-2">
+                    {presente
+                        ? <Botao estilo="contorno" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'retirar', leitura!.lido)}>Retirar {nomeTurno}</Botao>
+                        : <Botao data-principal="" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'dar', leitura!.lido)}>Registrar {nomeTurno}</Botao>}
+                    <Botao estilo="fantasma" onClick={() => { limpar(); focarBusca() }}>Fechar</Botao>
+                </div>
+            </>
+        )
+    }
+
+    const selo = (marcado: boolean) => (marcado ? <Selo tom="ok">Registrada</Selo> : <Selo>Não registrada</Selo>)
+    const colunas = [
+        { titulo: turno === 'init' ? 'Entrada (ativa)' : 'Entrada', render: (u: AdminUserSummary) => selo(entrada.has(u._id)) },
+        { titulo: turno === 'end' ? 'Saída (ativa)' : 'Saída', render: (u: AdminUserSummary) => selo(saida.has(u._id)) },
+        {
+            titulo: 'Situação',
+            render: (u: AdminUserSummary) => {
+                const e = entrada.has(u._id)
+                const s = saida.has(u._id)
+                return (
+                    <span className="flex flex-wrap gap-1.5">
+                        {e && s ? <Selo tom="ok">Ambas</Selo> : e ? <Selo tom="info">Só entrada</Selo> : s ? <Selo tom="alerta">Só saída</Selo> : <Selo>Sem registro</Selo>}
+                        {incertos.has(u._id) && <Selo tom="alerta">Sem resposta: conferir</Selo>}
+                        {guardados.has(u._id) && <Selo tom="alerta">{guardados.get(u._id) === 'retirar' ? 'Retirada guardada, aguardando envio' : 'Presença guardada, aguardando envio'}</Selo>}
+                    </span>
+                )
+            },
+        },
+    ]
 
     return (
-        <main className="presenca-lista-main-container">
-            <header className="presenca-lista-header">
-                <span className="presenca-lista-eyebrow">CIEPS · Controle de presença</span>
-                <h1 className="presenca-lista-title">{courseData.name}</h1>
-                <p className="presenca-lista-subtitle">
-                    Acompanhe a presença de início e fim, registre participantes e exporte a relação desta palestra.
-                </p>
-            </header>
-
-            <section className="presenca-lista-estatisticas" aria-label="Resumo da lista de presença">
-                <div className="presenca-lista-estatistica-card">
-                    <Users size={28} className="presenca-lista-stat-icon stat-blue" aria-hidden="true" />
-                    <span className="presenca-lista-estatistica-valor">{data2.length}</span>
-                    <span className="presenca-lista-estatistica-label">Total de Inscritos</span>
+        <Pagina largura="ampla">
+            <Cabecalho
+                etiqueta="Chamada · Palestra"
+                titulo={palestra.nome}
+                sub={sub}
+                voltar={VOLTAR}
+                acoes={(
+                    <>
+                        <Botao estilo="contorno" carregando={atualizando} onClick={() => void carregar(true)}>
+                            <RefreshCw className="size-4" aria-hidden="true" />Atualizar lista
+                        </Botao>
+                        <BotaoExportar
+                            rotulo={`Exportar planilha (entrada ${formatarNumero(totais.entrada)} · saída ${formatarNumero(totais.saida)})`}
+                            desabilitado={totais.entrada + totais.saida === 0}
+                            gerar={async () => {
+                                // a tela pode estar velha (outros leitores registram ao mesmo tempo): usa as listas do servidor no momento do clique
+                                let ids = { init: [...entrada], end: [...saida] }
+                                let usuarios: AdminUserSummary[] = lista
+                                try {
+                                    const res = await fetch(`/api/get/palestraProps/${_id}`)
+                                    const atual = res.ok ? lerPalestra(await res.json().catch(() => null)) : null
+                                    if (!atual) throw new Error('palestra')
+                                    ids = { init: atual.entrada, end: atual.saida }
+                                    // quem tem presença mas não está entre os inscritos listados também entra na planilha
+                                    usuarios = await usuariosComPresenca([...ids.init, ...ids.end], lista)
+                                } catch {
+                                    ids = { init: [...entrada], end: [...saida] }
+                                    usuarios = lista
+                                    avisar('alerta', 'Planilha com a lista desta tela', 'Não foi possível buscar a lista atual no servidor: podem faltar presenças registradas em outros aparelhos.')
+                                }
+                                const guardadas = pendentes.filter((p) => p.eventId === _id).length
+                                if (guardadas) avisar('alerta', 'Há presenças fora da planilha', `${guardadas} presença(s) guardada(s) neste aparelho ainda não chegaram ao servidor e não estão na planilha.`)
+                                const XLSX = await import('xlsx')
+                                const linhas = (porId: readonly string[]) => porId.map((id) => usuarios.find((u) => u._id === id)).filter((u): u is AdminUserSummary => !!u).sort(porNome).map((u) => ({
+                                    NOME: displayUserName(u),
+                                    CPF: displayUserField(u.informacoes_usuario.cpf),
+                                    EMAIL: displayUserField(u.informacoes_usuario.email),
+                                }))
+                                const livro = XLSX.utils.book_new()
+                                for (const aba of ['init', 'end'] as const) {
+                                    const planilha = XLSX.utils.json_to_sheet(linhas(ids[aba]))
+                                    planilha['!cols'] = [{ wch: 34 }, { wch: 16 }, { wch: 34 }]
+                                    XLSX.utils.book_append_sheet(livro, planilha, aba)
+                                }
+                                XLSX.writeFile(livro, 'Presenca.xlsx')
+                            }}
+                        />
+                    </>
+                )}
+            >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <Metrica rotulo="Inscritos" valor={formatarNumero(lista.length)} />
+                    <Metrica rotulo="Com entrada" valor={formatarNumero(totais.entrada)} />
+                    <Metrica rotulo="Com saída" valor={formatarNumero(totais.saida)} />
+                    <Metrica rotulo={`Sem ${nomeTurno}`} valor={formatarNumero(lista.length - (turno === 'init' ? totais.entrada : totais.saida))} />
                 </div>
-                <div className="presenca-lista-estatistica-card">
-                    <CheckCircle size={28} className="presenca-lista-stat-icon stat-green" aria-hidden="true" />
-                    <span className="presenca-lista-estatistica-valor">{presentes}</span>
-                    <span className="presenca-lista-estatistica-label">Presentes {listType === "init" ? "Início" : "Fim"}</span>
-                </div>
-                <div className="presenca-lista-estatistica-card">
-                    <XCircle size={28} className="presenca-lista-stat-icon stat-red" aria-hidden="true" />
-                    <span className="presenca-lista-estatistica-valor">{ausentes}</span>
-                    <span className="presenca-lista-estatistica-label">Ausentes {listType === "init" ? "Início" : "Fim"}</span>
-                </div>
-            </section>
+            </Cabecalho>
 
-            <div className="presenca-lista-info" aria-label="Data e horário da consulta">
-                <div className="presenca-lista-info-item">
-                    <Calendar size={18} aria-hidden="true" />
-                    <span>{new Date().toLocaleDateString('pt-BR')}</span>
-                </div>
-                <div className="presenca-lista-info-item">
-                    <Clock size={18} aria-hidden="true" />
-                    <span>{new Date().toLocaleTimeString('pt-BR')}</span>
-                </div>
-            </div>
-
-            <section className="attendance-list-mode" aria-label="Etapa da presença">
-                <div>
-                    <span className="attendance-list-mode-kicker">Lista ativa</span>
-                    <strong>{listType === "init" ? "Início do evento" : "Fim do evento"}</strong>
-                </div>
-                <button
-                    type="button"
-                    onClick={() => {
-                        setListType((prev) => prev === "end" ? "init" : "end")
-                    }}
-                    className="presenca-lista-btn presenca-lista-btn-secondary"
-                    aria-label={`Alternar para presença de ${listType === "init" ? "fim" : "início"} do evento`}
-                >
-                    <ListChecksIcon size={18} aria-hidden="true" />
-                    Alternar para {listType === "init" ? "fim" : "início"}
-                </button>
-            </section>
-
-            <section className="presenca-lista-actions" aria-label="Ações da lista">
-                <QRCodeScanner courseData={courseData} hydrateData={hydrateData} listType={listType} usuariosCarregados={allUsers} />
-                {
-                    canManageAttendance &&
-                    <button
-                        type="button"
-                        onClick={() => setIsOpenAllUsers(true)}
-                        className="presenca-lista-btn presenca-lista-btn-primary"
-                    >
-
-                        <UserPlus size={18} aria-hidden="true" />
-                        Adicionar Usuário
-                    </button>
-                }
-                <ExportButton eventId={_id} guardados={guardadosAqui} inscritos={data} presentes={dataPresentes} todosUsuarios={data2} />
-            </section>
-
-            {errorBolean && (
-                <p className="presenca-lista-inline-error" role="alert">
-                    Não foi possível concluir a última atualização. Tente novamente.
-                </p>
-            )}
             <AvisoPendentes pendentes={pendentes} eventId={_id} enviarAgora={enviarAgora} />
 
-            <div
-                className="presenca-lista-table-container"
-                role="region"
-                aria-label={`Congressistas e presença de ${listType === "init" ? "início" : "fim"}`}
-                tabIndex={0}
+            <section
+                aria-label="Turno ativo"
+                className={`grid gap-3 rounded-2xl border-2 p-4 sm:p-5 ${turno === 'init' ? 'border-info bg-info-fundo text-info' : 'border-alerta bg-alerta-fundo text-alerta'}`}
             >
-                <table className="presenca-lista-table">
-                    <caption className="presenca-lista-sr-only">
-                        Congressistas e status de presença de {listType === "init" ? "início" : "fim"} da palestra
-                    </caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Nome</th>
-                            <th scope="col">Email</th>
-                            <th scope="col">Status</th>
-                            {
-                                canManageAttendance &&
-                                <th scope="col" className="presenca-lista-acoes">Ações</th>
-                            }
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {data2.map((item, index) => (
-                            <tr key={item._id} className="presenca-lista-row">
-                                <td className="presenca-lista-nome">
-                                    <span>{index + 1}. {displayUserName(item).toLocaleUpperCase("pt-BR")}</span>
-                                </td>
-                                <td className="presenca-lista-email">{displayUserField(item.informacoes_usuario.email)}</td>
-                                <td className="presenca-lista-status">
-                                    <span className={`presenca-lista-status-badge ${dataPresentes[listType].includes(item._id) ? 'presente' : 'ausente'}`}>
-                                        {dataPresentes[listType].includes(`${item._id}`) ? "PRESENTE" : "AUSENTE"}
-                                    </span>
-                                    {guardados.has(item._id) && <span className="presenca-lista-status-badge ausente">GUARDADA, AGUARDANDO ENVIO</span>}
-                                </td>
-                                {
-                                    canManageAttendance &&
-                                    <td className="presenca-lista-acoes">
-                                        <button
-                                            type="button"
-                                            className={`presenca-lista-btn ${dataPresentes[listType].includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
-                                            onClick={async () => {
-                                                setLoadingContent(true)
-                                                try {
-                                                    const quer = dataPresentes[listType].includes(item._id) ? "retirar" : "dar"
-                                                    const r = await registrarPresenca({ tipo: "palestra", eventId: _id, turno: listType, userId: item._id, nome: item.informacoes_usuario.nome ?? "", quer })
-                                                    if (r.estado === "registrado" || r.estado === "jaEstava") {
-                                                        await hydrateData()
-                                                    } else {
-                                                        alert(r.mensagem)
-                                                    }
-                                                }
-                                                catch {
-                                                    setErrorBolean(true)
-                                                }
-                                                finally {
-                                                    setLoadingContent(false)
-                                                }
-                                            }}
-                                        >
-                                            {dataPresentes[listType].includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
-                                        </button>
-                                    </td>
-                                }
-                            </tr>
-                        ))}
-                        {data2.length === 0 && (
-                            <tr>
-                                <td className="presenca-lista-empty-cell" colSpan={canManageAttendance ? 4 : 3}>
-                                    Nenhum congressista disponível para esta palestra.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            <LoadingModal isLoading={loadingContent} />
-            <ConfirmationModal {...isModalProps} />
-            {isOpenAllUsers && (
-                <AllUsersModal
-                    listType={listType}
-                    setListType={setListType}
-                    courseData={courseData}
-                    isOpen={true}
-                    onClose={() => { setIsOpenAllUsers(false) }}
-                    onUserSelect={async (userId: string) => {
-                        setLoadingContent(true)
-                        const nome = allUsers.find((u) => `${u._id}` === userId)?.informacoes_usuario?.nome ?? ""
-                        const r = await registrarPresenca({ tipo: "palestra", eventId: _id, turno: listType, userId, nome, quer: "dar" })
-                        if (r.estado !== "registrado" && r.estado !== "jaEstava") {
-                            alert(r.mensagem)
-                            setLoadingContent(false)
-                            return;
-                        }
-                        await hydrateData()
-                        setIsOpenAllUsers(false)
-                        setLoadingContent(false)
-                    }}
-                    usersData={allUsers}
-                />
-            )}
-        </main>
-    );
-};
-//
-//
-const QRCodeScanner: React.FC<{ listType: "end" | "init", courseData: ILecture, hydrateData: () => Promise<void>, usuariosCarregados: AdminUserSummary[] }> = ({ courseData, hydrateData, listType, usuariosCarregados }) => {
-    // Estado para controlar a visibilidade do scanner
-    const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
-    // Estado para armazenar a lista de câmeras disponíveis
-    const [cameras, setCameras] = useState<CameraDevice[]>([]);
-    // Estado para armazenar o ID da câmera selecionada
-    const [selectedCameraId, setSelectedCameraId] = useState<string>('');
-    // Estado para armazenar o resultado do QR Code lido
-    const [qrCodeResult, setQrCodeResult] = useState<string | null>(null);
-    const [scannerError, setScannerError] = useState<string>('');
-
-    // Referência para a instância do leitor de QR Code para podermos controlá-la
-    const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
-    const readerId = "qr-code-reader"; // ID do elemento div onde o vídeo da câmera será renderizado
-
-    // Hook para buscar as câmeras disponíveis quando o scanner for aberto
-    useEffect(() => {
-        const fetchCameras = async () => {
-            try {
-                const devices = await Html5Qrcode.getCameras();
-                if (devices && devices.length) {
-                    setCameras(devices);
-                    // Seleciona a primeira câmera da lista como padrão
-                    if (!selectedCameraId) {
-                        setSelectedCameraId(devices[0].id);
-                    }
-                } else {
-                    setScannerError("Nenhuma câmera foi encontrada neste dispositivo.");
-                }
-            } catch (error) {
-                console.error('Erro ao buscar câmeras:', error);
-                setScannerError("Não foi possível acessar a câmera. Confira a permissão do navegador.");
-            }
-        };
-
-        if (isScannerOpen) {
-            fetchCameras();
-        }
-    }, [isScannerOpen, selectedCameraId]);
-
-    // Hook para iniciar e parar o scanner
-    useEffect(() => {
-        // Inicia o scanner apenas se estiver aberto e uma câmera for selecionada
-        if (isScannerOpen && selectedCameraId) {
-            // Cria uma nova instância do leitor de QR code
-            const html5QrCode = new Html5Qrcode(readerId);
-            html5QrCodeRef.current = html5QrCode;
-
-            // Função de callback para quando um QR Code for lido com sucesso
-            const qrCodeSuccessCallback = (decodedText: string) => {
-                setQrCodeResult(decodedText);
-                closeScanner(); // Fecha o scanner automaticamente após a leitura
-            };
-
-            // Configurações do scanner
-            const config: Html5QrcodeCameraScanConfig = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                // aspectRatio: 1.0,
-            };
-
-            // Inicia o scanner
-            html5QrCode.start(
-                selectedCameraId,
-                config,
-                qrCodeSuccessCallback,
-                (errorMessage) => {
-                    // issaqui dá erro toda hora, e os erros não alteram a funcionalidade. então deixa isso pra lá, não compensa mostrar o erro na tela;
-                }
-            ).catch((err) => {
-                console.error(`Não foi possível iniciar o scanner: ${err}`);
-                setScannerError("Não foi possível iniciar a leitura. Selecione outra câmera ou confira a permissão do navegador.");
-            });
-        }
-
-        // Função de limpeza: para o scanner quando o componente é desmontado
-        return () => {
-            if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                html5QrCodeRef.current.stop().catch(err => {
-                    console.error("Falha ao parar o scanner.", err);
-                });
-            }
-        };
-    }, [isScannerOpen, selectedCameraId]);
-
-    const openScanner = () => {
-        setScannerError('');
-        setIsScannerOpen(true);
-    };
-
-    const closeScanner = () => {
-        if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-            html5QrCodeRef.current.stop().catch(err => {
-                console.error("Falha ao parar o scanner.", err);
-            });
-        }
-        setIsScannerOpen(false);
-    };
-
-    const closeModal = () => {
-        setQrCodeResult(null);
-    };
-
-    return (
-        <div className="attendance-scanner">
-            {/* Botão para iniciar o processo */}
-            <div className="attendance-scanner-trigger">
-                {!isScannerOpen && !qrCodeResult && (
-                    <button
-                        type="button"
-                        onClick={openScanner}
-                        className="presenca-lista-btn presenca-lista-btn-secondary"
-                    >
-                        <QrCode size={18} aria-hidden="true" />
-                        Presença por QrCode
-                    </button>
-                )}
-            </div>
-            {/* Seção do Scanner */}
-            {isScannerOpen && (
-                <section className="attendance-scanner-panel" aria-labelledby="scanner-title-palestra">
-                    <div className="attendance-scanner-heading">
-                        <div>
-                            <span className="attendance-scanner-kicker">Leitura de credencial</span>
-                            <h2 id="scanner-title-palestra">Escanear QR Code</h2>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={closeScanner}
-                            className="presenca-lista-btn presenca-lista-btn-ghost"
-                        >
-                            Fechar Câmera
-                        </button>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em]">Registrando agora</p>
+                        <p className="titulo flex items-center gap-2 text-3xl uppercase">
+                            {turno === 'init' ? <LogIn className="size-7" aria-hidden="true" /> : <LogOut className="size-7" aria-hidden="true" />}
+                            {nomeTurno}
+                        </p>
                     </div>
-                    <label className="attendance-scanner-label" htmlFor="camera-select-palestra">
-                        Câmera
-                    </label>
-                    <select
-                        id="camera-select-palestra"
-                        onChange={(e) => {
-                            setScannerError('');
-                            setSelectedCameraId(e.target.value);
-                        }}
-                        value={selectedCameraId}
-                        className="attendance-scanner-select"
-                    >
-                        {cameras.length === 0 && <option value="">Buscando câmeras...</option>}
-                        {cameras.map((camera) => (
-                            <option key={camera.id} value={camera.id}>
-                                {camera.label || `Câmera ${camera.id}`}
-                            </option>
-                        ))}
-                    </select>
-                    {scannerError && <p className="attendance-scanner-error" role="alert">{scannerError}</p>}
-                    {/* O quadrado da câmera será renderizado aqui */}
-                    <div id={readerId} className="attendance-scanner-reader" aria-label="Visualização da câmera"></div>
-                    <p className="attendance-scanner-help">Posicione o QR Code dentro da área destacada.</p>
-                </section>
-            )}
-
-            {/* Modal com o Resultado */}
-            {qrCodeResult && (
-                <ModalUserFound listType={listType} courseData={courseData} hydrateData={hydrateData} qrCodeResult={qrCodeResult} closeModal={closeModal} usuariosCarregados={usuariosCarregados} />
-            )}
-        </div>
-    );
-};
-
-const ModalUserFound: React.FC<{ listType: "end" | "init", courseData: ILecture, qrCodeResult: string, closeModal: () => void, hydrateData: () => Promise<void>, usuariosCarregados: AdminUserSummary[] }> = ({ hydrateData, courseData, qrCodeResult, closeModal, listType, usuariosCarregados }) => {
-    const [isLoading, setIsLoading] = useState<boolean>(true)
-    const [user, setUser] = useState<AdminUserDetails | AdminUserSummary | null>(null)
-    const [erroLeitura, setErroLeitura] = useState<string>("")
-    const [semRede, setSemRede] = useState<boolean>(false)
-    const [loadError, setLoadError] = useState<string | null>(null)
-    useEffect(() => {
-        const fetchUser = async () => {
-            const codigo = limparCodigo(qrCodeResult)
-            if (!codigo) {
-                sinalizar("erro")
-                setErroLeitura("QR inválido: este código não é de uma credencial do CIEPS. Nada foi registrado.")
-                setIsLoading(false)
-                return
-            }
-            try {
-                const userFetch = await fetch(`/api/get/usuarioPorId/${codigo}`)
-                if (userFetch.status >= 500) throw new Error("servidor")
-                const payload: unknown = await userFetch.json().catch(() => null)
-                if (!userFetch.ok) {
-                    sinalizar("erro")
-                    setErroLeitura(userFetch.status === 404 ? "Credencial não encontrada: não existe cadastro com este código. Nada foi registrado." : "Não foi possível consultar esta credencial. Leia de novo.")
-                    return
-                }
-                const normalizedUser = parseAdminUserDetailsPayload(payload)
-                if (!normalizedUser) {
-                    sinalizar("erro")
-                    setLoadError("Dados do usuário inválidos")
-                    return
-                }
-                setUser(normalizedUser)
-            } catch {
-                // sem internet: usa a lista que já está carregada nesta tela para a chamada continuar
-                const local = usuariosCarregados.find((u) => `${u._id}` === codigo)
-                if (local) {
-                    setUser(local)
-                    setSemRede(true)
-                } else {
-                    sinalizar("erro")
-                    setErroLeitura("Sem conexão e esta credencial não está na lista carregada nesta tela. Leia de novo quando a internet voltar.")
-                }
-            } finally {
-                setIsLoading(false)
-            }
-        }
-        fetchUser()
-    }, [qrCodeResult, usuariosCarregados])
-
-    useEffect(() => {
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                closeModal();
-            }
-        };
-        window.addEventListener("keydown", handleEscape);
-        return () => window.removeEventListener("keydown", handleEscape);
-    }, [closeModal]);
-
-    return (
-        <>
-            <LoadingModal isLoading={isLoading} />
-            <div className="attendance-modal-overlay" onClick={closeModal}>
-                <div
-                    className="attendance-modal"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="qr-result-title-palestra"
-                    onClick={(event) => event.stopPropagation()}
-                >
-                    <header className="attendance-modal-header">
-                        <div>
-                            <span className="attendance-modal-kicker">Leitura concluída</span>
-                            <h3 id="qr-result-title-palestra">Usuário identificado</h3>
-                        </div>
-                        <button type="button" className="attendance-modal-close" onClick={closeModal} aria-label="Fechar modal">
-                            ×
-                        </button>
-                    </header>
-                    <div className="attendance-modal-body">
-                        <section className="attendance-modal-section">
-                            <span className="attendance-modal-label">ID de usuário</span>
-                            <p className="attendance-modal-code">{qrCodeResult}</p>
-                        </section>
-                        <section className="attendance-modal-section">
-                            <span className="attendance-modal-label">Informações gerais</span>
-                            <dl className="attendance-user-details">
-                                <div><dt>Nome</dt><dd>{user ? displayUserName(user) : "Não informado"}</dd></div>
-                                <div><dt>CPF</dt><dd>{displayUserField(user?.informacoes_usuario.cpf ?? null)}</dd></div>
-                                <div><dt>E-mail</dt><dd>{displayUserField(user?.informacoes_usuario.email ?? null)}</dd></div>
-                                <div><dt>Telefone</dt><dd>{displayUserField(user?.informacoes_usuario.numero_telefone ?? null)}</dd></div>
-                            </dl>
-                        </section>
-                        <section className="attendance-modal-section">
-                            <span className="attendance-modal-label">Observações</span>
-                            <div className="attendance-feedback-list" aria-live="polite">
-                                {erroLeitura && <p className="attendance-feedback attendance-feedback-warning" role="alert">{erroLeitura}</p>}
-                                {semRede && <p className="attendance-feedback attendance-feedback-warning">Sem conexão: dados da lista carregada nesta tela. A presença fica guardada neste aparelho e é enviada quando a internet voltar.</p>}
-                                {user && user.pagamento.situacao !== 1 && (
-                                    <p className="attendance-feedback attendance-feedback-warning">
-                                        Atenção: esse congressista não realizou o pagamento do congresso.
-                                    </p>
-                                )}
-                                {loadError && (
-                                    <p className="attendance-feedback attendance-feedback-warning">{loadError}</p>
-                                )}
-                                {user?.cadastroPendente && (
-                                    <p className="attendance-feedback attendance-feedback-warning">
-                                        Cadastro pendente: alguns dados pessoais ainda não foram informados.
-                                    </p>
-                                )}
-                                {listType === "init" && courseData.attendanceListInit?.includes(user?._id || "") && (
-                                    <p className="attendance-feedback attendance-feedback-positive">Presença de início já registrada.</p>
-                                )}
-                                {user && listType === "init" && !courseData.attendanceListInit?.includes(user._id) && (
-                                    <p className="attendance-feedback attendance-feedback-neutral">Presença de início ainda não registrada.</p>
-                                )}
-                                {listType === "end" && courseData.attendanceListEnd?.includes(user?._id || "") && (
-                                    <p className="attendance-feedback attendance-feedback-positive">Presença de fim já registrada.</p>
-                                )}
-                                {user && listType === "end" && !courseData.attendanceListEnd?.includes(user._id) && (
-                                    <p className="attendance-feedback attendance-feedback-neutral">Presença de fim ainda não registrada.</p>
-                                )}
-                            </div>
-                        </section>
+                    <div role="group" aria-label="Trocar o turno registrado" className="flex gap-2">
+                        <Botao estilo={turno === 'init' ? 'principal' : 'contorno'} aria-pressed={turno === 'init'} onClick={() => trocarTurno('init')}>Entrada</Botao>
+                        <Botao estilo={turno === 'end' ? 'principal' : 'contorno'} aria-pressed={turno === 'end'} onClick={() => trocarTurno('end')}>Saída</Botao>
                     </div>
-                    <footer className="attendance-modal-actions">
-                        {user && ((listType === "init" && !courseData.attendanceListInit?.includes(user._id)) ||
-                            (listType === "end" && !courseData.attendanceListEnd?.includes(user._id))) && (
-                                <button
-                                    type="button"
-                                    onClick={
-                                        async () => {
-                                            setIsLoading(true)
-                                            const r = await registrarPresenca({ tipo: "palestra", eventId: courseData._id, turno: listType, userId: user._id, nome: user.informacoes_usuario?.nome ?? "", quer: "dar" })
-                                            if (r.estado === "registrado" || r.estado === "jaEstava") await hydrateData()
-                                            setIsLoading(false)
-                                            alert(r.mensagem)
-                                            if (r.estado !== "recusado" && r.estado !== "atividadeInexistente") closeModal()
-
-                                        }
-                                    }
-                                    className="presenca-lista-btn presenca-lista-btn-success"
-                                >
-                                    Dar Presença · {listType === "init" ? "Início" : "Fim"}
-                                </button>
-                            )}
-                        {user && ((listType === "init" && courseData.attendanceListInit?.includes(user._id)) ||
-                            (listType === "end" && courseData.attendanceListEnd?.includes(user._id))) && (
-                                <button
-                                    type="button"
-                                    onClick={
-                                        async () => {
-                                            setIsLoading(true)
-                                            const r = await registrarPresenca({ tipo: "palestra", eventId: courseData._id, turno: listType, userId: user._id, nome: user.informacoes_usuario?.nome ?? "", quer: "retirar" })
-                                            if (r.estado === "registrado" || r.estado === "jaEstava") await hydrateData()
-                                            setIsLoading(false)
-                                            alert(r.mensagem)
-                                            if (r.estado !== "recusado" && r.estado !== "atividadeInexistente") closeModal()
-
-                                        }
-                                    }
-                                    className="presenca-lista-btn presenca-lista-btn-danger"
-                                >
-                                    Retirar Presença · {listType === "init" ? "Início" : "Fim"}
-                                </button>
-                            )}
-                        <button type="button" onClick={closeModal} className="presenca-lista-btn presenca-lista-btn-ghost">
-                            Fechar
-                        </button>
-                    </footer>
                 </div>
-            </div>
-        </>
+                <p className="text-sm">Toda presença dada ou retirada nesta tela vale para a <strong>{nomeTurno}</strong>. A tela só registra: a regra de frequência para certificado é definida pela comissão.</p>
+            </section>
+
+            <Secao titulo="Credenciamento" descricao={`Leia o QR da credencial ou busque a pessoa. Cada registro vale para a ${nomeTurno}.`}>
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+                    <div className="grid content-start gap-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <BuscaChamada valor={busca} aoMudar={setBusca} dica="Nome, e-mail ou código da credencial" foco={refBusca} />
+                            {!leitorAberto && (
+                                <Botao onClick={() => setLeitorAberto(true)}><QrCode className="size-4" aria-hidden="true" />Ler QR</Botao>
+                            )}
+                        </div>
+                        {leitorAberto && <LeitorQr aoLer={ler} aoFechar={() => setLeitorAberto(false)} />}
+                        {leitura && <ResultadoLeitura leitura={leitura} aoFechar={() => { limpar(); focarBusca() }}>{conteudoLeitura}</ResultadoLeitura>}
+                    </div>
+                    <Recentes itens={recentes} />
+                </div>
+            </Secao>
+
+            <Secao
+                titulo={`Lista de inscritos · ${nomeTurno}`}
+                descricao={`${formatarNumero(filtrados.length)} de ${formatarNumero(lista.length)} pessoas${termo ? ' na busca' : ''}.`}
+                acoes={<Atualizando ativo={atualizando} />}
+            >
+                <FiltroPresenca valor={filtro} aoMudar={setFiltro} rotulos={{ todos: 'Todos', ausentes: `Sem ${nomeTurno}`, presentes: `Com ${nomeTurno}` }} />
+                {lista.length === 0 && <Estado tipo="vazio" titulo="Nenhum inscrito nesta palestra" texto="Quando houver congressistas com ingresso confirmado, eles aparecem aqui." />}
+                {lista.length > 0 && filtrados.length === 0 && (
+                    <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={() => { setBusca(''); setFiltro('todos') }}>Limpar busca e filtro</Botao>} />
+                )}
+                {filtrados.length > 0 && (
+                    <ListaChamada
+                        rotulo={`Inscritos e presença de ${nomeTurno} na palestra`}
+                        pessoas={filtrados}
+                        classeTabela="[&_table]:min-w-[60rem]"
+                        colunas={colunas}
+                        extraNome={(u) => <MarcasPessoa u={u} />}
+                        acoes={podeGerir ? (u) => {
+                            const nome = displayUserName(u)
+                            const ocupado = ocupados.has(u._id)
+                            if (incertos.has(u._id)) {
+                                return <Botao estilo="contorno" carregando={ocupado} onClick={() => void conferir(u, turno)} aria-label={`Conferir a situação de ${nome}`}>Conferir</Botao>
+                            }
+                            return ativo.has(u._id)
+                                ? <Botao estilo="contorno" carregando={ocupado} onClick={() => void executar({ pessoa: u, quer: 'retirar', turno })} aria-label={`Retirar a ${nomeTurno} de ${nome}`}>Retirar {nomeTurno}</Botao>
+                                : <Botao carregando={ocupado} onClick={() => void executar({ pessoa: u, quer: 'dar', turno })} aria-label={`Registrar a ${nomeTurno} de ${nome}`}>Registrar {nomeTurno}</Botao>
+                        } : undefined}
+                    />
+                )}
+            </Secao>
+        </Pagina>
     )
 }
-//
-interface AllUsersModalProps {
-    courseData: ILecture;
-    isOpen: boolean;
-    onClose: () => void;
-    onUserSelect: (user: string) => Promise<void>; // Função para lidar com a seleção
-    usersData: AdminUserSummary[];
-    setListType: Dispatch<SetStateAction<"init" | "end">>,
-    listType: "init" | "end"
-}
-
-const AllUsersModal: React.FC<AllUsersModalProps> = ({ courseData, isOpen, onClose, onUserSelect, usersData, setListType, listType }) => {
-
-    const [searchTerm, setSearchTerm] = useState('');
-    // Efeito para fechar com a tecla 'Esc'
-    useEffect(() => {
-        const handleEsc = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                onClose();
-            }
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => {
-            window.removeEventListener('keydown', handleEsc);
-        };
-    }, [onClose]);
-
-    // Não renderiza nada se não estiver aberto
-    if (!isOpen) {
-        return null;
-    }
-
-
-
-    const filteredUsers = usersData.filter(user => {
-        const term = searchTerm.toLowerCase().trim();
-        if (!term) return true; // Mostra todos se a busca estiver vazia
-
-        const nome = user?.informacoes_usuario?.nome?.toLowerCase();
-        const email = user?.informacoes_usuario?.email?.toLowerCase();
-
-        return nome?.includes(term) || email?.includes(term);
-    });
-
-    return (
-        <div className="all-users-modal-overlay">
-            <div className="all-users-modal-backdrop" onClick={onClose} aria-hidden="true"></div>
-            <div
-                className="all-users-modal-container"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="all-users-title-palestra"
-            >
-                <div className="all-users-modal-header">
-                    <div>
-                        <span className="all-users-modal-kicker">Inclusão manual</span>
-                        <h2 id="all-users-title-palestra" className="all-users-modal-title">Escolha um congressista</h2>
-                    </div>
-                    <button type="button" onClick={onClose} className="all-users-modal-close-btn" aria-label="Fechar modal">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                </div>
-                <div className="all-users-modal-mode">
-                    <span className="all-users-modal-search-title">Realizar a presença para</span>
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setListType((prev) => prev === "end" ? "init" : "end")
-                        }}
-                        className="presenca-lista-btn presenca-lista-btn-secondary"
-                    >
-                        <ListChecksIcon size={18} aria-hidden="true" />
-                        {listType === "init" ? "Início do evento" : "Fim do evento"}
-                    </button>
-                </div>
-                <div className="all-users-modal-search-section">
-                    <label className="all-users-modal-search-title" htmlFor="all-users-search-palestra">Pesquisar congressista</label>
-                    <input
-                        id="all-users-search-palestra"
-                        type="text"
-                        placeholder="Filtrar por nome ou e-mail..."
-                        className="all-users-modal-search-input"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <div className="all-users-modal-body">
-                    <div className="all-users-modal-list">
-                        {filteredUsers.map((user) => (
-                            <button
-                                type="button"
-                                key={user._id}
-                                onClick={() => onUserSelect(user._id)}
-                                className="all-users-modal-user-button"
-                            >
-                                <div className="all-users-modal-user-card">
-                                    <div className="all-users-modal-user-content">
-                                        <div className="all-users-modal-user-avatar">
-                                            <span className="all-users-modal-avatar-text">
-                                                {adminUserInitial(user)}
-                                            </span>
-                                        </div>
-                                        <div className="all-users-modal-user-info">
-                                            <p className="all-users-modal-user-name">
-                                                {user.informacoes_usuario.titulo_honorario} {displayUserName(user)}
-                                            </p>
-                                            <p className="all-users-modal-user-email">{displayUserField(user.informacoes_usuario.email)}</p>
-                                            {user.cadastroPendente && (
-                                                <p className="all-users-modal-payment-status">Cadastro pendente</p>
-                                            )}
-                                            {user.pagamento.situacao != 1 && (
-                                                <p className="all-users-modal-payment-status">Não inscrito no congresso</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </button>
-                        ))}
-                        {filteredUsers.length === 0 && (
-                            <p className="all-users-modal-empty">Nenhum congressista corresponde à busca.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-function ExportButton({
-    eventId,
-    guardados,
-    inscritos,
-    presentes,
-    todosUsuarios,
-}: {
-    eventId: string;
-    guardados: number;
-    inscritos: string[];
-    presentes: { init: string[]; end: string[] };
-    todosUsuarios: AdminUserSummary[];
-}) {
-    // a tela pode estar velha (outros leitores registram ao mesmo tempo): a planilha usa a lista do servidor no momento do clique
-    const getDataFromIds = (ids: string[], todosUsuarios: AdminUserSummary[]) =>
-        ids
-            .map((usuarioId: string) => todosUsuarios.find(u => u._id === usuarioId))
-            .filter((usuario): usuario is AdminUserSummary => usuario !== undefined)
-            .map(usuario => ({
-                NOME: displayUserName(usuario),
-                CPF: displayUserField(usuario.informacoes_usuario.cpf),
-                EMAIL: displayUserField(usuario.informacoes_usuario.email),
-            }));
-
-    const handleDownload = async () => {
-        let listas = presentes
-        let usuarios = todosUsuarios
-        try {
-            const res = await fetch(`/api/get/palestraProps/${eventId}`)
-            if (!res.ok) throw new Error("palestra")
-            const palestra: { data: ILecture } = await res.json()
-            listas = { init: palestra.data.attendanceListInit ?? [], end: palestra.data.attendanceListEnd ?? [] }
-            // quem tem presença mas não está entre os inscritos com pagamento confirmado também entra na planilha
-            const faltam = [...new Set([...listas.init, ...listas.end])].filter((id) => !usuarios.some((u) => u._id === id))
-            if (faltam.length) {
-                const info = await fetch("/api/post/informacoesVariosUsuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(faltam) })
-                if (!info.ok) throw new Error("usuarios")
-                const extras = parseAdminUserListPayload(await info.json().catch(() => null))
-                if (!extras) throw new Error("usuarios")
-                usuarios = [...usuarios, ...extras]
-            }
-        } catch {
-            listas = presentes
-            usuarios = todosUsuarios
-            alert("Não foi possível buscar a lista atual no servidor. A planilha será gerada com a lista desta tela e podem faltar presenças registradas em outros aparelhos.")
-        }
-        if (guardados) alert(`${guardados} presença(s) guardada(s) neste aparelho ainda não chegaram ao servidor e não estão na planilha.`)
-        // Cria as duas listas (init e end)
-        const initData = getDataFromIds(listas.init, usuarios);
-        const endData = getDataFromIds(listas.end, usuarios);
-
-        // Cria o workbook
-        const workbook = XLSX.utils.book_new();
-
-        // Cria a aba "init"
-        const initSheet = XLSX.utils.json_to_sheet(initData);
-        initSheet["!cols"] = [
-            { wch: 20 },
-            { wch: 15 },
-            { wch: 25 },
-        ];
-        XLSX.utils.book_append_sheet(workbook, initSheet, "init");
-
-        // Cria a aba "end"
-        const endSheet = XLSX.utils.json_to_sheet(endData);
-        endSheet["!cols"] = [
-            { wch: 20 },
-            { wch: 15 },
-            { wch: 25 },
-        ];
-        XLSX.utils.book_append_sheet(workbook, endSheet, "end");
-
-        // Salva o arquivo
-        XLSX.writeFile(workbook, "Presenca.xlsx");
-    };
-
-    return (
-        <button
-            type="button"
-            onClick={handleDownload}
-            className="presenca-lista-btn presenca-lista-btn-primary"
-        >
-            <Table size={18} aria-hidden="true" />
-            Gerar Planilha
-        </button>
-    );
-}
-
-
-
-
-export default MyComponent;

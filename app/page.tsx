@@ -1,92 +1,64 @@
-"use client"
+import Link from "next/link";
+import { ArrowUpRight, CalendarDays, ClipboardList, CreditCard, FileText, UserCheck, Users } from "lucide-react";
+import { Aviso, Cabecalho, Pagina } from "@/app/components/ui";
+import { menuDaSessao } from "@/app/lib/menu-admin-servidor";
+import type { IconeMenu } from "@/app/lib/menu-admin";
 
-import Link from "next/link"
-import {
-  BriefcaseBusiness,
-  CircleDollarSign,
-  ClipboardList,
-  Settings,
-  UserRound,
-  UserCheck,
-} from "lucide-react"
+const ICONES: Record<Exclude<IconeMenu, "inicio">, typeof Users> = {
+  usuarios: Users,
+  trabalhos: FileText,
+  listas: ClipboardList,
+  presenca: UserCheck,
+  financeiro: CreditCard,
+  atividades: CalendarDays,
+};
 
-const adminModules = [
-  {
-    href: "/trabalhos",
-    title: "Trabalhos",
-    description: "Acompanhe submissões, pareceres, arquivos e status de avaliação.",
-    icon: BriefcaseBusiness,
-  },
-  {
-    href: "/listas",
-    title: "Listas",
-    description: "Gere listas de participantes por atividade, minicurso ou palestra.",
-    icon: ClipboardList,
-  },
-  {
-    href: "/presenca",
-    title: "Presença",
-    description: "Controle listas de presença e rotinas de conferência do evento.",
-    icon: UserCheck,
-  },
-  {
-    href: "/financeiro",
-    title: "Financeiro",
-    description: "Revise pagamentos, parcelamentos e configurações de inscrição.",
-    icon: CircleDollarSign,
-  },
-  {
-    href: "/usuarios",
-    title: "Usuários",
-    description: "Consulte congressistas, perfis, status de cadastro e inscrições.",
-    icon: UserRound,
-  },
-  {
-    href: "/gerenciarMinicursos/",
-    title: "Atividades",
-    description: "Configure minicursos, vagas, cronogramas e visibilidade pública.",
-    icon: Settings,
-  },
-]
+// Cor do ladrilho por coluna da grade (azul, vermelho, amarelo), repetida em cada fileira. Texto sempre ≥ 4,5:1 sobre o ladrilho.
+const LADRILHO = ["bg-info text-white", "bg-acao text-white", "bg-destaque text-tinta"];
 
-export default function Page() {
+export default async function Page() {
+  // só os destinos que a conta pode abrir (mesma regra do proxy)
+  const menu = await menuDaSessao();
+  const destinos = (menu?.itens ?? []).filter((i) => i.icone !== "inicio");
+
   return (
-    <div className="main-container">
-      <div className="content-area">
-        <PaginaAreaDoCliente />
-      </div>
-    </div>
-  )
-}
+    <Pagina>
+      <Cabecalho
+        etiqueta="Administração"
+        titulo="Início"
+        sub="Escolha o que você vai fazer agora. Aparecem só as áreas liberadas para a sua conta."
+      />
 
-function PaginaAreaDoCliente() {
-  return (
-    <>
-      <span className="main-eyebrow">CIEPS 2026 / Administração</span>
-      <h1 className="main-title">Área do Administrador</h1>
-      <p className="main-subtitle">
-        Painel central para operar participantes, trabalhos, presenças,
-        pagamentos e atividades do congresso com uma interface mais clara,
-        densa e alinhada à identidade institucional do CIEPS.
-      </p>
-
-      <div className="cards-grid">
-        {adminModules.map((module) => {
-          const Icon = module.icon
-
-          return (
-            <Link href={module.href} className="glass-card" key={module.href}>
-              <div>
-                <div className="card-icon">
-                  <Icon size={48} />
-                </div>
-                <h2 className="card-title">{module.title}</h2>
-                <p className="card-description">{module.description}</p>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
-    </>
-  )
+      {destinos.length === 0 ? (
+        <Aviso tom="alerta" titulo="Nenhuma área liberada">
+          Sua conta entrou, mas ainda não tem acesso a nenhuma área do painel. Peça a revisão do perfil ao responsável pelo sistema.
+        </Aviso>
+      ) : (
+        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {destinos.map((item, i) => {
+            const Icone = ICONES[item.icone as Exclude<IconeMenu, "inicio">];
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className="group flex h-full min-h-40 flex-col justify-between gap-6 rounded-2xl border border-linha bg-cartao p-5 shadow-[0_1px_2px_rgb(26_20_10/.06),0_10px_24px_-14px_rgb(26_20_10/.28)] transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-moldura hover:shadow-[0_16px_32px_-16px_rgb(74_14_18/.5)] sm:p-6"
+                >
+                  <div className="flex items-start justify-between">
+                    <span className={`grid size-12 place-items-center rounded-2xl ${LADRILHO[i % 3]}`}>
+                      <Icone className="size-5" aria-hidden="true" />
+                    </span>
+                    <ArrowUpRight className="size-5 text-sutil transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h2 className="titulo text-xl">{item.rotulo}</h2>
+                    <p className="mt-1 text-sm text-sutil">{item.descricao}</p>
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Pagina>
+  );
 }

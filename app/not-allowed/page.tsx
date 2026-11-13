@@ -1,44 +1,32 @@
-import { Ban, Home } from "lucide-react";
 import Link from "next/link";
-import styles from "@/app/components/CiepsAdmin.module.css";
+import { Ban, House, LogOut } from "lucide-react";
+import { Cartao, classeBotao } from "@/app/components/ui";
+import { menuDaSessao } from "@/app/lib/menu-admin-servidor";
 
-export default function NotAllowedPage() {
-    return (
-        <main className={styles.notAllowedPage}>
-            <section
-                aria-labelledby="not-allowed-title"
-                className={styles.notAllowedCard}
-            >
-                <span className={styles.brandMark}>CIEPS</span>
+export default async function NotAllowedPage() {
+  const menu = await menuDaSessao();
 
-                <div>
-                    <span className={styles.statusBadge}>
-                        <Ban aria-hidden="true" size={14} />
-                        Acesso restrito
-                    </span>
-                    <p aria-hidden="true" className={styles.errorCode}>403</p>
-                </div>
-
-                <div className={styles.notAllowedIcon}>
-                    <Ban aria-hidden="true" size={30} strokeWidth={1.8} />
-                </div>
-
-                <h1 className={styles.notAllowedTitle} id="not-allowed-title">
-                    Acesso negado
-                </h1>
-                <p className={styles.notAllowedText}>
-                    Sua conta não possui permissão para acessar esta área do painel administrativo.
-                </p>
-
-                <Link className={styles.homeLink} href="/">
-                    <Home aria-hidden="true" size={18} />
-                    Voltar para a página inicial
-                </Link>
-
-                <p className={styles.supportText}>
-                    Se você acredita que isso é um engano, solicite a revisão do seu perfil ao responsável pelo sistema.
-                </p>
-            </section>
-        </main>
-    );
+  return (
+    <main className="mx-auto grid min-h-[70dvh] w-full max-w-3xl content-center px-4 py-6 sm:px-8 sm:py-10">
+      <Cartao aria-labelledby="acesso-negado" className="grid justify-items-start gap-4 sm:p-8">
+        <span className="grid size-12 place-items-center rounded-full bg-erro-fundo text-erro">
+          <Ban className="size-6" aria-hidden="true" />
+        </span>
+        <div className="grid gap-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sutil">Erro 403</p>
+          <h1 id="acesso-negado" className="titulo text-[clamp(1.7rem,3.6vw,2.4rem)] leading-tight">Acesso negado</h1>
+          <div className="regua w-24" aria-hidden="true" />
+        </div>
+        <p className="text-[15px] text-sutil">
+          Sua conta{menu?.email ? <> (<strong className="font-semibold text-tinta">{menu.email}</strong>)</> : null} não tem permissão para abrir esta área do painel.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/" className={classeBotao("principal")}><House className="size-4" aria-hidden="true" />Voltar ao início</Link>
+          {/* <a>, não <Link>: o prefetch do Link chamaria a saída sozinho */}
+          <a href="/auth/logout" className={classeBotao("contorno")}><LogOut className="size-4" aria-hidden="true" />Entrar com outra conta</a>
+        </div>
+        <p className="text-sm text-sutil">Se isso parece um engano, peça a revisão do seu perfil ao responsável pelo sistema.</p>
+      </Cartao>
+    </main>
+  );
 }

@@ -1,15 +1,12 @@
 "use client";
 
-// Envio da presença (bip do QR ou botão) com fila no aparelho para quando a internet cai.
+// Fila no aparelho para a presença (bip do QR ou botão) que não chegou ao servidor quando a internet cai.
 // As rotas usam $addToSet/$pull: reenviar o mesmo pedido não duplica nada.
 import { CHAVE_ARMAZENAMENTO, chaveDe, destinoDoEnvio, efeitoDaResposta, enfileirar, lerFila, requisicaoDe } from "./fila-presenca";
 import type { Pendente } from "./fila-presenca";
 
-export type EstadoBip = "registrado" | "jaEstava" | "guardado" | "recusado" | "atividadeInexistente";
-export interface ResultadoBip { estado: EstadoBip; mensagem: string }
-
 /** Sem resposta em PRAZO_MS conta como rede caída: a presença vai para a fila. */
-const PRAZO_MS = 12000;
+export const PRAZO_MS = 12000;
 export const EVENTO_FILA = "cieps-presenca-fila";
 
 // ---------- fila no localStorage (se o navegador bloquear, fica na memória desta aba)
@@ -66,42 +63,23 @@ export function sinalizar(tipo: "ok" | "aviso" | "erro") {
   } catch { /* sem áudio: o aviso na tela continua */ }
 }
 
-/**
- * Dá ou retira a presença de uma pessoa. Nunca lança erro e nunca perde o pedido em silêncio:
- * sem rede, sem resposta ou servidor fora (5xx) => guarda no aparelho e reenvia depois.
- */
-export async function registrarPresenca(pedido: Omit<Pendente, "chave" | "criadoEm">): Promise<ResultadoBip> {
-  const p: Pendente = { ...pedido, userId: pedido.userId.trim().toLowerCase(), criadoEm: Date.now(), chave: "" };
+export type Pedido = Omit<Pendente, "chave" | "criadoEm">;
+const comChave = (pedido: Pedido): Pendente => {
+  const p = { ...pedido, userId: pedido.userId.trim().toLowerCase(), criadoEm: Date.now(), chave: "" };
   p.chave = chaveDe(p);
-  const turno = p.turno ? ` (${p.turno === "end" ? "fim" : "início"})` : "";
-  const quem = p.nome ? `${p.nome}${turno}` : `Credencial${turno}`;
-  // a ação nova substitui o que estava guardado para esta pessoa (ex.: deu presença sem rede e agora retira)
-  mexerNaFila((atual) => atual.filter((x) => x.chave !== p.chave));
-  const { status, corpo } = await postar(p);
-  const destino = destinoDoEnvio(status);
-  if (destino === "tentarDepois") {
-    mexerNaFila((atual) => enfileirar(atual, p));
-    sinalizar("aviso");
-    return { estado: "guardado", mensagem: `${quem}: sem conexão com o servidor. ${p.quer === "dar" ? "A presença" : "A retirada"} ficou GUARDADA neste aparelho e será enviada sozinha quando a internet voltar. Não limpe os dados do navegador.` };
-  }
-  if (destino !== "entregue") {
-    sinalizar("erro");
-    const motivo = destino === "sessao"
-      ? "sua sessão expirou. Entre de novo e repita."
-      : (typeof (corpo as { message?: unknown })?.message === "string" ? (corpo as { message: string }).message : `o servidor recusou (código ${status}).`);
-    return { estado: "recusado", mensagem: `${quem}: NÃO registrado, ${motivo}` };
-  }
-  const efeito = efeitoDaResposta(corpo);
-  if (efeito === "atividadeInexistente") {
-    sinalizar("erro");
-    return { estado: "atividadeInexistente", mensagem: "Atividade não encontrada: nada foi alterado. Recarregue a página." };
-  }
-  if (efeito === "jaEstava") {
-    sinalizar("aviso");
-    return { estado: "jaEstava", mensagem: `${quem}: ${p.quer === "dar" ? "já estava com presença" : "já estava sem presença"}. Nada foi alterado.` };
-  }
-  sinalizar("ok");
-  return { estado: "registrado", mensagem: `${quem}: ${p.quer === "dar" ? "presença registrada" : "presença retirada"}.` };
+  return p;
+};
+
+/** A ação nova substitui o que estava guardado para esta pessoa (ex.: deu presença sem rede e agora retira). */
+export function descartarPendente(pedido: Pedido) {
+  const { chave } = comChave(pedido);
+  if (lerPendentes().some((x) => x.chave === chave)) mexerNaFila((atual) => atual.filter((x) => x.chave !== chave));
+}
+
+/** Guarda no aparelho o pedido que não chegou ao servidor; é reenviado sozinho (ver PendentesPresenca). */
+export function guardarPresenca(pedido: Pedido) {
+  const p = comChave(pedido);
+  mexerNaFila((atual) => enfileirar(atual, p));
 }
 
 let enviando = false;

@@ -1,27 +1,77 @@
 "use client"
-import { useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { RefreshCw } from "lucide-react"
+import {
+    Botao,
+    BotaoLink,
+    Cabecalho,
+    Campo,
+    CampoBusca,
+    Cartao,
+    Escolha,
+    Metrica,
+    Pagina,
+    Paginacao,
+    Selo,
+    TabelaRolavel,
+    classeTd,
+    classeTh,
+    type TomSelo,
+} from "../components/ui"
+import { Atualizando, Estado } from "../components/Estado"
+import QrCodeUserSearch from "../components/QrCodeUserSearch"
 import {
     type AdminUserSummary,
-    adminDateToIso,
     displayUserField,
     displayUserName,
     normalizeAdminUserList,
 } from "../lib/users/admin-user-contract"
-import { CONGRESSISTAS_MIN_QUERY_LENGTH } from "../lib/users/congressistas-busca"
+import { CONGRESSISTAS_MIN_QUERY_LENGTH, CONGRESSISTAS_PAGE_SIZE } from "../lib/users/congressistas-busca"
 import { participationModeLabel } from "../lib/users/admin-remote-work"
-import { User, Mail, Hash, Phone, Award, CreditCard, Ticket, BadgeCheck, BadgeX, BadgeAlert, ExternalLink, List, Search, SearchX, FilterX, CalendarDays, Users, Loader2, Laptop, MapPin, FileCheck2, Briefcase, IdCard, Building2 } from "lucide-react"
-import { useRouter } from "next/navigation"
-import './style.css'
-import QrCodeUserSearch from "../components/QrCodeUserSearch"
+import { formatarData, formatarNumero } from "../lib/formatar"
 
-const formatUserCreationDate = (value: string | null) => {
-    const iso = adminDateToIso(value)
-    const date = iso ? new Date(iso) : null
-    return date ? date.toLocaleDateString("pt-BR") : "Data não informada"
+const PARAMS = ["q", "situacao", "modo", "pgto", "de", "ate", "pag"] as const
+
+const SITUACOES: Record<number, { rotulo: string; tom: TomSelo }> = {
+    0: { rotulo: "Não inscrito", tom: "erro" },
+    1: { rotulo: "Inscrito", tom: "ok" },
+    2: { rotulo: "Pagamento em aberto", tom: "alerta" },
+    3: { rotulo: "Suspenso", tom: "alerta" },
 }
 
-interface CongressistasResumo {
+function SeloSituacao({ situacao }: { situacao: AdminUserSummary["pagamento"]["situacao"] }) {
+    const s = situacao === null ? null : SITUACOES[situacao]
+    return <Selo tom={s?.tom ?? "neutro"}>{s?.rotulo ?? "Situação não informada"}</Selo>
+}
+
+// Só diz o que falta; o CPF em si nunca aparece na lista.
+function camposFaltando(u: AdminUserSummary): string[] {
+    const p = u.informacoes_usuario
+    return [
+        !p.nome && "nome",
+        !p.email && "e-mail",
+        !p.cpf && "CPF",
+        !p.numero_telefone && "telefone",
+    ].filter((c): c is string => Boolean(c))
+}
+
+function Pendencia({ user }: { user: AdminUserSummary }) {
+    if (!user.cadastroPendente) return null
+    const falta = camposFaltando(user)
+    return <Selo tom="alerta">Cadastro incompleto{falta.length ? `: falta ${falta.join(", ")}` : ""}</Selo>
+}
+
+function resumoParticipacao(u: AdminUserSummary): string {
+    const p = u.participacao
+    const partes = [participationModeLabel(p.mode)]
+    if (p.remoteWorkCount > 0) partes.push(`${formatarNumero(p.remoteWorkCount)} trabalho(s) remoto(s)`)
+    if (p.proof) partes.push("comprovante enviado")
+    return partes.join(" · ")
+}
+
+interface Resumo {
     total: number
     inscritos: number
     naoInscritos: number
@@ -30,498 +80,326 @@ interface CongressistasResumo {
     paymentTypes: string[]
 }
 
-interface CongressistasPagina {
+interface PaginaBusca {
     users: AdminUserSummary[]
     total: number
     page: number
     totalPages: number
 }
 
-const isCount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value)
+const ehContagem = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
 
-const parseResumo = (value: unknown): CongressistasResumo | null => {
-    if (typeof value !== "object" || value === null) return null
-    const r = value as Record<string, unknown>
-    if (![r.total, r.inscritos, r.naoInscritos, r.pagamentoAberto, r.participantesRemotos].every(isCount)) return null
-    if (!Array.isArray(r.paymentTypes) || !r.paymentTypes.every((type) => typeof type === "string")) return null
-    return r as unknown as CongressistasResumo
+function lerResumo(valor: unknown): Resumo | null {
+    if (typeof valor !== "object" || valor === null) return null
+    const r = valor as Record<string, unknown>
+    if (![r.total, r.inscritos, r.naoInscritos, r.pagamentoAberto, r.participantesRemotos].every(ehContagem)) return null
+    if (!Array.isArray(r.paymentTypes) || !r.paymentTypes.every(t => typeof t === "string")) return null
+    return r as unknown as Resumo
 }
 
-const parsePagina = (value: unknown): CongressistasPagina | null => {
-    if (typeof value !== "object" || value === null) return null
-    const r = value as Record<string, unknown>
+function lerPagina(valor: unknown): PaginaBusca | null {
+    if (typeof valor !== "object" || valor === null) return null
+    const r = valor as Record<string, unknown>
     const users = normalizeAdminUserList(r.data)
-    if (!users || !isCount(r.total) || !isCount(r.page) || !isCount(r.totalPages)) return null
+    if (!users || !ehContagem(r.total) || !ehContagem(r.page) || !ehContagem(r.totalPages)) return null
     return { users, total: r.total, page: r.page, totalPages: r.totalPages }
 }
 
-const responseMessage = (payload: unknown, fallback: string) =>
-    typeof payload === "object" && payload !== null && "message" in payload && typeof payload.message === "string"
-        ? payload.message
-        : fallback
+function mensagemDe(corpo: unknown, padrao: string): string {
+    return typeof corpo === "object" && corpo !== null && "message" in corpo && typeof corpo.message === "string" ? corpo.message : padrao
+}
 
-export default function Page() {
+function Lista() {
     const router = useRouter()
+    const pathname = usePathname()
+    const params = useSearchParams()
 
-    const [resumo, setResumo] = useState<CongressistasResumo | null>(null)
-    const [resumoFailed, setResumoFailed] = useState<boolean>(false)
+    const [resumo, setResumo] = useState<Resumo | null>(null)
+    const [resultados, setResultados] = useState<PaginaBusca | null>(null)
+    const [buscando, setBuscando] = useState(false)
+    const [erro, setErro] = useState<string | null>(null)
+    const [tentativa, setTentativa] = useState(0)
+    const topoRef = useRef<HTMLDivElement>(null)
 
-    const [searchTerm, setSearchTerm] = useState<string>("")
-    const [debouncedTerm, setDebouncedTerm] = useState<string>("")
-    const [selectedStatus, setSelectedStatus] = useState<string>("")
-    const [selectedPaymentType, setSelectedPaymentType] = useState<string>("")
-    const [selectedParticipationMode, setSelectedParticipationMode] = useState<string>("")
-    const [startDate, setStartDate] = useState<string>("")
-    const [endDate, setEndDate] = useState<string>("")
+    const q = params.get("q") ?? ""
+    const situacao = params.get("situacao") ?? ""
+    const modo = params.get("modo") ?? ""
+    const pgto = params.get("pgto") ?? ""
+    const de = params.get("de") ?? ""
+    const ate = params.get("ate") ?? ""
+    const pagParam = Number.parseInt(params.get("pag") ?? "1", 10)
 
-    const [pageState, setPageState] = useState<{ key: string, page: number }>({ key: "", page: 1 })
-    const [retryTick, setRetryTick] = useState<number>(0)
-    const [results, setResults] = useState<CongressistasPagina | null>(null)
-    const [searching, setSearching] = useState<boolean>(false)
-    const [searchError, setSearchError] = useState<string | null>(null)
-
-    // Resumo (estatísticas e tipos de pagamento): carregado uma vez, sem bloquear a tela.
-    useEffect(() => {
-        const controller = new AbortController()
-        const loadResumo = async () => {
-            try {
-                const response = await fetch("/api/get/congressistasResumo/", { cache: "no-store", signal: controller.signal })
-                const payload: unknown = await response.json().catch(() => null)
-                const parsed = response.ok ? parseResumo(payload) : null
-                if (!parsed) throw new Error("resumo inválido")
-                setResumo(parsed)
-            } catch {
-                if (!controller.signal.aborted) setResumoFailed(true)
-            }
+    const mudarParams = useCallback((mudancas: Partial<Record<(typeof PARAMS)[number], string>>) => {
+        const next = new URLSearchParams(window.location.search)
+        for (const [chave, valor] of Object.entries(mudancas)) {
+            if (valor) next.set(chave, valor)
+            else next.delete(chave)
         }
-        void loadResumo()
-        return () => controller.abort()
-    }, [])
+        const qs = next.toString()
+        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    }, [pathname, router])
 
-    // Debounce da digitação.
+    // A digitação fica local e só vai para a URL depois de uma pausa; o que veio da URL (voltar do navegador) volta para o campo.
+    const [busca, setBusca] = useState(q)
+    const ultimoEnviado = useRef(q)
     useEffect(() => {
-        const timer = setTimeout(() => setDebouncedTerm(searchTerm.trim()), 400)
-        return () => clearTimeout(timer)
-    }, [searchTerm])
-
-    const hasOtherFilter = Boolean(selectedStatus || selectedPaymentType || selectedParticipationMode || startDate || endDate)
-    const searchActive = debouncedTerm.length >= CONGRESSISTAS_MIN_QUERY_LENGTH || hasOtherFilter
-    const queryKey = JSON.stringify([debouncedTerm, selectedStatus, selectedPaymentType, selectedParticipationMode, startDate, endDate])
-    // Mudou busca ou filtro: volta para a página 1.
-    const currentPage = pageState.key === queryKey ? pageState.page : 1
-
-    // Descarta a página guardada de uma busca anterior: voltar a uma busca já
-    // feita não deve reabrir a página em que ela estava.
+        if (q !== ultimoEnviado.current) {
+            ultimoEnviado.current = q
+            setBusca(q)
+        }
+    }, [q])
     useEffect(() => {
-        setPageState((state) => (state.key === queryKey ? state : { key: queryKey, page: 1 }))
-    }, [queryKey])
+        if (busca === ultimoEnviado.current) return
+        const t = setTimeout(() => {
+            ultimoEnviado.current = busca
+            mudarParams({ q: busca, pag: "" })
+        }, 300)
+        return () => clearTimeout(t)
+    }, [busca, mudarParams])
 
+    const termo = q.trim()
+    const temFiltro = Boolean(q || situacao || modo || pgto || de || ate)
+    const buscaAtiva = termo.length >= CONGRESSISTAS_MIN_QUERY_LENGTH || Boolean(situacao || modo || pgto || de || ate)
+    const pagina = Number.isFinite(pagParam) && pagParam >= 1 ? pagParam : 1
+
+    // Resumo (métricas e tipos de pagamento): não bloqueia a tela; se falhar, as métricas mostram "Indisponível".
     useEffect(() => {
-        if (!searchActive) {
-            setResults(null)
-            setSearching(false)
-            setSearchError(null)
+        const controle = new AbortController()
+        void (async () => {
+            try {
+                const response = await fetch("/api/get/congressistasResumo/", { cache: "no-store", signal: controle.signal })
+                const lido = response.ok ? lerResumo(await response.json().catch(() => null)) : null
+                if (lido && !controle.signal.aborted) setResumo(lido)
+            } catch { /* sem resumo: a métrica fica "Indisponível" */ }
+        })()
+        return () => controle.abort()
+    }, [tentativa])
+
+    // A busca roda no servidor, 12 por página. O AbortController descarta a resposta de uma busca já substituída.
+    useEffect(() => {
+        if (!buscaAtiva) {
+            setResultados(null)
+            setBuscando(false)
+            setErro(null)
             return
         }
-        // O AbortController descarta a resposta antiga quando uma nova busca começa.
-        const controller = new AbortController()
-        const run = async () => {
-            setSearching(true)
-            setSearchError(null)
+        const controle = new AbortController()
+        void (async () => {
+            setBuscando(true)
+            setErro(null)
             try {
-                const params = new URLSearchParams()
-                if (debouncedTerm) params.set("q", debouncedTerm)
-                if (selectedStatus) params.set("status", selectedStatus)
-                if (selectedPaymentType) params.set("paymentType", selectedPaymentType)
-                if (selectedParticipationMode) params.set("mode", selectedParticipationMode)
-                if (startDate) params.set("startDate", startDate)
-                if (endDate) params.set("endDate", endDate)
-                params.set("page", String(currentPage))
-                const response = await fetch(`/api/get/congressistasBusca/?${params.toString()}`, { cache: "no-store", signal: controller.signal })
-                const payload: unknown = await response.json().catch(() => null)
-                const parsed = response.ok ? parsePagina(payload) : null
-                if (!parsed) {
-                    throw new Error(responseMessage(payload, response.ok
+                const qs = new URLSearchParams()
+                if (termo) qs.set("q", termo)
+                if (situacao) qs.set("status", situacao)
+                if (pgto) qs.set("paymentType", pgto)
+                if (modo) qs.set("mode", modo)
+                if (de) qs.set("startDate", de)
+                if (ate) qs.set("endDate", ate)
+                qs.set("page", String(pagina))
+                const response = await fetch(`/api/get/congressistasBusca/?${qs.toString()}`, { cache: "no-store", signal: controle.signal })
+                const corpo: unknown = await response.json().catch(() => null)
+                const lida = response.ok ? lerPagina(corpo) : null
+                if (!lida) {
+                    throw new Error(mensagemDe(corpo, response.ok
                         ? "A lista de congressistas recebida está em formato inválido."
                         : "Não foi possível buscar os congressistas."))
                 }
-                if (controller.signal.aborted) return
-                setResults(parsed)
-                setSearching(false)
+                if (controle.signal.aborted) return
+                setResultados(lida)
+                setBuscando(false)
             } catch (cause) {
-                if (controller.signal.aborted) return
-                setResults(null)
-                setSearchError(cause instanceof Error ? cause.message : "Não foi possível buscar os congressistas.")
-                setSearching(false)
+                if (controle.signal.aborted) return
+                setResultados(null)
+                setErro(cause instanceof Error ? cause.message : "Não foi possível buscar os congressistas.")
+                setBuscando(false)
             }
-        }
-        void run()
-        return () => controller.abort()
-    }, [searchActive, debouncedTerm, selectedStatus, selectedPaymentType, selectedParticipationMode, startDate, endDate, currentPage, retryTick])
+        })()
+        return () => controle.abort()
+    }, [buscaAtiva, termo, situacao, pgto, modo, de, ate, pagina, tentativa])
 
-    const paymentTypes = resumo?.paymentTypes ?? []
+    const tiposPagamento = Array.from(new Set([...(resumo?.paymentTypes ?? []), ...(pgto ? [pgto] : [])]))
+        .sort((a, b) => a.localeCompare(b, "pt-BR"))
 
-    const handleResetFilters = () => {
-        setSearchTerm("")
-        setDebouncedTerm("")
-        setSelectedStatus("")
-        setSelectedPaymentType("")
-        setSelectedParticipationMode("")
-        setStartDate("")
-        setEndDate("")
+    const visiveis = resultados?.users ?? []
+    const total = resultados?.total ?? 0
+    const inicio = resultados ? (resultados.page - 1) * CONGRESSISTAS_PAGE_SIZE : 0
+
+    const limpar = () => {
+        ultimoEnviado.current = ""
+        setBusca("")
+        mudarParams(Object.fromEntries(PARAMS.map(p => [p, ""])))
+    }
+    const irParaPagina = (n: number) => {
+        mudarParams({ pag: n > 1 ? String(n) : "" })
+        topoRef.current?.scrollIntoView({ block: "start" })
     }
 
-    const getSituacaoBadge = (situacao: AdminUserSummary["pagamento"]["situacao"]) => {
-        switch (situacao) {
-            case 0: return <span className="usuarios-badge usuarios-badge-error"><BadgeX className="mr-1.5 h-4 w-4" />Não Inscrito</span>
-            case 1: return <span className="usuarios-badge usuarios-badge-success"><BadgeCheck className="mr-1.5 h-4 w-4" />Inscrito</span>
-            case 2: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Pagamento em Aberto</span>
-            case 3: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Suspenso</span>
-            default: return <span className="usuarios-badge usuarios-badge-warning"><BadgeAlert className="mr-1.5 h-4 w-4" />Status não informado</span>
-        }
-    }
-
-    const stat = (value: number | undefined) => resumo ? value : resumoFailed ? "—" : "…"
+    const filtro = (chave: (typeof PARAMS)[number]) => (e: { target: { value: string } }) =>
+        mudarParams({ [chave]: e.target.value, pag: "" })
 
     return (
-        <>
-            <div className="usuarios-main-container">
-                <span className="main-eyebrow">CIEPS / Pessoas</span>
-                <h1 className="usuarios-title">Congressistas</h1>
-                <p className="usuarios-subtitle">Visualize e gerencie as informações dos usuários cadastrados.</p>
+        <Pagina largura="ampla">
+            <Cabecalho
+                etiqueta="Pessoas"
+                titulo="Usuários"
+                sub="Congressistas cadastrados, com situação de pagamento e participação."
+                acoes={
+                    <Botao estilo="contorno" carregando={buscando && resultados !== null} onClick={() => setTentativa(t => t + 1)}>
+                        {!(buscando && resultados !== null) && <RefreshCw className="size-4" aria-hidden="true" />}
+                        Atualizar lista
+                    </Botao>
+                }
+            >
+                <section aria-label="Resumo" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                    <Metrica className="col-span-2 lg:col-span-1" rotulo="Total" valor={resumo ? formatarNumero(resumo.total) : null} />
+                    <Metrica rotulo="Inscritos" valor={resumo ? formatarNumero(resumo.inscritos) : null} />
+                    <Metrica rotulo="Não inscritos" valor={resumo ? formatarNumero(resumo.naoInscritos) : null} />
+                    <Metrica rotulo="Pagamento em aberto" valor={resumo ? formatarNumero(resumo.pagamentoAberto) : null} />
+                    <Metrica rotulo="Acesso remoto" valor={resumo ? formatarNumero(resumo.participantesRemotos) : null} />
+                </section>
+            </Cabecalho>
 
-                {/* Estatísticas */}
-                <div className="usuarios-estatisticas">
-                    <div className="usuarios-estatistica-card">
-                        <Users size={32} style={{ marginBottom: '0.3rem', color: 'var(--azul)' }} />
-                        <span className="usuarios-estatistica-valor">{stat(resumo?.total)}</span>
-                        <span className="usuarios-estatistica-label">Total de Usuários</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <BadgeCheck size={32} style={{ marginBottom: '0.3rem', color: '#4CAF50' }} />
-                        <span className="usuarios-estatistica-valor">{stat(resumo?.inscritos)}</span>
-                        <span className="usuarios-estatistica-label">Inscritos</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <BadgeX size={32} style={{ marginBottom: '0.3rem', color: '#F44336' }} />
-                        <span className="usuarios-estatistica-valor">{stat(resumo?.naoInscritos)}</span>
-                        <span className="usuarios-estatistica-label">Não Inscritos</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <BadgeAlert size={32} style={{ marginBottom: '0.3rem', color: '#FF9800' }} />
-                        <span className="usuarios-estatistica-valor">{stat(resumo?.pagamentoAberto)}</span>
-                        <span className="usuarios-estatistica-label">Pagamento Aberto</span>
-                    </div>
-                    <div className="usuarios-estatistica-card">
-                        <Laptop size={32} style={{ marginBottom: '0.3rem', color: '#2563EB' }} />
-                        <span className="usuarios-estatistica-valor">{stat(resumo?.participantesRemotos)}</span>
-                        <span className="usuarios-estatistica-label">Acesso Remoto</span>
-                    </div>
+            <Cartao className="grid gap-4" aria-label="Busca e filtros">
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                    <CampoBusca
+                        rotulo="Buscar usuário"
+                        rotuloOculto={false}
+                        placeholder="Mínimo de 4 letras: nome, e-mail, telefone ou ID"
+                        value={busca}
+                        onChange={e => setBusca(e.target.value)}
+                    />
+                    <QrCodeUserSearch titleText="Pesquisar por QR Code" />
                 </div>
-
-                {/* Filtros */}
-                <div className="usuarios-filtros">
-                    <div className="usuarios-filtros-grid">
-                        <div className="usuarios-filtro-busca">
-                            <label htmlFor="search" className="usuarios-label">
-                                <Search className="h-5 w-5" />
-                                Busca
-                            </label>
-                            <input
-                                id="search"
-                                type="text"
-                                placeholder="Digite pelo menos 4 letras: nome, e-mail, ID ou telefone..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="usuarios-input"
-                            />
-                        </div>
-
-                        <div className="usuarios-filtro-select">
-                            <label htmlFor="status" className="usuarios-label">Status de Inscrição</label>
-                            <select
-                                id="status"
-                                value={selectedStatus}
-                                onChange={e => setSelectedStatus(e.target.value)}
-                                className="usuarios-select"
-                            >
-                                <option value="">Todos os Status</option>
-                                <option value="1">Inscrito</option>
-                                <option value="0">Não Inscrito</option>
-                                <option value="2">Pagamento em Aberto</option>
-                                <option value="3">Suspenso</option>
-                            </select>
-                        </div>
-
-                        <div className="usuarios-filtro-select">
-                            <label htmlFor="participationMode" className="usuarios-label">Modalidade de Participação</label>
-                            <select
-                                id="participationMode"
-                                value={selectedParticipationMode}
-                                onChange={e => setSelectedParticipationMode(e.target.value)}
-                                className="usuarios-select"
-                            >
-                                <option value="">Todas as Modalidades</option>
-                                <option value="REGULAR">Regular</option>
-                                <option value="REMOTE">Somente remoto</option>
-                                <option value="BOTH">Regular + remoto</option>
-                                <option value="NONE">Sem acesso</option>
-                            </select>
-                        </div>
-
-                        <div className="usuarios-filtro-select">
-                            <label htmlFor="paymentType" className="usuarios-label">Tipo de Pagamento</label>
-                            <select
-                                id="paymentType"
-                                value={selectedPaymentType}
-                                onChange={e => setSelectedPaymentType(e.target.value)}
-                                className="usuarios-select"
-                            >
-                                <option value="">Todos os Tipos</option>
-                                {paymentTypes.map(type => <option key={type} value={type}>{type}</option>)}
-                            </select>
-                        </div>
-
-                        <div className="usuarios-filtro-datas">
-                            <div className="usuarios-filtro-data">
-                                <label htmlFor="startDate" className="usuarios-label">Criado de</label>
-                                <input
-                                    type="date"
-                                    id="startDate"
-                                    value={startDate}
-                                    onChange={e => setStartDate(e.target.value)}
-                                    className="usuarios-input"
-                                />
-                            </div>
-                            <div className="usuarios-filtro-data">
-                                <label htmlFor="endDate" className="usuarios-label">Criado até</label>
-                                <input
-                                    type="date"
-                                    id="endDate"
-                                    value={endDate}
-                                    onChange={e => setEndDate(e.target.value)}
-                                    className="usuarios-input"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="w-full flex justify-between items-center content-center">
-                        <button onClick={handleResetFilters} className="usuarios-btn usuarios-btn-secondary">
-                            <FilterX className="h-5 w-5" />
-                            Limpar Filtros
-                        </button>
-                    </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                    <Escolha rotulo="Situação" value={situacao} onChange={filtro("situacao")}>
+                        <option value="">Todas</option>
+                        <option value="1">Inscrito</option>
+                        <option value="0">Não inscrito</option>
+                        <option value="2">Pagamento em aberto</option>
+                        <option value="3">Suspenso</option>
+                    </Escolha>
+                    <Escolha rotulo="Participação" value={modo} onChange={filtro("modo")}>
+                        <option value="">Todas</option>
+                        <option value="REGULAR">Regular</option>
+                        <option value="REMOTE">Somente remoto</option>
+                        <option value="BOTH">Regular + remoto</option>
+                        <option value="NONE">Sem acesso</option>
+                    </Escolha>
+                    <Escolha rotulo="Tipo de pagamento" value={pgto} onChange={filtro("pgto")}>
+                        <option value="">Todos</option>
+                        {tiposPagamento.map(t => <option key={t} value={t}>{t}</option>)}
+                    </Escolha>
+                    <Campo rotulo="Cadastrado de" type="date" value={de} onChange={filtro("de")} />
+                    <Campo rotulo="Cadastrado até" type="date" value={ate} onChange={filtro("ate")} />
                 </div>
-                <div className="pb-5">
-                    <QrCodeUserSearch titleText={"Pesquisa por QrCode"}/>
-                </div>
-                {/* Lista de Usuários */}
-                {results && results.users.length > 0 && (
+                {temFiltro && (
+                    <div>
+                        <Botao estilo="fantasma" tamanho="pequeno" onClick={limpar}>Limpar busca e filtros</Botao>
+                    </div>
+                )}
+            </Cartao>
+
+            <div ref={topoRef} className="grid scroll-mt-4 gap-3">
+                {!buscaAtiva && (
+                    <Estado tipo="vazio" titulo="Digite pelo menos 4 letras para buscar um congressista" texto="Pesquise por nome, e-mail, ID ou telefone, ou use algum dos filtros acima." />
+                )}
+                {buscaAtiva && buscando && !resultados && !erro && <Estado tipo="carregando" titulo="Buscando congressistas…" linhas={5} />}
+                {buscaAtiva && erro && <Estado tipo="erro" titulo="Não foi possível buscar os congressistas" texto={erro} aoTentar={() => setTentativa(t => t + 1)} />}
+                {buscaAtiva && resultados && (
                     <>
-                        <div className="usuarios-header">
-                            <h2 className="usuarios-header-title">
-                                <List size={24} />
-                                CLIQUE PARA VER DETALHES
-                                {searching && <Loader2 size={18} className="animate-spin" aria-label="Atualizando resultados" />}
-                            </h2>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="num text-sm text-sutil" aria-live="polite">
+                                {total === 0
+                                    ? "Nenhum usuário"
+                                    : `${formatarNumero(inicio + 1)}–${formatarNumero(inicio + visiveis.length)} de ${formatarNumero(total)}`}
+                            </p>
+                            <Atualizando ativo={buscando} />
                         </div>
 
-                        <div className="usuarios-grid">
-                            {results?.users.map((user) => (
-                                <div key={user._id} className="usuarios-card">
-                                    <div className="usuarios-card-header">
-                                        <div className="usuarios-avatar">
-                                            <User className="h-6 w-6" />
-                                        </div>
-                                        <div className="usuarios-user-info">
-                                            <h3 className="usuarios-user-name" title={displayUserName(user)}>
-                                                <Link href={`/usuarios/informacoes/${user._id}`} prefetch={false} className="usuarios-user-name-link">
-                                                    {displayUserName(user)}
-                                                </Link>
-                                            </h3>
-                                            <p className="usuarios-user-email" title={displayUserField(user.informacoes_usuario.email)}>
-                                                <Mail className="h-4 w-4" />
-                                                {displayUserField(user.informacoes_usuario.email)}
-                                            </p>
-                                            {user.cadastroPendente && (
-                                                <span className="usuarios-badge usuarios-badge-warning">
-                                                    <BadgeAlert className="mr-1.5 h-4 w-4" />Cadastro pendente
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
+                        {total === 0 && !buscando && (
+                            <Estado tipo="semResultado" acao={<Botao estilo="contorno" onClick={limpar}>Limpar busca e filtros</Botao>} />
+                        )}
 
-                                    <div className="usuarios-card-content">
-                                        <div className="usuarios-info-item">
-                                            <Hash className="h-4 w-4" />
-                                            <span className="usuarios-info-label">ID:</span>
-                                            <span className="usuarios-info-value">{user._id}</span>
-                                        </div>
-                                        <div className="usuarios-info-item">
-                                            <Phone className="h-4 w-4" />
-                                            <span className="usuarios-info-label">Telefone:</span>
-                                            <span className="usuarios-info-value">{displayUserField(user.informacoes_usuario.numero_telefone)}</span>
-                                        </div>
-                                        {user.informacoes_usuario.profissao && (
-                                            <div className="usuarios-info-item">
-                                                <Briefcase className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Profissão:</span>
-                                                <span className="usuarios-info-value">{user.informacoes_usuario.profissao}</span>
-                                            </div>
-                                        )}
-                                        {user.informacoes_usuario.matricula_municipio && (
-                                            <div className="usuarios-info-item">
-                                                <IdCard className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Matrícula do município:</span>
-                                                <span className="usuarios-info-value">{user.informacoes_usuario.matricula_municipio}</span>
-                                            </div>
-                                        )}
-                                        {user.informacoes_usuario.unidade_origem && (
-                                            <div className="usuarios-info-item">
-                                                <Building2 className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Unidade de Origem:</span>
-                                                <span className="usuarios-info-value">{user.informacoes_usuario.unidade_origem}</span>
-                                            </div>
-                                        )}
-                                        <div className="usuarios-info-item">
-                                            <CalendarDays className="h-4 w-4" />
-                                            <span className="usuarios-info-label">Criação:</span>
-                                            <span className="usuarios-info-value">
-                                                {formatUserCreationDate(user.informacoes_usuario.data_criacao)}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="usuarios-card-payment">
-                                        <h4 className="usuarios-payment-title">
-                                            <CreditCard className="h-5 w-5" />
-                                            Informações de Pagamento
-                                        </h4>
-                                        <div className="usuarios-payment-info">
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Situação:</span>
-                                                {getSituacaoBadge(user.pagamento.situacao)}
-                                            </div>
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Tipo:</span>
-                                                <span className="usuarios-payment-type">
-                                                    {user.pagamento.tipo_pagamento || "N/D"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="usuarios-card-payment">
-                                        <h4 className="usuarios-payment-title">
-                                            <Laptop className="h-5 w-5" />
-                                            Participação em Trabalhos
-                                        </h4>
-                                        <div className="usuarios-payment-info">
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Modalidade:</span>
-                                                <span className="usuarios-payment-type">{participationModeLabel(user.participacao.mode)}</span>
-                                            </div>
-                                            <div className="usuarios-info-item">
-                                                <MapPin className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Cidade/UF:</span>
-                                                <span className="usuarios-info-value">
-                                                    {user.participacao.municipalityName && user.participacao.uf
-                                                        ? `${user.participacao.municipalityName}/${user.participacao.uf}`
-                                                        : "Não informado"}
-                                                </span>
-                                            </div>
-                                            <div className="usuarios-info-item">
-                                                <FileCheck2 className="h-4 w-4" />
-                                                <span className="usuarios-info-label">Comprovante:</span>
-                                                <span className="usuarios-info-value">
-                                                    {user.participacao.proof
-                                                        ? `${user.participacao.reviewStatus ?? "PENDING"} · ${formatUserCreationDate(user.participacao.proof.uploadedAt)}`
-                                                        : "Não enviado"}
-                                                </span>
-                                            </div>
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Financeiro:</span>
-                                                <span className="usuarios-payment-type">{user.participacao.status ?? "SEM ACESSO"}</span>
-                                            </div>
-                                            <div className="usuarios-payment-item">
-                                                <span className="usuarios-payment-label">Trabalhos remotos:</span>
-                                                <span className="usuarios-payment-type">{user.participacao.remoteWorkCount}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="usuarios-card-actions">
-                                        <button
-                                            className="usuarios-btn usuarios-btn-primary"
-                                            onClick={() => router.push(`/usuarios/informacoes/${user._id}`)}
-                                        >
-                                            <ExternalLink size={18} />
-                                            VER DETALHES
-                                        </button>
-                                    </div>
+                        {visiveis.length > 0 && (
+                            <>
+                                <div className="hidden md:block">
+                                    <TabelaRolavel rotulo="Lista de usuários" className="[&_table]:min-w-[60rem]">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col" className={classeTh}>Nome</th>
+                                                <th scope="col" className={classeTh}>E-mail</th>
+                                                <th scope="col" className={classeTh}>Situação</th>
+                                                <th scope="col" className={classeTh}>Participação</th>
+                                                <th scope="col" className={classeTh}>Cadastro em</th>
+                                                <th scope="col" className={classeTh}><span className="sr-only">Ação</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {visiveis.map(u => (
+                                                <tr key={u._id}>
+                                                    <td className={`${classeTd} max-w-64`}>
+                                                        <p className="truncate font-medium" title={displayUserName(u)}>
+                                                            <Link href={`/usuarios/informacoes/${u._id}`} prefetch={false} className="hover:underline">{displayUserName(u)}</Link>
+                                                        </p>
+                                                        {u.informacoes_usuario.profissao && <p className="truncate text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
+                                                        {u.informacoes_usuario.matricula_municipio && <p className="truncate text-xs text-sutil">Matrícula do município: {u.informacoes_usuario.matricula_municipio}</p>}
+                                                        {u.informacoes_usuario.unidade_origem && <p className="truncate text-xs text-sutil">Unidade de Origem: {u.informacoes_usuario.unidade_origem}</p>}
+                                                        <div className="mt-1"><Pendencia user={u} /></div>
+                                                    </td>
+                                                    <td className={`${classeTd} max-w-64`}>
+                                                        <p className="truncate" title={displayUserField(u.informacoes_usuario.email)}>{displayUserField(u.informacoes_usuario.email)}</p>
+                                                        <p className="num text-xs text-sutil">{displayUserField(u.informacoes_usuario.numero_telefone)}</p>
+                                                    </td>
+                                                    <td className={classeTd}>
+                                                        <SeloSituacao situacao={u.pagamento.situacao} />
+                                                        <p className="mt-1 text-xs text-sutil">{u.pagamento.tipo_pagamento ?? "Tipo não informado"}</p>
+                                                    </td>
+                                                    <td className={`${classeTd} text-sm`}>{resumoParticipacao(u)}</td>
+                                                    <td className={`${classeTd} num whitespace-nowrap text-sm`}>{formatarData(u.informacoes_usuario.data_criacao)}</td>
+                                                    <td className={`${classeTd} text-right`}>
+                                                        <BotaoLink href={`/usuarios/informacoes/${u._id}`} estilo="contorno" aria-label={`Abrir ficha de ${displayUserName(u)}`}>Abrir ficha</BotaoLink>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </TabelaRolavel>
                                 </div>
-                            ))}
-                        </div>
+
+                                <ul className="grid gap-3 md:hidden" aria-label="Lista de usuários">
+                                    {visiveis.map(u => (
+                                        <li key={u._id} className="grid gap-2 rounded-2xl bg-cartao p-4 ring-1 ring-linha/60">
+                                            <div className="min-w-0">
+                                                <p className="break-words font-semibold">
+                                                    <Link href={`/usuarios/informacoes/${u._id}`} prefetch={false} className="-my-2 inline-block py-2 hover:underline">{displayUserName(u)}</Link>
+                                                </p>
+                                                <p className="break-all text-sm text-sutil">{displayUserField(u.informacoes_usuario.email)}</p>
+                                                {u.informacoes_usuario.profissao && <p className="text-xs text-sutil">{u.informacoes_usuario.profissao}</p>}
+                                                {u.informacoes_usuario.matricula_municipio && <p className="text-xs text-sutil">Matrícula do município: {u.informacoes_usuario.matricula_municipio}</p>}
+                                                {u.informacoes_usuario.unidade_origem && <p className="text-xs text-sutil">Unidade de Origem: {u.informacoes_usuario.unidade_origem}</p>}
+                                            </div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                <SeloSituacao situacao={u.pagamento.situacao} />
+                                                <Pendencia user={u} />
+                                            </div>
+                                            <BotaoLink href={`/usuarios/informacoes/${u._id}`} estilo="contorno" aria-label={`Abrir ficha de ${displayUserName(u)}`}>Abrir ficha</BotaoLink>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </>
+                        )}
+
+                        <Paginacao pagina={resultados.page} total={total} porPagina={CONGRESSISTAS_PAGE_SIZE} aoMudar={irParaPagina} rotulo="usuários" />
                     </>
                 )}
-
-                {results && results.users.length > 0 && (
-                    <div className="usuarios-paginacao">
-                        <button
-                            type="button"
-                            className="usuarios-btn usuarios-btn-secondary"
-                            disabled={searching || results.page <= 1}
-                            onClick={() => setPageState({ key: queryKey, page: results.page - 1 })}
-                        >
-                            Anterior
-                        </button>
-                        <span className="usuarios-paginacao-texto" role="status" aria-live="polite">
-                            Página {results.page} de {results.totalPages} · {results.total} {results.total === 1 ? "resultado" : "resultados"}
-                        </span>
-                        <button
-                            type="button"
-                            className="usuarios-btn usuarios-btn-secondary"
-                            disabled={searching || results.page >= results.totalPages}
-                            onClick={() => setPageState({ key: queryKey, page: results.page + 1 })}
-                        >
-                            Próxima
-                        </button>
-                    </div>
-                )}
-
-                {/* Estados sem lista */}
-                {!searchActive && (
-                    <div className="usuarios-empty">
-                        <Search className="usuarios-empty-icon" />
-                        <h3 className="usuarios-empty-title">Digite pelo menos 4 letras para buscar um congressista</h3>
-                        <p className="usuarios-empty-text">Pesquise por nome, e-mail, ID ou telefone, ou use algum dos filtros acima.</p>
-                    </div>
-                )}
-                {searchActive && searching && !results && !searchError && (
-                    <div className="usuarios-empty" role="status" aria-live="polite">
-                        <Loader2 className="usuarios-empty-icon animate-spin" />
-                        <h3 className="usuarios-empty-title">Buscando congressistas...</h3>
-                    </div>
-                )}
-                {searchActive && searchError && (
-                    <div className="usuarios-empty" role="alert">
-                        <SearchX className="usuarios-empty-icon" />
-                        <h3 className="usuarios-empty-title">Não foi possível buscar os congressistas</h3>
-                        <p className="usuarios-empty-text">{searchError}</p>
-                        <button type="button" className="usuarios-btn usuarios-btn-primary" onClick={() => setRetryTick((tick) => tick + 1)}>
-                            Tentar novamente
-                        </button>
-                    </div>
-                )}
-                {searchActive && !searching && !searchError && results && results.users.length === 0 && (
-                    <div className="usuarios-empty">
-                        <SearchX className="usuarios-empty-icon" />
-                        <h3 className="usuarios-empty-title">Nenhum resultado encontrado</h3>
-                        <p className="usuarios-empty-text">Tente ajustar ou limpar os filtros aplicados.</p>
-                    </div>
-                )}
             </div>
-        </>
+        </Pagina>
+    )
+}
+
+export default function Page() {
+    return (
+        <Suspense fallback={<Pagina largura="ampla"><Estado tipo="carregando" titulo="Carregando usuários…" linhas={5} /></Pagina>}>
+            <Lista />
+        </Suspense>
     )
 }

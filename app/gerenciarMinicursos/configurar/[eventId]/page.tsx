@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, RefreshCw, Settings2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import CreateCourseModal from "@/app/components/CreateCourseModal";
-import LoadingModal from "@/app/components/LoadingModal";
-import styles from "@/app/components/CiepsAdmin.module.css";
+import { Cabecalho, BotaoLink, Cartao, Pagina } from "@/app/components/ui";
+import { Estado } from "@/app/components/Estado";
 import { ICourse } from "@/app/lib/types/events/event.t";
 
 type CourseResponse = {
     data?: ICourse;
     message?: string;
 };
+
+const VOLTAR = { href: "/gerenciarMinicursos/", rotulo: "Voltar às atividades" };
 
 export default function Page() {
     const { eventId } = useParams<{ eventId: string }>();
@@ -26,7 +27,7 @@ export default function Page() {
 
         try {
             const fetchData = await fetch(`/api/get/minicursoProps/${eventId}`);
-            const response = await fetchData.json() as CourseResponse;
+            const response = await fetchData.json().catch(() => ({})) as CourseResponse;
 
             if (!fetchData.ok || !response.data) {
                 throw new Error(response.message || "Não foi possível carregar os dados da atividade.");
@@ -51,57 +52,29 @@ export default function Page() {
 
     if (!dataCourse) {
         return (
-            <main className={styles.configPage}>
-                <LoadingModal isLoading={loading} />
-                <section
-                    aria-live="polite"
-                    className={styles.configStateCard}
-                    role={error ? "alert" : "status"}
-                >
-                    <span className={styles.eyebrow}>Administração CIEPS</span>
-                    <div className={styles.configStateIcon}>
-                        <Settings2 aria-hidden="true" size={34} />
-                    </div>
-                    <h1 className={styles.configStateTitle}>
-                        {error ? "Não foi possível abrir a configuração" : "Carregando configuração"}
-                    </h1>
-                    <p className={styles.configStateText}>
-                        {error || "Estamos buscando os dados mais recentes desta atividade."}
-                    </p>
-
-                    {error && (
-                        <div className={styles.stateActions}>
-                            <button
-                                className={styles.secondaryButton}
-                                onClick={() => router.push("/gerenciarMinicursos/")}
-                                type="button"
-                            >
-                                <ArrowLeft aria-hidden="true" size={18} />
-                                Voltar
-                            </button>
-                            <button
-                                className={styles.primaryButton}
-                                onClick={() => void hydrateData()}
-                                type="button"
-                            >
-                                <RefreshCw aria-hidden="true" size={18} />
-                                Tentar novamente
-                            </button>
-                        </div>
-                    )}
-                </section>
-            </main>
+            <Pagina largura="estreita">
+                <Cabecalho etiqueta="Atividades" titulo="Configurar atividade" voltar={VOLTAR} />
+                {error && !loading ? (
+                    <Estado
+                        tipo="erro"
+                        titulo="Não foi possível abrir a configuração"
+                        texto={error}
+                        aoTentar={() => void hydrateData()}
+                        acao={<BotaoLink href={VOLTAR.href} estilo="contorno">Voltar</BotaoLink>}
+                    />
+                ) : (
+                    <Estado tipo="carregando" titulo="Carregando os dados da atividade…" linhas={2} />
+                )}
+            </Pagina>
         );
     }
 
     return (
-        <main className={styles.configPage}>
-            <LoadingModal isLoading={loading} />
-            <div aria-hidden="true" className={styles.configStateCard}>
-                <span className={styles.eyebrow}>Administração CIEPS</span>
-                <h1 className={styles.configStateTitle}>Configurar atividade</h1>
-                <p className={styles.configStateText}>{dataCourse.name}</p>
-            </div>
+        <Pagina largura="estreita">
+            <Cabecalho etiqueta="Atividades" titulo="Configurar atividade" sub={dataCourse.name} voltar={VOLTAR} />
+            <Cartao>
+                <p className="text-sm text-sutil">As alterações só valem depois de salvar no formulário de edição.</p>
+            </Cartao>
 
             <CreateCourseModal
                 apiMethod="PUT"
@@ -109,22 +82,22 @@ export default function Page() {
                 buttonText="Atualizar atividade"
                 initialForms={{
                     ...dataCourse,
-                    dateOpen: dataCourse.dateOpen.slice(0, -6),
+                    // datetime-local mostra "AAAA-MM-DDTHH:mm": tira segundos e fuso salvos
+                    dateOpen: dataCourse.dateOpen.slice(0, 16),
                     timeline: dataCourse.timeline.map((time) => ({
                         ...time,
-                        date_init: time.date_init.slice(0, -6),
-                        date_end: time.date_end.slice(0, -6),
+                        date_init: time.date_init.slice(0, 16),
+                        date_end: time.date_end.slice(0, 16),
                     })),
                 }}
                 isOpen
                 onClose={() => {
                     router.push("/gerenciarMinicursos/");
                 }}
-                onSuccess={() => {
-                    window.location.reload();
-                }}
+                // a lista recarrega ao ser aberta de novo, então não há o que atualizar aqui
+                onSuccess={() => { }}
                 title={dataCourse.name}
             />
-        </main>
+        </Pagina>
     );
 }
