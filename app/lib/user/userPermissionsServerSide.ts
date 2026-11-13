@@ -20,6 +20,11 @@ function isFinanceCodesRoute(pathname: string) {
 }
 // import getUserIdServerSide from "./getUserIdServerSide";
 
+/** Conta de admin: a única que faz ajustes manuais (inscrever sem presença, remover inscrição). */
+export function isAdminSub(sub: unknown): boolean {
+    return typeof sub === "string" && sub.replace(/^auth0\|/, "") === "6a8799078ecd649be9bdb061";
+}
+
 // Objeto para permissões de rotas de API (ex: /api/trabalhos/:id)
 const permittedRoutesApi: { [key: string]: string[] } = {
     "6a87991a310d49dafb8d113b": [ // ID da conta de apoio
@@ -69,13 +74,16 @@ const permittedRoutes: { [key: string]: string[] } = {
 // Objecto para bloquear algumas rotas de API
 const blockedApiRoutes: { [key: string]: string[] } = {
     "6a87991a310d49dafb8d113b": [ // ID da conta de apoio ………
+        "/api/delete/removerInscricaoMinicurso", // só o admin tira alguém de um minicurso
         "/api/put/usuario/atualizarUsuario",
         "/api/post/trabalhos/email"
     ],
     "6a8799158b3fe756dd02f487": [ // ID da conta Certificados
+        "/api/delete/removerInscricaoMinicurso", // só o admin tira alguém de um minicurso
         "/api/post/trabalhos/email"
     ],
     "6a87990e9d8d0385e0a77083": [ // ID da conta Científica
+        "/api/delete/removerInscricaoMinicurso", // só o admin tira alguém de um minicurso
     ],
     "6a8799078ecd649be9bdb061": [ // id do admin
     ]

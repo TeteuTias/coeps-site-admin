@@ -312,17 +312,13 @@ const MyComponent = () => {
                             <th scope="col">Nome</th>
                             <th scope="col">Email</th>
                             <th scope="col">Status</th>
-                            {
-                                canManageAttendance &&
-                                <th scope="col" className="presenca-lista-acoes">Ações</th>
-                            }
                         </tr>
                     </thead>
                     <tbody>
                         {data2.map((item, index) => (
                             <tr key={item._id} className="presenca-lista-row">
                                 <td className="presenca-lista-nome">
-                                    <button
+                                    {canManageAttendance && <button
                                         type="button"
                                         className="presenca-lista-remove-btn"
                                         aria-label={`Remover inscrição de ${displayUserName(item)}`}
@@ -374,22 +370,16 @@ const MyComponent = () => {
                                         }}
                                     >
                                         ×
-                                    </button>
+                                    </button>}
                                     <span>{index + 1}. {displayUserName(item)}</span>
                                 </td>
                                 <td className="presenca-lista-email">{displayUserField(item.informacoes_usuario.email)}</td>
                                 <td className="presenca-lista-status">
-                                    <span className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}>
-                                        {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
-                                    </span>
-                                    {guardados.has(item._id) && <span className="presenca-lista-status-badge ausente">GUARDADA, AGUARDANDO ENVIO</span>}
-                                </td>
-                                {
-                                    canManageAttendance &&
-                                    <td className="presenca-lista-acoes">
+                                    {canManageAttendance ? (
                                         <button
                                             type="button"
-                                            className={`presenca-lista-btn ${dataPresentes.includes(item._id) ? 'presenca-lista-btn-danger' : 'presenca-lista-btn-success'}`}
+                                            className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}
+                                            title={dataPresentes.includes(item._id) ? "Clique para retirar a presença" : "Clique para dar presença"}
                                             onClick={async () => {
                                                 setLoadingContent(true)
                                                 try {
@@ -409,15 +399,20 @@ const MyComponent = () => {
                                                 }
                                             }}
                                         >
-                                            {dataPresentes.includes(item._id) ? "RETIRAR PRESENÇA" : "DAR PRESENÇA"}
+                                            {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
                                         </button>
-                                    </td>
-                                }
+                                    ) : (
+                                        <span className={`presenca-lista-status-badge ${dataPresentes.includes(item._id) ? 'presente' : 'ausente'}`}>
+                                            {dataPresentes.includes(item._id) ? "PRESENTE" : "AUSENTE"}
+                                        </span>
+                                    )}
+                                    {guardados.has(item._id) && <span className="presenca-lista-status-badge ausente">GUARDADA, AGUARDANDO ENVIO</span>}
+                                </td>
                             </tr>
                         ))}
                         {data2.length === 0 && (
                             <tr>
-                                <td className="presenca-lista-empty-cell" colSpan={canManageAttendance ? 4 : 3}>
+                                <td className="presenca-lista-empty-cell" colSpan={3}>
                                     Nenhum congressista inscrito neste minicurso.
                                 </td>
                             </tr>
@@ -623,6 +618,8 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
     const [erroLeitura, setErroLeitura] = useState<string>("")
     const [semRede, setSemRede] = useState<boolean>(false)
     const [loadError, setLoadError] = useState<string | null>(null)
+    // "Inscrever" sem presença é só do admin (a rota recusa as outras contas)
+    const ehAdmin = Boolean(useUser()?.user?.sub?.includes("6a8799078ecd649be9bdb061"))
     useEffect(() => {
         const fetchUser = async () => {
             const codigo = limparCodigo(qrCodeResult)
@@ -775,7 +772,7 @@ const ModalUserFound: React.FC<{ courseData: ICourse, qrCodeResult: string, clos
                         </section>
                     </div>
                     <footer className="attendance-modal-actions">
-                        {user && !courseData.participants.includes(`${user._id}`) && (
+                        {ehAdmin && user && !courseData.participants.includes(`${user._id}`) && (
                             <button
                                 type="button"
                                 onClick={

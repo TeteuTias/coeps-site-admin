@@ -18,6 +18,7 @@ import { ICourse } from "@/app/lib/types/events/event.t";
 import ConfirmationModal from "@/app/components/ConfirmationModal";
 import { ObjectId } from "bson";
 import { getPaymentStatusTone } from "@/app/lib/payments/payment-status-appearance";
+import { useUser } from "@/app/lib/auth0-client";
 
 
 //
@@ -77,6 +78,8 @@ const getPaymentStatusIconAndColor = (status?: string) => {
 
 export default function Page() {
     const { userId } = useParams<{ userId: string }>()
+    // conta de admin (mesmo id de app/lib/user/userPermissionsServerSide.ts); as outras contas levam 403 na remoção
+    const isAdmin = Boolean(useUser()?.user?.sub?.includes("6a8799078ecd649be9bdb061"))
     const [user, setUser] = useState<AdminUserDetails | null>(null)
     const [loadError, setLoadError] = useState<string | null>(null)
     const [formData, setFormData] = useState({
@@ -476,7 +479,7 @@ export default function Page() {
                 {
                     dataCourses.length === 0 ?
                         <p className="w-full text-center py-2 font-semibold">Não há pagamentos prévios</p> :
-                        dataCourses.map((minicurso) => <CourseCard key={minicurso._id} minicurso={{ ...minicurso }} onCancelEnrollment={() => { setCourseNotice(null); setCourseToCancel(minicurso) }} />)
+                        dataCourses.map((minicurso) => <CourseCard key={minicurso._id} minicurso={{ ...minicurso }} onCancelEnrollment={isAdmin ? () => { setCourseNotice(null); setCourseToCancel(minicurso) } : undefined} />)
                 }
             </div>
             {canViewModernPayments && (

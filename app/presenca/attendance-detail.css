@@ -435,6 +435,11 @@
   letter-spacing: 0.08em;
 }
 
+button.presenca-lista-status-badge {
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .presenca-lista-status-badge.presente {
   color: var(--cieps-blue);
   background: color-mix(in srgb, var(--cieps-blue) 9%, var(--cieps-surface));
