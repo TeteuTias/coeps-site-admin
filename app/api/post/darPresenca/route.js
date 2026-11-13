@@ -3,6 +3,7 @@ import { isAdminSub } from "@/app/lib/user/userPermissionsServerSide";
 import { NextResponse } from "next/server"
 import { connectToDatabase } from "@/app/lib/mongodb";
 import { gravarPresenca, lerCorpo, lerPedidoPresenca } from "@/app/lib/presenca/registro-presenca";
+import { anotarAuditoria } from "@/app/lib/auditoria/registro";
 
 
 export const POST = withApiAuthRequired(async function POST(request) {
@@ -20,6 +21,9 @@ export const POST = withApiAuthRequired(async function POST(request) {
             if (!isAdminSub(session?.user?.sub)) {
                 return NextResponse.json({ error: "forbidden", message: "Somente o admin pode inscrever sem dar presença." }, { status: 403 })
             }
+        }
+        if (acao === "inscrever") {
+            anotarAuditoria(request, { acao: "inscricao.admin", categoria: "inscricao", resumo: "Inscreveu o congressista no minicurso pelo Admin (sem presença)" })
         }
         const resposta = await gravarPresenca(db, "minicursos", acao, lido.pedido)
         return NextResponse.json(resposta.corpo, { status: resposta.status })

@@ -9,6 +9,7 @@ import {
     cancelOpenActivityCharges,
     noRefundCancellationRecord,
 } from "@/app/lib/payments/activity-charge-cancellation";
+import { anotarAuditoria } from "@/app/lib/auditoria/registro";
 
 
 export const DELETE = withApiAuthRequired(async function DELETE(request) {
@@ -64,8 +65,22 @@ export const DELETE = withApiAuthRequired(async function DELETE(request) {
             semEstorno
                 ? { $pull: retirar, $push: { cancelamentosSemEstorno: noRefundCancellationRecord(userId, chargeIds, operador) } }
                 : { $pull: retirar },
-            { projection: { incluiAtividades: 1 } }
+            { projection: { incluiAtividades: 1, name: 1, participants: 1 } }
         );
+        const estavaInscrito = Array.isArray(minicurso?.participants) && minicurso.participants.map(String).includes(userId)
+        const pagamentos = (Array.isArray(usuario?.pagamento?.lista_pagamentos) ? usuario.pagamento.lista_pagamentos : [])
+            .filter((p: any) => p?._type === "activity" && String(p?._eventID) === eventId)
+            .map((p: any) => ({ id: p.id, status: p.status, value: p.value }))
+        anotarAuditoria(request, {
+            acao: semEstorno ? "inscricao.remover_sem_estorno" : "inscricao.remover",
+            resumo: semEstorno
+                ? "Cancelou a inscrição no minicurso sem estorno"
+                : "Removeu a inscrição do minicurso (cobrança em aberto cancelada no Asaas)",
+            alvo: { usuarioId: userId, minicursoId: eventId, minicursoNome: minicurso?.name ? String(minicurso.name) : null, cobrancaId: chargeIds[0] ?? null },
+            antes: { inscrito: estavaInscrito, pagamentos },
+            depois: { inscrito: false },
+            detalhes: { semEstorno, cobrancas },
+        })
 
         // Pacote (ex.: APH Tático): sai também das etapas incluídas, como no site.
         const incluidas = (Array.isArray(minicurso?.incluiAtividades) ? minicurso.incluiAtividades : [])

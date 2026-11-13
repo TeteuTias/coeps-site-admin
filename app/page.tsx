@@ -1,10 +1,12 @@
 "use client"
 
 import Link from "next/link"
+import { useUser } from "@/app/lib/auth0-client"
 import {
   BriefcaseBusiness,
   CircleDollarSign,
   ClipboardList,
+  History,
   Settings,
   UserRound,
   UserCheck,
@@ -49,6 +51,13 @@ const adminModules = [
   },
 ]
 
+const logsModule = {
+  href: "/logs",
+  title: "Logs",
+  description: "Quem fez o quê, quando e em quem: inscrições, remoções, pagamentos, edições e entradas.",
+  icon: History,
+}
+
 export default function Page() {
   return (
     <div className="main-container">
@@ -60,6 +69,8 @@ export default function Page() {
 }
 
 function PaginaAreaDoCliente() {
+  const ehAdmin = Boolean(useUser()?.user?.sub?.includes("6a8799078ecd649be9bdb061"))
+  const modules = ehAdmin ? [...adminModules, logsModule] : adminModules
   return (
     <>
       <span className="main-eyebrow">CIEPS 2026 / Administração</span>
@@ -71,7 +82,7 @@ function PaginaAreaDoCliente() {
       </p>
 
       <div className="cards-grid">
-        {adminModules.map((module) => {
+        {modules.map((module) => {
           const Icon = module.icon
 
           return (

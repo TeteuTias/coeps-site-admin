@@ -2,72 +2,41 @@ import { withApiAuthRequired } from "@/app/lib/auth0";
 import { NextResponse } from "next/server"
 import { ObjectId } from 'bson';
 import { connectToDatabase } from "@/app/lib/mongodb";
-import { ICourse } from "@/app/lib/types/events/event.t";
+import { camposEditaveisMinicurso } from "@/app/lib/minicursos/edicao";
+import { anotarAuditoria } from "@/app/lib/auditoria/registro";
 
-function formatarDataComFuso(dataOriginal: string) {
-    // Verifique se a string de entrada tem o formato esperado
-    dataOriginal = dataOriginal.slice(0, -3)
-    if (!dataOriginal || typeof dataOriginal !== 'string' || dataOriginal.length !== 16 || dataOriginal[10] !== 'T') {
-        console.error("Formato de data inválido. Use 'YYYY-MM-DDTHH:mm'.", dataOriginal);
-        throw new Error("Formato de data inválido. Use 'YYYY-MM-DDTHH:mm'.")
-    }
-
-    const segundos = ':00';
-    const fusoHorario = '-03:00'; // Fuso horário de Brasília (BRT)
-
-    // Concatena a string original com os segundos e o fuso horário
-    const dataFormatada = dataOriginal + segundos + fusoHorario;
-
-    return dataFormatada;
-}
-
-export const PUT = withApiAuthRequired(async function POST(request) {
+export const PUT = withApiAuthRequired(async function PUT(request) {
     const data = await request.json()
     const { db } = await connectToDatabase();
     const colecao = 'minicursos'
 
-    const newCouser: Omit<ICourse, "_id"> = {
-        "showToUser": data.showToUser,
-        "name": data.name,
-        "description": data.description,
-        "maxParticipants": data.maxParticipants,
-        "participantsCount": data.participantsCount,
-        "participants": [] as never,
-        "isFree": data.isFree,
-        "timeline": data.timeline.map((element: ICourse['timeline'][number]) => ({
-            ...element,
-            date_init: formatarDataComFuso(element.date_init),
-            date_end: formatarDataComFuso(element.date_end),
-        })
-        ),
-        "isOpen": data.isOpen,
-        "dateOpen": formatarDataComFuso(data.dateOpen),
-        "type": data.type,
-        "organization_name": data.organization_name,
-        "emoji": data.emoji,
-        "value": data.value,
-        "_nSerie": new ObjectId().toString() as ICourse["_nSerie"],
-        "attendanceList": [] as never
-    }
-    console.log(data)
     try {
-        "O Minicurso foi criado com sucesso!"
-        await db.collection(colecao).findOneAndUpdate(
-            {
-                _id: new ObjectId(data._id)
-            },
-            {
-                $set: {
-                    ...newCouser
-                }
-            }
+        if (!ObjectId.isValid(String(data?._id ?? ""))) {
+            return NextResponse.json({ message: "Atividade inválida." }, { status: 400 })
+        }
+        // Só os campos do formulário. Inscritos, presença e _nSerie ficam como estão.
+        const campos = camposEditaveisMinicurso(data)
+        const projecao = Object.fromEntries(Object.keys(campos).map((campo) => [campo, 1]))
+        const antes = await db.collection(colecao).findOneAndUpdate(
+            { _id: new ObjectId(data._id) },
+            { $set: campos },
+            { projection: { ...projecao, participants: 1 } }
         );
+        if (antes) {
+            const { participants, _id, ...antesCampos } = antes
+            anotarAuditoria(request, {
+                alvo: { minicursoId: String(_id), minicursoNome: String(campos.name ?? antes.name ?? "") },
+                antes: antesCampos,
+                depois: campos,
+                detalhes: { inscritosMantidos: Array.isArray(participants) ? participants.length : null },
+            })
+        }
+        if (!antes) {
+            return NextResponse.json({ message: "Atividade não encontrada." }, { status: 404 })
+        }
         return NextResponse.json({ message: "Minicurso atualizado com sucesso!" })
 
     } catch (error) {
         return NextResponse.json({ "message": error instanceof Error ? error.message : "Ocorreu Algum erro" }, { status: 500 })
     }
-
-
-
 })

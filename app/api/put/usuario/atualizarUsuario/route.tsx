@@ -2,6 +2,7 @@ import { withApiAuthRequired } from "@/app/lib/auth0";
 import { NextResponse } from "next/server";
 import { ObjectId } from 'mongodb';
 import { connectToDatabase } from "@/app/lib/mongodb";
+import { anotarAuditoria } from "@/app/lib/auditoria/registro";
 
 // A função não precisa mais do segundo parâmetro 'context', pois a rota não é mais dinâmica.
 export const PUT = withApiAuthRequired(async function PUT(request) {
@@ -41,12 +42,22 @@ export const PUT = withApiAuthRequired(async function PUT(request) {
         }
 
         // 4. Atualizar o documento no banco de dados usando o userId do corpo
-        const result = await db.collection(colecao).updateOne(
+        const projecao = Object.fromEntries(Object.keys(updateFields).map((campo) => [campo, 1]))
+        const antes = await db.collection(colecao).findOneAndUpdate(
             { _id: new ObjectId(userId) },
-            { $set: updateFields }
+            { $set: updateFields },
+            { projection: projecao }
         );
+        if (antes) {
+            const ler = (doc: any, caminho: string) => caminho.split(".").reduce((v, k) => (v == null ? v : v[k]), doc)
+            anotarAuditoria(request, {
+                alvo: { usuarioId: String(userId) },
+                antes: Object.fromEntries(Object.keys(updateFields).map((campo) => [campo, ler(antes, campo) ?? null])),
+                depois: updateFields,
+            })
+        }
 
-        if (result.matchedCount === 0) {
+        if (!antes) {
             return NextResponse.json({ message: "Usuário não encontrado." }, { status: 404 });
         }
 
