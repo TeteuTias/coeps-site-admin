@@ -4,6 +4,17 @@ import {
   isAuth0Configured,
 } from "./app/lib/auth0";
 import checkUserPermission from "./app/lib/user/userPermissionsServerSide";
+import { connectToDatabase } from "./app/lib/mongodb";
+import { registrarEvento, registrarLogin } from "./app/lib/auditoria/acesso";
+
+async function bancoDeLogs() {
+  try {
+    return (await connectToDatabase()).db;
+  } catch (error) {
+    console.error("auditoria: banco indisponível no proxy", error);
+    return null;
+  }
+}
 
 function jsonError(status: number, code: string, message: string) {
   return NextResponse.json({ error: code, message }, { status });
@@ -24,6 +35,14 @@ export async function proxy(req: NextRequest) {
   const auth0 = getAuth0Client();
 
   if (pathname.startsWith("/auth/")) {
+    // Saída de conta: grava antes de o Auth0 apagar a sessão.
+    if (pathname === "/auth/logout") {
+      const sessaoAtual = await auth0.getSession(req).catch(() => null);
+      const db = sessaoAtual?.user?.sub ? await bancoDeLogs() : null;
+      if (db) {
+        await registrarEvento(db, sessaoAtual, { acao: "acesso.logout", resumo: "Saiu do Admin", sucesso: true, metodo: req.method, rota: pathname, headers: req.headers });
+      }
+    }
     return auth0.middleware(req);
   }
 
@@ -61,6 +80,10 @@ export async function proxy(req: NextRequest) {
       : auth0.startInteractiveLogin({ returnTo: `${pathname}${search}` });
   }
 
+  // Entrada na conta: uma linha por sessão do Auth0, com IP e navegador.
+  const dbLogs = await bancoDeLogs();
+  if (dbLogs) await registrarLogin(dbLogs, session, req.method, pathname, req.headers);
+
   if (pathname === "/not-allowed") {
     return authResponse;
   }
@@ -81,6 +104,10 @@ export async function proxy(req: NextRequest) {
   }
 
   if (!canUserAccess) {
+    // Tentativa de ação sem permissão fica registrada (leituras negadas não, para não encher o log).
+    if (routeType === "api" && req.method !== "GET" && req.method !== "HEAD" && dbLogs) {
+      await registrarEvento(dbLogs, session, { acao: "acesso.negado", resumo: `Tentou ${req.method} ${pathname} sem permissão`, sucesso: false, status: 403, metodo: req.method, rota: pathname, headers: req.headers });
+    }
     if (routeType === "api") {
       return jsonError(
         403,

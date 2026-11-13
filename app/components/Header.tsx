@@ -6,15 +6,19 @@ import {
   ClipboardList,
   CreditCard,
   FileText,
+  History,
   Home,
   Settings,
   UserCheck,
   Users,
 } from "lucide-react"
+import { useUser } from "@/app/lib/auth0-client"
 import "./Header.css"
 
 export default function Header() {
   const pathname = usePathname()
+  // Logs: só a conta Admin (as outras recebem 403 na API).
+  const ehAdmin = Boolean(useUser()?.user?.sub?.includes("6a8799078ecd649be9bdb061"))
 
   if (
     pathname.startsWith("/gerarListaMinicurso/") ||
@@ -31,6 +35,7 @@ export default function Header() {
     { href: "/presenca", label: "Presença", icon: UserCheck },
     { href: "/financeiro", label: "Financeiro", icon: CreditCard },
     { href: "/gerenciarMinicursos", label: "Atividades", icon: Settings },
+    ...(ehAdmin ? [{ href: "/logs", label: "Logs", icon: History }] : []),
   ]
 
   const isActive = (href: string) => {

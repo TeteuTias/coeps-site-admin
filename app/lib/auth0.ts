@@ -1,4 +1,13 @@
 import { Auth0Client } from "@auth0/nextjs-auth0/server";
+import { connectToDatabase } from "@/app/lib/mongodb";
+import {
+  gravarLog,
+  ipDaRequisicao,
+  lerAnotacao,
+  lerCorpoParaLog,
+  METODOS_AUDITADOS,
+  montarLogDePedido,
+} from "@/app/lib/auditoria/registro";
 
 type ApiRouteHandler = (
   request: Request,
@@ -80,8 +89,10 @@ export function withApiAuthRequired<T extends ApiRouteHandler>(handler: T): T {
   }
 
   return (async (request: Request, context?: any) => {
+    let sessionUser: { sub?: unknown; email?: unknown; name?: unknown } | null = null;
     try {
       const session = await (getAuth0Client().getSession as any)(request);
+      sessionUser = session?.user ?? null;
       if (!session?.user?.sub) {
         return jsonError(
           401,
@@ -105,8 +116,35 @@ export function withApiAuthRequired<T extends ApiRouteHandler>(handler: T): T {
       );
     }
 
+    // Aba Logs: toda ação que muda dado (POST/PUT/PATCH/DELETE) vira uma linha de auditoria.
+    const auditar = METODOS_AUDITADOS.has(request.method.toUpperCase());
+    const inicio = Date.now();
+    const corpoParaLog = auditar ? await lerCorpoParaLog(request) : null;
+    const registrar = async (status: number | null, erro?: string) => {
+      if (!auditar) return;
+      try {
+        const { db } = await connectToDatabase();
+        await gravarLog(db, montarLogDePedido({
+          metodo: request.method.toUpperCase(),
+          rota: new URL(request.url).pathname,
+          corpo: corpoParaLog,
+          status,
+          usuario: sessionUser,
+          ip: ipDaRequisicao(request.headers),
+          userAgent: request.headers.get("user-agent"),
+          inicio,
+          fim: Date.now(),
+          anotacao: lerAnotacao(request),
+          erro,
+        }));
+      } catch (error) {
+        console.error("auditoria: falha ao registrar pedido", error);
+      }
+    };
+
     try {
       const response = await handler(request, context);
+      await registrar(response instanceof Response ? response.status : null);
 
       if (!(response instanceof Response)) {
         return jsonError(
@@ -138,7 +176,8 @@ export function withApiAuthRequired<T extends ApiRouteHandler>(handler: T): T {
       }
 
       return response;
-    } catch {
+    } catch (error) {
+      await registrar(500, error instanceof Error ? error.message : String(error));
       return jsonError(
         500,
         "internal_server_error",
