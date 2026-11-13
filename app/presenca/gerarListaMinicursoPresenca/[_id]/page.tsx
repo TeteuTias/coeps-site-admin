@@ -246,7 +246,7 @@ export default function ChamadaMinicurso() {
                     {presente
                         ? <Botao estilo="contorno" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'retirar', leitura!.lido)}>Retirar presença</Botao>
                         : <Botao data-principal="" carregando={ocupados.has(id)} onClick={() => void daLeitura(pessoa, 'dar', leitura!.lido)}>{inscrito ? 'Dar presença' : 'Inscrever e dar presença'}</Botao>}
-                    {!inscrito && !presente && (
+                    {podeGerir && !inscrito && !presente && (
                         <Botao estilo="contorno" carregando={ocupados.has(id)} onClick={() => void inscrever(pessoa)}>Inscrever (sem presença)</Botao>
                     )}
                     <Botao estilo="fantasma" onClick={() => { limpar(); focarBusca() }}>Fechar</Botao>
@@ -372,8 +372,8 @@ export default function ChamadaMinicurso() {
                                         : presentes.has(u._id)
                                             ? <Botao estilo="contorno" carregando={ocupados.has(u._id)} onClick={() => void executar({ pessoa: u, quer: 'retirar' })} aria-label={`Retirar a presença de ${nome}`}>Retirar presença</Botao>
                                             : <Botao carregando={ocupados.has(u._id)} onClick={() => void darPresenca(u)} aria-label={`Dar presença a ${nome}`}>Dar presença</Botao>)}
-                                    {/* como no original, remover inscrição não depende do gate de presença */}
-                                    <Botao estilo="perigo" disabled={ocupados.has(u._id)} onClick={() => void removerInscricao(u)} aria-label={`Remover a inscrição de ${nome}`}>Remover inscrição</Botao>
+                                    {/* ajuste manual: só a conta de admin (a rota recusa as outras com 403) */}
+                                    {podeGerir && <Botao estilo="perigo" disabled={ocupados.has(u._id)} onClick={() => void removerInscricao(u)} aria-label={`Remover a inscrição de ${nome}`}>Remover inscrição</Botao>}
                                 </>
                             )
                         }}

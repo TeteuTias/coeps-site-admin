@@ -5,6 +5,7 @@ import { Calendar, ListChecks, MapPin, Users } from "lucide-react"
 import { Botao, BotaoLink, Secao, Selo } from "@/app/components/ui"
 import { Estado } from "@/app/components/Estado"
 import { useAvisos } from "@/app/components/Avisos"
+import { useUser } from "@/app/lib/auth0-client"
 import { renderEmojiAsLucide } from "@/app/lib/utils/emojiToLucide"
 import { formatarDataHora, formatarHora, formatarMoeda, formatarNumero } from "@/app/lib/formatar"
 import type { ICourse } from "@/app/lib/types/events/event.t"
@@ -33,6 +34,8 @@ export function AtividadesSecao({ carga, userId }: { carga: Carga<ICourse[]>; us
 
 function Atividade({ curso, userId, aoRetirar }: { curso: ICourse; userId: string; aoRetirar: () => Promise<void> }) {
     const { avisar, escolher } = useAvisos()
+    // conta de admin (mesmo id de userPermissionsServerSide); as outras contas levam 403 na remoção
+    const ehAdmin = Boolean(useUser()?.user?.sub?.includes("6a8799078ecd649be9bdb061"))
     const [retirando, setRetirando] = useState(false)
     const linhas = curso.timeline ?? []
     const max = curso.maxParticipants
@@ -115,7 +118,7 @@ function Atividade({ curso, userId, aoRetirar }: { curso: ICourse; userId: strin
             </div>
 
             <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-linha pt-3">
-                {inscrito && (
+                {inscrito && ehAdmin && (
                     <Botao estilo="perigo" tamanho="pequeno" carregando={retirando} onClick={() => void retirarInscricao()} aria-label={`Cancelar inscrição no minicurso ${curso.name}`}>Cancelar inscrição</Botao>
                 )}
                 <BotaoLink href={`/presenca/gerarListaMinicursoPresenca/${curso._id}`} estilo="contorno" tamanho="pequeno"><ListChecks className="size-4" aria-hidden="true" />Lista de presença</BotaoLink>
