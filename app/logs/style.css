@@ -1,10 +1,20 @@
+/* Mesmo recuo das outras telas: menu lateral fixo no desktop, topo no celular. */
 .logs-page {
   min-height: 100vh;
-  padding: 5rem clamp(1rem, 3vw, 2.5rem) 3rem;
-  max-width: 1400px;
-  margin: 0 auto;
+  padding: 2rem 2rem 3rem calc(var(--cieps-sidebar-width) + 2rem);
   box-sizing: border-box;
   color: var(--cieps-ink);
+}
+
+.logs-conteudo {
+  width: min(100%, 1240px);
+  margin: 0 auto;
+}
+
+@media (max-width: 1024px) {
+  .logs-page {
+    padding: 6rem 1rem 2.5rem;
+  }
 }
 
 .logs-title {
@@ -72,8 +82,7 @@
 }
 
 .logs-campo input,
-.logs-campo select,
-.logs-busca {
+.logs-campo select {
   min-height: 42px;
   padding: 0 0.7rem;
   border: 1px solid var(--cieps-line-strong);
@@ -85,17 +94,22 @@
   box-sizing: border-box;
 }
 
+/* O estilo global de input usa !important: o ícone fica por cima e o texto recua. */
 .logs-busca {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  position: relative;
 }
 
-.logs-busca input {
-  border: none;
-  padding: 0;
-  min-height: 40px;
-  outline: none;
+.logs-busca svg {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--cieps-ink-soft);
+  pointer-events: none;
+}
+
+.logs-campo .logs-busca input {
+  padding-left: 2.3rem !important;
 }
 
 .logs-acoes {
@@ -363,4 +377,11 @@
   .logs-antes-depois {
     grid-template-columns: 1fr;
   }
+}
+
+.logs-diff td:first-child,
+.logs-diff th:first-child {
+  white-space: nowrap;
+  width: 1%;
+  word-break: normal;
 }

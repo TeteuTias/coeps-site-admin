@@ -173,6 +173,7 @@ export default function Page() {
 
     return (
         <main className="logs-page">
+            <div className="logs-conteudo">
             <span className="main-eyebrow">CIEPS / Auditoria</span>
             <h1 className="logs-title">Logs</h1>
             <p className="logs-subtitle">Tudo o que acontece no Admin e no site: quem fez, o quê, em quem, antes e depois. Os registros não podem ser apagados.</p>
@@ -331,6 +332,7 @@ export default function Page() {
                     )}
                 </section>
             )}
+            </div>
         </main>
     )
 }
